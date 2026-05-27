@@ -30,17 +30,11 @@ jobs:
         curl -L -o soundtouch.tar.gz https://www.surina.net/soundtouch/soundtouch-2.3.3.tar.gz
         tar -xzf soundtouch.tar.gz
         mkdir -p app/src/main/cpp/soundtouch
-
-        # Copy all .cpp and .h files from the source directory
         cp soundtouch/source/SoundTouch/*.cpp app/src/main/cpp/soundtouch/ 2>/dev/null || true
         cp soundtouch/source/SoundTouch/*.h   app/src/main/cpp/soundtouch/ 2>/dev/null || true
-        # Also copy headers from the include directory
         cp soundtouch/include/*.h app/src/main/cpp/soundtouch/ 2>/dev/null || true
-        # Ensure MMX/SSE files are copied (they are already included above, but just in case)
         find soundtouch/source -name "*.cpp" -exec cp {} app/src/main/cpp/soundtouch/ \;
-
         rm -rf soundtouch soundtouch.tar.gz
-        echo "SoundTouch files in destination:"
         ls -la app/src/main/cpp/soundtouch/
 
     - name: Download jaudiotagger
@@ -74,6 +68,13 @@ jobs:
 
     - name: Create settings.gradle
       run: echo "include ':app'" > settings.gradle
+
+    - name: Create gradle.properties (enable AndroidX)
+      run: |
+        cat > gradle.properties << 'EOF'
+        android.useAndroidX=true
+        android.enableJetifier=true
+        EOF
 
     - name: Create gradle wrapper
       run: |
