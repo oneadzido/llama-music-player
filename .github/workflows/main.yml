@@ -16,15 +16,10 @@ jobs:
           echo "Found Llama.zip, extracting..."
           unzip -o Llama.zip
           rm Llama.zip
-          echo "Extraction complete"
-        else
-          echo "Llama.zip not found!"
-          exit 1
         fi
         
         # If extraction created a folder, move contents up
         if [ -d "Llama" ]; then
-          echo "Moving contents from Llama folder to root"
           mv Llama/* .
           mv Llama/.* . 2>/dev/null || true
           rm -rf Llama
@@ -32,10 +27,6 @@ jobs:
         
         echo "Files after extraction:"
         ls -la
-    
-    - name: Make gradlew executable
-      run: |
-        chmod +x gradlew 2>/dev/null || echo "gradlew not found"
     
     - name: Set up JDK 17
       uses: actions/setup-java@v4
@@ -50,9 +41,36 @@ jobs:
       run: |
         sdkmanager "platforms;android-34" "build-tools;34.0.0"
     
+    - name: Generate Gradle Wrapper
+      run: |
+        # Create gradle wrapper directory
+        mkdir -p gradle/wrapper
+        
+        # Create gradle-wrapper.properties
+        cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
+        distributionBase=GRADLE_USER_HOME
+        distributionPath=wrapper/dists
+        distributionUrl=https\://services.gradle.org/distributions/gradle-7.5-bin.zip
+        zipStoreBase=GRADLE_USER_HOME
+        zipStorePath=wrapper/dists
+        EOF
+        
+        # Download gradle-wrapper.jar
+        curl -L -o gradle/wrapper/gradle-wrapper.jar https://github.com/gradle/gradle/raw/master/gradle/wrapper/gradle-wrapper.jar
+        
+        # Create gradlew script
+        cat > gradlew << 'EOF'
+        #!/bin/sh
+        exec java -cp "gradle/wrapper/gradle-wrapper.jar" org.gradle.wrapper.GradleWrapperMain "$@"
+        EOF
+        
+        # Make gradlew executable
+        chmod +x gradlew
+        
+        echo "Gradle wrapper generated successfully"
+    
     - name: Build APK
       run: |
-        chmod +x gradlew
         ./gradlew assembleRelease
     
     - name: Upload APK
