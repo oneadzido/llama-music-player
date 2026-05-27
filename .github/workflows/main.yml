@@ -34,54 +34,22 @@ jobs:
       run: |
         echo "Downloading SoundTouch source..."
         curl -L -o soundtouch.tar.gz https://www.surina.net/soundtouch/soundtouch-2.3.3.tar.gz
-        echo "Extracting..."
         tar -xzf soundtouch.tar.gz
         echo "Extraction complete"
     
-    - name: Inspect SoundTouch Structure
-      run: |
-        echo "Listing extracted directory:"
-        ls -la soundtouch-2.3.3/
-        echo ""
-        echo "Listing all subdirectories:"
-        find soundtouch-2.3.3 -type d | head -20
-        echo ""
-        echo "Looking for .cpp files:"
-        find soundtouch-2.3.3 -name "*.cpp" | head -20
-        echo ""
-        echo "Looking for SoundTouch.h:"
-        find soundtouch-2.3.3 -name "SoundTouch.h"
-    
-    - name: Copy SoundTouch Source
+    - name: Copy SoundTouch source files (any location)
       run: |
         mkdir -p app/src/main/cpp/soundtouch
         
-        # Find the correct source directory
-        if [ -d "soundtouch-2.3.3/SoundTouch" ]; then
-          echo "Copying from soundtouch-2.3.3/SoundTouch/"
-          cp -v soundtouch-2.3.3/SoundTouch/*.cpp app/src/main/cpp/soundtouch/ || true
-          cp -v soundtouch-2.3.3/SoundTouch/*.h app/src/main/cpp/soundtouch/ || true
-        elif [ -d "soundtouch-2.3.3/source/SoundTouch" ]; then
-          echo "Copying from soundtouch-2.3.3/source/SoundTouch/"
-          cp -v soundtouch-2.3.3/source/SoundTouch/*.cpp app/src/main/cpp/soundtouch/ || true
-          cp -v soundtouch-2.3.3/source/SoundTouch/*.h app/src/main/cpp/soundtouch/ || true
-        elif [ -d "soundtouch-2.3.3/include/SoundTouch" ]; then
-          echo "Copying from soundtouch-2.3.3/include/SoundTouch/"
-          cp -v soundtouch-2.3.3/include/SoundTouch/*.cpp app/src/main/cpp/soundtouch/ || true
-          cp -v soundtouch-2.3.3/include/SoundTouch/*.h app/src/main/cpp/soundtouch/ || true
-        elif [ -f "soundtouch-2.3.3/SoundTouch.h" ]; then
-          echo "Copying from soundtouch-2.3.3/ root"
-          cp -v soundtouch-2.3.3/*.cpp app/src/main/cpp/soundtouch/ || true
-          cp -v soundtouch-2.3.3/*.h app/src/main/cpp/soundtouch/ || true
-        else
-          echo "ERROR: Could not find SoundTouch source in any expected location"
-          echo "Full directory tree:"
-          ls -laR soundtouch-2.3.3/
-          exit 1
-        fi
+        # Find all .cpp and .h files under the extracted folder and copy them
+        find soundtouch-2.3.3 -name "*.cpp" -exec cp {} app/src/main/cpp/soundtouch/ \;
+        find soundtouch-2.3.3 -name "*.h" -exec cp {} app/src/main/cpp/soundtouch/ \;
         
-        echo "Files in destination:"
+        echo "Copied files:"
         ls -la app/src/main/cpp/soundtouch/
+        
+        # Clean up extracted folder
+        rm -rf soundtouch-2.3.3 soundtouch.tar.gz
     
     - name: Download jaudiotagger
       run: |
