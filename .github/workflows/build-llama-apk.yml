@@ -3,14 +3,6 @@
 # ============================================================================
 # This workflow builds the Llama Music Player APK on GitHub's runners.
 #
-# LOCAL-FIRST APPROACH:
-# - FontAwesome font: MUST be local (no download source - build fails if missing)
-# - jaudiotagger: Use local if present, otherwise download from Maven Central
-# - SoundTouch: Use local if present, otherwise download from official source
-#
-# The workflow checks both the root directory and the llama-music-player folder
-# because the ZIP file extracts into a subfolder.
-#
 # @author Richard Korbla Adzido
 # @version 1.0.0
 # @since 1.0
@@ -36,12 +28,15 @@ jobs:
           rm llama-music-player.zip
           echo "Extraction complete"
         fi
-        echo "Directory structure after extraction:"
-        ls -la
+        # Fix permissions on extracted folder
         if [ -d "llama-music-player" ]; then
-          echo "Contents of llama-music-player folder:"
-          ls -la llama-music-player/
+          sudo chmod -R 755 llama-music-player
+          echo "Copying contents to root..."
+          cp -r llama-music-player/* .
+          cp -r llama-music-player/.[!.]* . 2>/dev/null || true
         fi
+        echo "Files after extraction:"
+        ls -la
 
     - name: Ensure required directories exist
       run: |
@@ -49,32 +44,29 @@ jobs:
         mkdir -p app/src/main/assets/fonts
         mkdir -p app/src/main/cpp/soundtouch
 
-    - name: Prepare assets (check local, download if missing)
+    - name: Prepare assets
       run: |
         echo "=========================================="
         echo "PREPARING ASSETS"
         echo "=========================================="
         
-        # FontAwesome - check both possible locations
+        # FontAwesome - check both locations
         if [ -f "app/src/main/assets/fonts/fa-solid-900.ttf" ]; then
-          echo "PASS: FontAwesome font found at app/src/main/assets/fonts/"
+          echo "PASS: FontAwesome found"
         elif [ -f "llama-music-player/app/src/main/assets/fonts/fa-solid-900.ttf" ]; then
-          echo "PASS: FontAwesome font found in llama-music-player folder"
+          echo "PASS: FontAwesome found in llama-music-player folder"
           mkdir -p app/src/main/assets/fonts
           cp llama-music-player/app/src/main/assets/fonts/fa-solid-900.ttf app/src/main/assets/fonts/
         else
           echo "FAIL: FontAwesome font missing"
-          echo "Checked paths:"
-          echo "  - app/src/main/assets/fonts/fa-solid-900.ttf"
-          echo "  - llama-music-player/app/src/main/assets/fonts/fa-solid-900.ttf"
           exit 1
         fi
         
-        # jaudiotagger - check local, download if missing
+        # jaudiotagger
         if [ -f "app/libs/jaudiotagger-3.0.1.jar" ]; then
-          echo "PASS: jaudiotagger-3.0.1.jar found locally"
+          echo "PASS: jaudiotagger found"
         elif [ -f "app/libs/jaudiotagger.jar" ]; then
-          echo "PASS: jaudiotagger.jar found locally"
+          echo "PASS: jaudiotagger found"
         elif [ -f "llama-music-player/app/libs/jaudiotagger-3.0.1.jar" ]; then
           echo "PASS: jaudiotagger found in llama-music-player folder"
           mkdir -p app/libs
@@ -84,56 +76,38 @@ jobs:
           mkdir -p app/libs
           cp llama-music-player/app/libs/jaudiotagger.jar app/libs/
         else
-          echo "Downloading jaudiotagger from Maven Central..."
+          echo "Downloading jaudiotagger..."
           curl -L -o app/libs/jaudiotagger.jar https://repo1.maven.org/maven2/net/jthink/jaudiotagger/3.0.1/jaudiotagger-3.0.1.jar
-          echo "PASS: jaudiotagger downloaded"
         fi
         
-        # SoundTouch - check local, download if missing
+        # SoundTouch
         if [ -f "app/src/main/cpp/soundtouch/SoundTouch.h" ]; then
-          echo "PASS: SoundTouch source found locally"
+          echo "PASS: SoundTouch found"
         elif [ -f "llama-music-player/app/src/main/cpp/soundtouch/SoundTouch.h" ]; then
-          echo "PASS: SoundTouch source found in llama-music-player folder"
+          echo "PASS: SoundTouch found in llama-music-player folder"
           mkdir -p app/src/main/cpp
           cp -r llama-music-player/app/src/main/cpp/soundtouch app/src/main/cpp/
         else
-          echo "Downloading SoundTouch from official source..."
+          echo "Downloading SoundTouch..."
           curl -L -o soundtouch.tar.gz https://www.surina.net/soundtouch/soundtouch-2.3.3.tar.gz
           tar -xzf soundtouch.tar.gz
           mkdir -p app/src/main/cpp/soundtouch
           cp -r soundtouch/source/SoundTouch/* app/src/main/cpp/soundtouch/ 2>/dev/null || true
           cp -r soundtouch/include/* app/src/main/cpp/soundtouch/ 2>/dev/null || true
           rm -rf soundtouch.tar.gz soundtouch
-          echo "PASS: SoundTouch downloaded"
         fi
         
         echo ""
-        echo "=========================================="
-        echo "ASSETS VERIFICATION"
-        echo "=========================================="
-        echo ""
         echo "FontAwesome:"
-        if [ -f "app/src/main/assets/fonts/fa-solid-900.ttf" ]; then
-          ls -la app/src/main/assets/fonts/
-        else
-          echo "  MISSING"
-        fi
+        ls -la app/src/main/assets/fonts/ 2>/dev/null || echo "MISSING"
         echo ""
         echo "jaudiotagger:"
-        if [ -f "app/libs/jaudiotagger-3.0.1.jar" ] || [ -f "app/libs/jaudiotagger.jar" ]; then
-          ls -la app/libs/
-        else
-          echo "  MISSING"
-        fi
+        ls -la app/libs/ 2>/dev/null || echo "MISSING"
         echo ""
         echo "SoundTouch:"
-        if [ -f "app/src/main/cpp/soundtouch/SoundTouch.h" ]; then
-          ls -la app/src/main/cpp/soundtouch/ | head -10
-        else
-          echo "  MISSING"
-        fi
+        ls -la app/src/main/cpp/soundtouch/ 2>/dev/null | head -5 || echo "MISSING"
 
-    - name: Create top-level build.gradle if missing
+    - name: Create build.gradle if missing
       run: |
         if [ ! -f "build.gradle" ]; then
           cat > build.gradle << 'EOF'
