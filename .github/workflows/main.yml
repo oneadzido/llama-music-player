@@ -23,11 +23,36 @@ jobs:
           rm -rf Llama
         fi
         
-        echo "Directory structure:"
+        echo "Files after extraction:"
         ls -la
-        echo ""
-        echo "App folder contents:"
-        ls -la app/ || echo "app/ not found"
+    
+    - name: Create libs directory
+      run: |
+        mkdir -p app/libs
+    
+    - name: Download SoundTouch Library
+      run: |
+        echo "Downloading SoundTouch source..."
+        curl -L -o soundtouch.tar.gz https://www.surina.net/soundtouch/soundtouch-2.3.3.tar.gz
+        tar -xzf soundtouch.tar.gz
+        
+        mkdir -p app/src/main/cpp/soundtouch
+        
+        cp soundtouch-2.3.3/source/SoundTouch/*.cpp app/src/main/cpp/soundtouch/
+        cp soundtouch-2.3.3/source/SoundTouch/*.h app/src/main/cpp/soundtouch/
+        
+        rm -rf soundtouch.tar.gz soundtouch-2.3.3
+        
+        echo "SoundTouch files copied:"
+        ls -la app/src/main/cpp/soundtouch/
+    
+    - name: Download jaudiotagger 3.0.1
+      run: |
+        echo "Downloading jaudiotagger 3.0.1..."
+        curl -L -o app/libs/jaudiotagger.jar https://repo1.maven.org/maven2/net/jthink/jaudiotagger/3.0.1/jaudiotagger-3.0.1.jar
+        
+        echo "jaudiotagger downloaded:"
+        ls -la app/libs/
     
     - name: Create minimal top-level build.gradle
       run: |
@@ -45,6 +70,9 @@ jobs:
             repositories {
                 google()
                 mavenCentral()
+                flatDir {
+                    dirs 'app/libs'
+                }
             }
         }
         task clean(type: Delete) {
