@@ -8,17 +8,6 @@
 # - jaudiotagger: Use local if present, otherwise download from Maven Central
 # - SoundTouch: Use local if present, otherwise download from official source
 #
-# After extracting llama-music-player.zip, the workflow:
-# 1. Verifies FontAwesome font (required local - fails if missing)
-# 2. Checks for jaudiotagger - downloads if missing
-# 3. Checks for SoundTouch - downloads if missing
-# 4. Creates necessary Gradle build files
-# 5. Sets up Android SDK and NDK
-# 6. Builds the APK
-# 7. Uploads the APK as an artifact
-#
-# File Location: .github/workflows/build-apk.yml
-#
 # @author Richard Korbla Adzido
 # @version 1.0.0
 # @since 1.0
@@ -44,12 +33,6 @@ jobs:
           rm llama-music-player.zip
           echo "Extraction complete"
         fi
-        if [ -d "llama-music-player" ]; then
-          echo "Copying contents from llama-music-player folder to root..."
-          cp -r llama-music-player/* . 2>/dev/null || true
-          cp -r llama-music-player/.[!.]* . 2>/dev/null || true
-          rm -rf llama-music-player
-        fi
         echo "Files after extraction:"
         ls -la
 
@@ -69,17 +52,15 @@ jobs:
         if [ -f "app/src/main/assets/fonts/fa-solid-900.ttf" ]; then
           echo "PASS: FontAwesome font found locally"
         else
-          echo "FAIL: FontAwesome font missing at app/src/main/assets/fonts/fa-solid-900.ttf"
-          echo "ERROR: FontAwesome font must be included in your ZIP file"
-          echo "Please add app/src/main/assets/fonts/fa-solid-900.ttf to your llama-music-player.zip"
+          echo "FAIL: FontAwesome font missing"
           exit 1
         fi
         
         # jaudiotagger - check local, download if missing
         if [ -f "app/libs/jaudiotagger-3.0.1.jar" ]; then
-          echo "PASS: jaudiotagger-3.0.1.jar found locally"
+          echo "PASS: jaudiotagger found locally"
         elif [ -f "app/libs/jaudiotagger.jar" ]; then
-          echo "PASS: jaudiotagger.jar found locally"
+          echo "PASS: jaudiotagger found locally"
         else
           echo "Downloading jaudiotagger from Maven Central..."
           curl -L -o app/libs/jaudiotagger.jar https://repo1.maven.org/maven2/net/jthink/jaudiotagger/3.0.1/jaudiotagger-3.0.1.jar
@@ -94,17 +75,12 @@ jobs:
           curl -L -o soundtouch.tar.gz https://www.surina.net/soundtouch/soundtouch-2.3.3.tar.gz
           tar -xzf soundtouch.tar.gz
           mkdir -p app/src/main/cpp/soundtouch
-          cp soundtouch/source/SoundTouch/*.cpp app/src/main/cpp/soundtouch/ 2>/dev/null || true
-          cp soundtouch/source/SoundTouch/*.h app/src/main/cpp/soundtouch/ 2>/dev/null || true
-          cp soundtouch/include/*.h app/src/main/cpp/soundtouch/ 2>/dev/null || true
+          cp -r soundtouch/source/SoundTouch/* app/src/main/cpp/soundtouch/ 2>/dev/null || true
+          cp -r soundtouch/include/* app/src/main/cpp/soundtouch/ 2>/dev/null || true
           rm -rf soundtouch.tar.gz soundtouch
-          echo "PASS: SoundTouch downloaded and extracted"
+          echo "PASS: SoundTouch downloaded"
         fi
         
-        echo ""
-        echo "=========================================="
-        echo "ASSETS READY"
-        echo "=========================================="
         echo ""
         echo "FontAwesome:"
         ls -la app/src/main/assets/fonts/
@@ -112,7 +88,7 @@ jobs:
         echo "jaudiotagger:"
         ls -la app/libs/
         echo ""
-        echo "SoundTouch source:"
+        echo "SoundTouch:"
         ls -la app/src/main/cpp/soundtouch/ | head -10
 
     - name: Create top-level build.gradle if missing
