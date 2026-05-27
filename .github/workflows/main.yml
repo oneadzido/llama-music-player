@@ -13,73 +13,43 @@ jobs:
     - name: Extract Llama.zip
       run: |
         if [ -f "Llama.zip" ]; then
-          echo "Found Llama.zip, extracting..."
           unzip -o Llama.zip
           rm Llama.zip
         fi
-        
         if [ -d "Llama" ]; then
           mv Llama/* .
           rm -rf Llama
         fi
-        
-        echo "Files after extraction:"
-        ls -la
     
     - name: Create libs directory
-      run: |
-        mkdir -p app/libs
+      run: mkdir -p app/libs
     
     - name: Download SoundTouch
       run: |
-        echo "Downloading SoundTouch source..."
         curl -L -o soundtouch.tar.gz https://www.surina.net/soundtouch/soundtouch-2.3.3.tar.gz
         tar -xzf soundtouch.tar.gz
-        echo "Extraction complete"
-    
-    - name: Copy SoundTouch source files (any location)
-      run: |
         mkdir -p app/src/main/cpp/soundtouch
-        
-        # Find all .cpp and .h files under the extracted folder and copy them
+        # Copy ALL .cpp and .h files from anywhere inside the extracted folder
         find soundtouch-2.3.3 -name "*.cpp" -exec cp {} app/src/main/cpp/soundtouch/ \;
         find soundtouch-2.3.3 -name "*.h" -exec cp {} app/src/main/cpp/soundtouch/ \;
-        
-        echo "Copied files:"
-        ls -la app/src/main/cpp/soundtouch/
-        
-        # Clean up extracted folder
         rm -rf soundtouch-2.3.3 soundtouch.tar.gz
+        ls -la app/src/main/cpp/soundtouch/
     
     - name: Download jaudiotagger
       run: |
         curl -L -o app/libs/jaudiotagger.jar https://repo1.maven.org/maven2/net/jthink/jaudiotagger/3.0.1/jaudiotagger-3.0.1.jar
-        ls -la app/libs/
     
-    - name: Create top-level build.gradle
+    - name: Create build.gradle
       run: |
         cat > build.gradle << 'EOF'
         buildscript {
-            repositories {
-                google()
-                mavenCentral()
-            }
-            dependencies {
-                classpath 'com.android.tools.build:gradle:7.4.0'
-            }
+            repositories { google(); mavenCentral() }
+            dependencies { classpath 'com.android.tools.build:gradle:7.4.0' }
         }
         allprojects {
-            repositories {
-                google()
-                mavenCentral()
-                flatDir {
-                    dirs 'app/libs'
-                }
-            }
+            repositories { google(); mavenCentral(); flatDir { dirs 'app/libs' } }
         }
-        task clean(type: Delete) {
-            delete rootProject.buildDir
-        }
+        task clean(type: Delete) { delete rootProject.buildDir }
         EOF
     
     - name: Create settings.gradle
@@ -117,8 +87,7 @@ jobs:
         echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.1.8937393" >> $GITHUB_ENV
     
     - name: Build APK
-      run: |
-        ./gradlew assembleRelease --stacktrace
+      run: ./gradlew assembleRelease --stacktrace
     
     - name: Upload APK
       uses: actions/upload-artifact@v4
