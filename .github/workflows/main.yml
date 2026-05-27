@@ -37,11 +37,30 @@ jobs:
     - name: Set up Android SDK
       uses: android-actions/setup-android@v3
     
-    - name: Install Android SDK 34
+    - name: Install CMake and NDK
       run: |
-        sdkmanager "platforms;android-34" "build-tools;34.0.0"
+        # Accept licenses
+        yes | sdkmanager --licenses || true
+        
+        # Install CMake 3.18.1
+        yes | sdkmanager "cmake;3.18.1"
+        
+        # Install NDK
+        yes | sdkmanager "ndk;25.1.8937393"
+        
+        # Verify installations
+        echo "CMake versions:"
+        ls -la $ANDROID_HOME/cmake/
+        
+        echo "NDK versions:"
+        ls -la $ANDROID_HOME/ndk/
     
-    - name: Generate Gradle Wrapper
+    - name: Set CMake PATH
+      run: |
+        echo "$ANDROID_HOME/cmake/3.18.1/bin" >> $GITHUB_PATH
+        cmake --version
+    
+    - name: Setup Gradle
       run: |
         # Create gradle wrapper directory
         mkdir -p gradle/wrapper
@@ -64,14 +83,25 @@ jobs:
         exec java -cp "gradle/wrapper/gradle-wrapper.jar" org.gradle.wrapper.GradleWrapperMain "$@"
         EOF
         
-        # Make gradlew executable
+        # Create gradlew.bat for Windows
+        cat > gradlew.bat << 'EOF'
+        @if "%DEBUG%" == "" @echo off
+        @rem ########## Gradle wrapper startup script ##########
+        set DIRNAME=%~dp0
+        set APP_BASE_NAME=%~n0
+        set GRADLE_USER_HOME=%DIRNAME%\.gradle
+        java -cp "%DIRNAME%\gradle\wrapper\gradle-wrapper.jar" org.gradle.wrapper.GradleWrapperMain %*
+        EOF
+        
         chmod +x gradlew
         
-        echo "Gradle wrapper generated successfully"
+        echo "Gradle wrapper created successfully"
+        ls -la gradle/wrapper/
     
     - name: Build APK
       run: |
-        ./gradlew assembleRelease
+        chmod +x gradlew
+        ./gradlew assembleRelease --stacktrace
     
     - name: Upload APK
       uses: actions/upload-artifact@v4
