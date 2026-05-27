@@ -37,30 +37,18 @@ jobs:
     - name: Set up Android SDK
       uses: android-actions/setup-android@v3
     
-    - name: Install CMake and NDK
+    - name: Install NDK
       run: |
-        # Accept licenses
-        yes | sdkmanager --licenses || true
-        
-        # Install CMake 3.18.1
-        yes | sdkmanager "cmake;3.18.1"
-        
-        # Install NDK
         yes | sdkmanager "ndk;25.1.8937393"
-        
-        # Verify installations
-        echo "CMake versions:"
-        ls -la $ANDROID_HOME/cmake/
-        
-        echo "NDK versions:"
-        ls -la $ANDROID_HOME/ndk/
+        echo "NDK installed successfully"
+        echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.1.8937393" >> $GITHUB_ENV
     
-    - name: Set CMake PATH
+    - name: Verify CMake (pre-installed)
       run: |
-        echo "$ANDROID_HOME/cmake/3.18.1/bin" >> $GITHUB_PATH
         cmake --version
+        which cmake
     
-    - name: Setup Gradle
+    - name: Setup Gradle Wrapper
       run: |
         # Create gradle wrapper directory
         mkdir -p gradle/wrapper
@@ -80,13 +68,17 @@ jobs:
         # Create gradlew script
         cat > gradlew << 'EOF'
         #!/bin/sh
-        exec java -cp "gradle/wrapper/gradle-wrapper.jar" org.gradle.wrapper.GradleWrapperMain "$@"
+        ##############################################################################
+        ## Gradle start up script for UN*X
+        ##############################################################################
+        APP_BASE_NAME=`basename "$0"`
+        APP_HOME=`dirname "$0"`
+        exec java -cp "$APP_HOME/gradle/wrapper/gradle-wrapper.jar" org.gradle.wrapper.GradleWrapperMain "$@"
         EOF
         
         # Create gradlew.bat for Windows
         cat > gradlew.bat << 'EOF'
         @if "%DEBUG%" == "" @echo off
-        @rem ########## Gradle wrapper startup script ##########
         set DIRNAME=%~dp0
         set APP_BASE_NAME=%~n0
         set GRADLE_USER_HOME=%DIRNAME%\.gradle
@@ -96,7 +88,6 @@ jobs:
         chmod +x gradlew
         
         echo "Gradle wrapper created successfully"
-        ls -la gradle/wrapper/
     
     - name: Build APK
       run: |
