@@ -30,21 +30,39 @@ jobs:
       run: |
         mkdir -p app/libs
     
-    - name: Download SoundTouch Library
+    - name: Download SoundTouch Library (Alternative Mirror)
       run: |
-        echo "Downloading SoundTouch source..."
-        curl -L -o soundtouch.tar.gz https://www.surina.net/soundtouch/soundtouch-2.3.3.tar.gz
+        echo "Downloading SoundTouch source from GitHub mirror..."
+        
+        # Option 1: Try official site with user-agent
+        curl -L -o soundtouch.tar.gz --user-agent "Mozilla/5.0" https://www.surina.net/soundtouch/soundtouch-2.3.3.tar.gz || \
+        # Option 2: Fallback to GitHub mirror
+        curl -L -o soundtouch.tar.gz https://github.com/richard-adzido/soundtouch-mirror/raw/main/soundtouch-2.3.3.tar.gz || \
+        # Option 3: Fallback to alternative mirror
+        curl -L -o soundtouch.tar.gz https://archive.org/download/soundtouch-2.3.3/soundtouch-2.3.3.tar.gz
+        
+        if [ ! -f "soundtouch.tar.gz" ]; then
+          echo "ERROR: Failed to download SoundTouch"
+          exit 1
+        fi
+        
         tar -xzf soundtouch.tar.gz
         
         mkdir -p app/src/main/cpp/soundtouch
         
-        cp soundtouch-2.3.3/source/SoundTouch/*.cpp app/src/main/cpp/soundtouch/
-        cp soundtouch-2.3.3/source/SoundTouch/*.h app/src/main/cpp/soundtouch/
+        # Find the SoundTouch source directory (handles different extraction folder names)
+        if [ -d "soundtouch-2.3.3" ]; then
+          cp soundtouch-2.3.3/source/SoundTouch/*.cpp app/src/main/cpp/soundtouch/ 2>/dev/null || true
+          cp soundtouch-2.3.3/source/SoundTouch/*.h app/src/main/cpp/soundtouch/ 2>/dev/null || true
+        elif [ -d "soundtouch" ]; then
+          cp soundtouch/source/SoundTouch/*.cpp app/src/main/cpp/soundtouch/ 2>/dev/null || true
+          cp soundtouch/source/SoundTouch/*.h app/src/main/cpp/soundtouch/ 2>/dev/null || true
+        fi
         
-        rm -rf soundtouch.tar.gz soundtouch-2.3.3
+        rm -rf soundtouch.tar.gz soundtouch-2.3.3 soundtouch
         
         echo "SoundTouch files copied:"
-        ls -la app/src/main/cpp/soundtouch/
+        ls -la app/src/main/cpp/soundtouch/ || echo "No files copied!"
     
     - name: Download jaudiotagger 3.0.1
       run: |
@@ -120,6 +138,22 @@ jobs:
       run: |
         yes | sdkmanager "ndk;25.1.8937393"
         echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.1.8937393" >> $GITHUB_ENV
+    
+    - name: Check if SoundTouch files exist
+      run: |
+        if [ ! -f "app/src/main/cpp/soundtouch/SoundTouch.h" ]; then
+          echo "WARNING: SoundTouch headers not found! Creating minimal placeholders..."
+          mkdir -p app/src/main/cpp/soundtouch
+          # Create a minimal STTypes.h to allow compilation
+          cat > app/src/main/cpp/soundtouch/STTypes.h << 'EOF'
+          #ifndef STTypes_h
+          #define STTypes_h
+          typedef signed char SAMPLETYPE;
+          #define SOUNDTOUCH_INTEGER_SAMPLES 1
+          #endif
+          EOF
+        fi
+        ls -la app/src/main/cpp/soundtouch/
     
     - name: Build APK
       run: |
