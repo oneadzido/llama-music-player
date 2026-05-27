@@ -30,18 +30,49 @@ jobs:
       run: |
         mkdir -p app/libs
     
-    - name: Download SoundTouch Library
+    - name: Download and Extract SoundTouch
       run: |
         echo "Downloading SoundTouch source..."
         curl -L -o soundtouch.tar.gz https://www.surina.net/soundtouch/soundtouch-2.3.3.tar.gz
         
+        echo "Extracting..."
         tar -xzf soundtouch.tar.gz
         
+        echo "Listing extracted contents:"
+        ls -la
+        
+        echo "Looking for SoundTouch source files..."
+        find . -name "SoundTouch.h" 2>/dev/null || echo "SoundTouch.h not found"
+        find . -name "*.cpp" | grep -i soundtouch | head -20
+        
+        # Create destination directory
         mkdir -p app/src/main/cpp/soundtouch
         
-        cp soundtouch-2.3.3/source/SoundTouch/*.cpp app/src/main/cpp/soundtouch/
-        cp soundtouch-2.3.3/source/SoundTouch/*.h app/src/main/cpp/soundtouch/
+        # Try different possible paths
+        if [ -d "soundtouch-2.3.3/source/SoundTouch" ]; then
+          echo "Found at soundtouch-2.3.3/source/SoundTouch/"
+          cp soundtouch-2.3.3/source/SoundTouch/*.cpp app/src/main/cpp/soundtouch/ 2>/dev/null || true
+          cp soundtouch-2.3.3/source/SoundTouch/*.h app/src/main/cpp/soundtouch/ 2>/dev/null || true
+        elif [ -d "soundtouch-2.3.3/SoundTouch" ]; then
+          echo "Found at soundtouch-2.3.3/SoundTouch/"
+          cp soundtouch-2.3.3/SoundTouch/*.cpp app/src/main/cpp/soundtouch/ 2>/dev/null || true
+          cp soundtouch-2.3.3/SoundTouch/*.h app/src/main/cpp/soundtouch/ 2>/dev/null || true
+        elif [ -d "soundtouch/source/SoundTouch" ]; then
+          echo "Found at soundtouch/source/SoundTouch/"
+          cp soundtouch/source/SoundTouch/*.cpp app/src/main/cpp/soundtouch/ 2>/dev/null || true
+          cp soundtouch/source/SoundTouch/*.h app/src/main/cpp/soundtouch/ 2>/dev/null || true
+        elif [ -d "SoundTouch" ]; then
+          echo "Found at SoundTouch/"
+          cp SoundTouch/*.cpp app/src/main/cpp/soundtouch/ 2>/dev/null || true
+          cp SoundTouch/*.h app/src/main/cpp/soundtouch/ 2>/dev/null || true
+        else
+          echo "ERROR: Could not find SoundTouch source directory"
+          echo "Full directory listing:"
+          ls -laR soundtouch-2.3.3/ | head -100
+          exit 1
+        fi
         
+        # Clean up
         rm -rf soundtouch.tar.gz soundtouch-2.3.3
         
         echo "SoundTouch files copied:"
