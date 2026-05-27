@@ -45,8 +45,9 @@ jobs:
           echo "Extraction complete"
         fi
         if [ -d "llama-music-player" ]; then
-          echo "Moving contents from llama-music-player folder to root..."
-          mv llama-music-player/* .
+          echo "Copying contents from llama-music-player folder to root..."
+          cp -r llama-music-player/* . 2>/dev/null || true
+          cp -r llama-music-player/.[!.]* . 2>/dev/null || true
           rm -rf llama-music-player
         fi
         echo "Files after extraction:"
@@ -199,4 +200,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: llama-music-player-apk
-        path: app/build/outputs/apk/release/*.apk/*.apk
+        path: app/build/outputs/apk/release/*.apk
