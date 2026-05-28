@@ -20,6 +20,12 @@ A high quality android music player with a custom-built music playback engine wi
 - **Bluetooth**: Headset support
 - **Background Playback**: Notification controls
 
+## Credits
+
+- SoundTouch library by Olli Parviainen
+- jaudiotagger by jthink Ltd
+- FontAwesome by Fonticons, Inc.
+
 ## Download
 
 Get the APK from:
