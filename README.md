@@ -31,7 +31,10 @@ A high quality android music player with a custom-built music playback engine wi
 Get the APK from:
 https://github.com/oneadzido/llama-music-player/releases/tag/v1.0.0
 
-**Requirements**: Android 4.4+ (API 19), 512MB RAM
+**System Requirements**:
+- Android 4.4 (KitKat) / API 19 or higher
+- 512 MB RAM minimum
+- 50 MB storage
 
 ## Build from Source
 
