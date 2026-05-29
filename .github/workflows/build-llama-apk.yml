@@ -2,6 +2,7 @@
 # Llama Music Player - GitHub Actions Workflow
 # ============================================================================
 # This workflow builds the Llama Music Player APK on GitHub's runners.
+# Updated for SDK 35 (Android 15) with AGP 8.1.0 and Gradle 8.0
 #
 # @author Richard Korbla Adzido
 # @version 1.0.1
@@ -136,11 +137,11 @@ jobs:
         # Create gradle wrapper directory if needed
         mkdir -p gradle/wrapper
         
-        # Create gradle-wrapper.properties
+        # Create gradle-wrapper.properties with Gradle 8.0
         cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
         distributionBase=GRADLE_USER_HOME
         distributionPath=wrapper/dists
-        distributionUrl=https\://services.gradle.org/distributions/gradle-7.5-bin.zip
+        distributionUrl=https\://services.gradle.org/distributions/gradle-8.0-bin.zip
         zipStoreBase=GRADLE_USER_HOME
         zipStorePath=wrapper/dists
         EOF
@@ -148,7 +149,7 @@ jobs:
         # Download gradle-wrapper.jar
         curl -L -o gradle/wrapper/gradle-wrapper.jar https://github.com/gradle/gradle/raw/master/gradle/wrapper/gradle-wrapper.jar
         
-        echo "Gradle wrapper created successfully"
+        echo "Gradle wrapper created successfully (Gradle 8.0)"
 
     - name: Create build.gradle if missing
       run: |
@@ -160,7 +161,7 @@ jobs:
                 mavenCentral()
             }
             dependencies {
-                classpath 'com.android.tools.build:gradle:7.4.0'
+                classpath 'com.android.tools.build:gradle:8.1.0'
             }
         }
         allprojects {
@@ -188,8 +189,10 @@ jobs:
           cat > gradle.properties << 'EOF'
         android.useAndroidX=true
         android.enableJetifier=true
-        org.gradle.jvmargs=-Xmx2048m
+        org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m
         org.gradle.parallel=true
+        org.gradle.caching=true
+        org.gradle.daemon=true
         EOF
         fi
 
@@ -207,8 +210,12 @@ jobs:
         yes | sdkmanager "ndk;25.1.8937393"
         echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.1.8937393" >> $GITHUB_ENV
 
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+
     - name: Build APK
       run: |
+        ./gradlew clean
         ./gradlew assembleRelease --stacktrace
 
     - name: Upload APK
