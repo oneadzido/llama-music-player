@@ -1,0 +1,460 @@
+# ============================================================================
+# Llama Music Player - GitHub Actions Workflow with Auto-Signing
+# ============================================================================
+# This workflow builds the Llama Music Player APK on GitHub's runners.
+# Updated for SDK 35 (Android 15) with AGP 8.1.0 and Gradle 8.0.
+#
+# Uses Node.js 24 for improved performance and modern JavaScript features.
+#
+# Automatically signs the release APK using:
+# - llama-release-keys.zip (contains release.jks and release.txt, may be in subfolder)
+# - release.txt format: KEYSTORE_PASSWORD=xxx\nKEY_ALIAS=xxx\nKEY_PASSWORD=xxx
+#
+# @author Richard Korbla Adzido
+# @version 1.0.1
+# @since 1.0
+# ============================================================================
+
+name: Build Llama Music Player APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - release
+          - debug
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    # ========================================================================
+    # Setup Node.js 24
+    # ========================================================================
+    - name: Setup Node.js 24
+      uses: actions/setup-node@v4
+      with:
+        node-version: '24'
+        
+    - name: Verify Node.js version
+      run: |
+        echo "Node.js version: $(node --version)"
+        echo "npm version: $(npm --version)"
+
+    # ========================================================================
+    # Extract main project zip
+    # ========================================================================
+    - name: Extract llama-music-player.zip
+      run: |
+        if [ -f "llama-music-player.zip" ]; then
+          echo "Found llama-music-player.zip, extracting..."
+          unzip -o llama-music-player.zip
+          rm llama-music-player.zip
+          echo "Extraction complete"
+        fi
+        if [ -d "llama-music-player" ]; then
+          sudo chmod -R 755 llama-music-player
+          echo "Copying contents to root..."
+          cp -r llama-music-player/* . 2>/dev/null || true
+          cp -r llama-music-player/.[!.]* . 2>/dev/null || true
+        fi
+        echo "Files after extraction:"
+        ls -la
+
+    # ========================================================================
+    # Extract and setup signing keys
+    # ========================================================================
+    - name: Extract llama-release-keys.zip
+      run: |
+        echo "=========================================="
+        echo "EXTRACTING RELEASE KEYS"
+        echo "=========================================="
+        
+        if [ -f "llama-release-keys.zip" ]; then
+          echo "Found llama-release-keys.zip, extracting..."
+          mkdir -p signing
+          unzip -o llama-release-keys.zip -d signing/
+          rm llama-release-keys.zip
+          echo "Extraction complete"
+          
+          echo "Contents of signing directory:"
+          find signing/ -type f
+          
+          # Find release.jks anywhere in signing directory
+          JKS_FILE=$(find signing/ -name "release.jks" -type f | head -1)
+          TXT_FILE=$(find signing/ -name "release.txt" -type f | head -1)
+          
+          if [ -z "$JKS_FILE" ]; then
+            echo "ERROR: release.jks not found in zip!"
+            exit 1
+          fi
+          
+          if [ -z "$TXT_FILE" ]; then
+            echo "ERROR: release.txt not found in zip!"
+            exit 1
+          fi
+          
+          # Get the directory containing the files
+          JKS_DIR=$(dirname "$JKS_FILE")
+          
+          # If files are in a subfolder, move them to signing/ root
+          if [ "$JKS_DIR" != "signing" ]; then
+            echo "Moving files from $JKS_DIR to signing/..."
+            mv "$JKS_DIR"/* signing/
+            rmdir "$JKS_DIR" 2>/dev/null || true
+          fi
+          
+          echo "SUCCESS: Both release.jks and release.txt found"
+          ls -la signing/
+        else
+          echo "WARNING: llama-release-keys.zip not found!"
+          echo "Will build unsigned APK (debug only)"
+        fi
+
+    # ========================================================================
+    # Parse signing credentials from release.txt using Node.js
+    # ========================================================================
+    - name: Parse signing credentials
+      id: signing_creds
+      run: |
+        if [ -f "signing/release.txt" ]; then
+          echo "Parsing signing credentials from release.txt using Node.js..."
+          
+          node -e "
+            const fs = require('fs');
+            const content = fs.readFileSync('signing/release.txt', 'utf8');
+            const lines = content.split(/\r?\n/);
+            
+            let keystorePassword = '';
+            let keyAlias = '';
+            let keyPassword = '';
+            
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (trimmed.startsWith('KEYSTORE_PASSWORD') || trimmed.startsWith('STORE_PASSWORD')) {
+                const match = trimmed.match(/(?:KEYSTORE_PASSWORD|STORE_PASSWORD)[=:]\\s*(.*)/i);
+                if (match) keystorePassword = match[1].trim();
+              }
+              else if (trimmed.startsWith('KEY_ALIAS')) {
+                const match = trimmed.match(/KEY_ALIAS[=:]\\s*(.*)/i);
+                if (match) keyAlias = match[1].trim();
+              }
+              else if (trimmed.startsWith('KEY_PASSWORD') || trimmed.startsWith('ALIAS_PASSWORD')) {
+                const match = trimmed.match(/(?:KEY_PASSWORD|ALIAS_PASSWORD)[=:]\\s*(.*)/i);
+                if (match) keyPassword = match[1].trim();
+              }
+            }
+            
+            if (!keystorePassword || !keyAlias || !keyPassword) {
+              console.error('ERROR: Missing required signing credentials');
+              console.error('KEYSTORE_PASSWORD: ' + (keystorePassword ? 'present' : 'missing'));
+              console.error('KEY_ALIAS: ' + (keyAlias ? 'present' : 'missing'));
+              console.error('KEY_PASSWORD: ' + (keyPassword ? 'present' : 'missing'));
+              process.exit(1);
+            }
+            
+            console.log('KEYSTORE_PASSWORD=' + keystorePassword);
+            console.log('KEY_ALIAS=' + keyAlias);
+            console.log('KEY_PASSWORD=' + keyPassword);
+            
+            const fs_write = require('fs');
+            fs_write.appendFileSync(process.env.GITHUB_OUTPUT, 'KEYSTORE_PASSWORD=' + keystorePassword + '\n');
+            fs_write.appendFileSync(process.env.GITHUB_OUTPUT, 'KEY_ALIAS=' + keyAlias + '\n');
+            fs_write.appendFileSync(process.env.GITHUB_OUTPUT, 'KEY_PASSWORD=' + keyPassword + '\n');
+          "
+          
+          echo "SUCCESS: Signing credentials parsed"
+          echo "KEY_ALIAS: ${{ steps.signing_creds.outputs.KEY_ALIAS }}"
+        else
+          echo "No signing credentials found"
+        fi
+
+    # ========================================================================
+    # Create signing configuration for gradle
+    # ========================================================================
+    - name: Configure signing in gradle.properties
+      run: |
+        if [ -f "signing/release.jks" ] && [ -n "${{ steps.signing_creds.outputs.KEYSTORE_PASSWORD }}" ]; then
+          echo "Configuring signing in local.properties..."
+          
+          cat >> local.properties << EOF
+          signing.keyAlias=${{ steps.signing_creds.outputs.KEY_ALIAS }}
+          signing.keyPassword=${{ steps.signing_creds.outputs.KEY_PASSWORD }}
+          signing.storeFile=${{ github.workspace }}/signing/release.jks
+          signing.storePassword=${{ steps.signing_creds.outputs.KEYSTORE_PASSWORD }}
+          EOF
+          
+          echo "SUCCESS: Signing configuration added to local.properties"
+        else
+          echo "Skipping signing configuration - keys not available"
+        fi
+
+    # ========================================================================
+    # Ensure required directories exist
+    # ========================================================================
+    - name: Ensure required directories exist
+      run: |
+        mkdir -p app/libs
+        mkdir -p app/src/main/assets/fonts
+        mkdir -p app/src/main/cpp/soundtouch
+
+    # ========================================================================
+    # Prepare assets
+    # ========================================================================
+    - name: Prepare assets
+      run: |
+        echo "=========================================="
+        echo "PREPARING ASSETS"
+        echo "=========================================="
+        
+        if [ -f "app/src/main/assets/fonts/fa-solid-900.ttf" ]; then
+          echo "PASS: FontAwesome found"
+        elif [ -f "llama-music-player/app/src/main/assets/fonts/fa-solid-900.ttf" ]; then
+          echo "PASS: FontAwesome found in llama-music-player folder"
+          mkdir -p app/src/main/assets/fonts
+          cp llama-music-player/app/src/main/assets/fonts/fa-solid-900.ttf app/src/main/assets/fonts/
+        else
+          echo "FAIL: FontAwesome font missing"
+          exit 1
+        fi
+        
+        if [ -f "app/libs/jaudiotagger-3.0.1.jar" ]; then
+          echo "PASS: jaudiotagger found"
+        elif [ -f "app/libs/jaudiotagger.jar" ]; then
+          echo "PASS: jaudiotagger found"
+        elif [ -f "llama-music-player/app/libs/jaudiotagger-3.0.1.jar" ]; then
+          echo "PASS: jaudiotagger found in llama-music-player folder"
+          mkdir -p app/libs
+          cp llama-music-player/app/libs/jaudiotagger-3.0.1.jar app/libs/
+        elif [ -f "llama-music-player/app/libs/jaudiotagger.jar" ]; then
+          echo "PASS: jaudiotagger found in llama-music-player folder"
+          mkdir -p app/libs
+          cp llama-music-player/app/libs/jaudiotagger.jar app/libs/
+        else
+          echo "Downloading jaudiotagger..."
+          curl -L -o app/libs/jaudiotagger.jar https://repo1.maven.org/maven2/net/jthink/jaudiotagger/3.0.1/jaudiotagger-3.0.1.jar
+        fi
+        
+        if [ -f "app/src/main/cpp/soundtouch/SoundTouch.h" ]; then
+          echo "PASS: SoundTouch found"
+        elif [ -f "llama-music-player/app/src/main/cpp/soundtouch/SoundTouch.h" ]; then
+          echo "PASS: SoundTouch found in llama-music-player folder"
+          mkdir -p app/src/main/cpp
+          cp -r llama-music-player/app/src/main/cpp/soundtouch app/src/main/cpp/
+        else
+          echo "Downloading SoundTouch..."
+          curl -L -o soundtouch.tar.gz https://www.surina.net/soundtouch/soundtouch-2.3.3.tar.gz
+          tar -xzf soundtouch.tar.gz
+          mkdir -p app/src/main/cpp/soundtouch
+          cp -r soundtouch/source/SoundTouch/* app/src/main/cpp/soundtouch/ 2>/dev/null || true
+          cp -r soundtouch/include/* app/src/main/cpp/soundtouch/ 2>/dev/null || true
+          rm -rf soundtouch.tar.gz soundtouch
+        fi
+        
+        echo ""
+        echo "FontAwesome:"
+        ls -la app/src/main/assets/fonts/ 2>/dev/null || echo "MISSING"
+        echo ""
+        echo "jaudiotagger:"
+        ls -la app/libs/ 2>/dev/null || echo "MISSING"
+        echo ""
+        echo "SoundTouch:"
+        ls -la app/src/main/cpp/soundtouch/ 2>/dev/null | head -5 || echo "MISSING"
+
+    # ========================================================================
+    # Create gradle wrapper
+    # ========================================================================
+    - name: Create gradle wrapper
+      run: |
+        rm -f gradlew gradlew.bat
+        
+        cat > gradlew << 'EOF'
+        #!/bin/sh
+        ##############################################################################
+        ##
+        ##  Gradle start up script for UN*X
+        ##
+        ##############################################################################
+        APP_BASE_NAME=`basename "$0"`
+        APP_HOME=`dirname "$0"`
+        DEFAULT_JVM_OPTS=""
+        CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
+        if [ -n "$JAVA_HOME" ] ; then
+            JAVACMD="$JAVA_HOME/bin/java"
+        else
+            JAVACMD="java"
+        fi
+        exec "$JAVACMD" $DEFAULT_JVM_OPTS $JAVA_OPTS $GRADLE_OPTS -cp "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain "$@"
+        EOF
+        
+        chmod +x gradlew
+        
+        mkdir -p gradle/wrapper
+        
+        cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
+        distributionBase=GRADLE_USER_HOME
+        distributionPath=wrapper/dists
+        distributionUrl=https\://services.gradle.org/distributions/gradle-8.0-bin.zip
+        zipStoreBase=GRADLE_USER_HOME
+        zipStorePath=wrapper/dists
+        EOF
+        
+        curl -L -o gradle/wrapper/gradle-wrapper.jar https://github.com/gradle/gradle/raw/master/gradle/wrapper/gradle-wrapper.jar
+        
+        echo "Gradle wrapper created successfully (Gradle 8.0)"
+
+    # ========================================================================
+    # Create build.gradle if missing
+    # ========================================================================
+    - name: Create build.gradle if missing
+      run: |
+        if [ ! -f "build.gradle" ]; then
+          cat > build.gradle << 'EOF'
+        buildscript {
+            repositories {
+                google()
+                mavenCentral()
+            }
+            dependencies {
+                classpath 'com.android.tools.build:gradle:8.1.0'
+            }
+        }
+        allprojects {
+            repositories {
+                google()
+                mavenCentral()
+                flatDir { dirs 'app/libs' }
+            }
+        }
+        task clean(type: Delete) {
+            delete rootProject.buildDir
+        }
+        EOF
+        fi
+
+    # ========================================================================
+    # Create settings.gradle if missing
+    # ========================================================================
+    - name: Create settings.gradle if missing
+      run: |
+        if [ ! -f "settings.gradle" ]; then
+          echo "include ':app'" > settings.gradle
+        fi
+
+    # ========================================================================
+    # Create gradle.properties if missing
+    # ========================================================================
+    - name: Create gradle.properties if missing
+      run: |
+        if [ ! -f "gradle.properties" ]; then
+          cat > gradle.properties << 'EOF'
+        android.useAndroidX=true
+        android.enableJetifier=true
+        org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m
+        org.gradle.parallel=true
+        org.gradle.caching=true
+        org.gradle.daemon=true
+        EOF
+        fi
+
+    # ========================================================================
+    # Setup signing in app/build.gradle (if keys available and building release)
+    # ========================================================================
+    - name: Configure app/build.gradle for signing
+      if: github.event.inputs.build_type == 'release' && steps.signing_creds.outputs.KEYSTORE_PASSWORD != ''
+      run: |
+        echo "Configuring signing in app/build.gradle..."
+        
+        if ! grep -q "signingConfigs" app/build.gradle; then
+          sed -i '/buildTypes {/i \    signingConfigs {\n        release {\n            storeFile file("'"${{ github.workspace }}/signing/release.jks"'")\n            storePassword "'"${{ steps.signing_creds.outputs.KEYSTORE_PASSWORD }}"'"\n            keyAlias "'"${{ steps.signing_creds.outputs.KEY_ALIAS }}"'"\n            keyPassword "'"${{ steps.signing_creds.outputs.KEY_PASSWORD }}"'"\n        }\n    }\n' app/build.gradle
+        fi
+        
+        sed -i 's/release {/release {\n            signingConfig signingConfigs.release/' app/build.gradle
+        
+        echo "SUCCESS: app/build.gradle configured for signing"
+
+    # ========================================================================
+    # Set up JDK 17
+    # ========================================================================
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    # ========================================================================
+    # Set up Android SDK
+    # ========================================================================
+    - name: Set up Android SDK
+      uses: android-actions/setup-android@v4
+
+    # ========================================================================
+    # Install NDK
+    # ========================================================================
+    - name: Install NDK
+      run: |
+        yes | sdkmanager "ndk;25.1.8937393"
+        echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.1.8937393" >> $GITHUB_ENV
+
+    # ========================================================================
+    # Grant execute permission for gradlew
+    # ========================================================================
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+
+    # ========================================================================
+    # Build APK
+    # ========================================================================
+    - name: Build APK
+      run: |
+        ./gradlew clean
+        if [ "${{ github.event.inputs.build_type }}" = "release" ]; then
+          echo "Building RELEASE APK..."
+          ./gradlew assembleRelease --stacktrace
+        else
+          echo "Building DEBUG APK..."
+          ./gradlew assembleDebug --stacktrace
+        fi
+
+    # ========================================================================
+    # Verify APK signing (for release builds)
+    # ========================================================================
+    - name: Verify APK signing
+      if: github.event.inputs.build_type == 'release'
+      run: |
+        APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
+        if [ -f "$APK_PATH" ]; then
+          echo "Verifying APK signing for: $APK_PATH"
+          $ANDROID_HOME/build-tools/34.0.0/apksigner verify --verbose "$APK_PATH" || {
+            echo "WARNING: APK signing verification failed or apksigner not available"
+          }
+        else
+          echo "No release APK found to verify"
+        fi
+
+    # ========================================================================
+    # Upload APK
+    # ========================================================================
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: llama-music-player-${{ github.event.inputs.build_type }}-apk
+        path: app/build/outputs/apk/${{ github.event.inputs.build_type }}/*.apk
+        retention-days: 30
+
+    # ========================================================================
+    # Clean up sensitive files
+    # ========================================================================
+    - name: Clean up signing files
+      if: always()
+      run: |
+        rm -rf signing/
+        echo "Cleaned up signing files"
