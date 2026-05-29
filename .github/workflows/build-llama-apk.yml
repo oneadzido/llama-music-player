@@ -85,7 +85,7 @@ jobs:
           rm llama-release-keys.zip
           echo "Extraction complete"
           
-          # Fix permissions on extracted files (they may have restrictive permissions)
+          # Fix permissions on extracted files
           chmod -R 755 signing/
           
           echo "Contents of signing directory:"
@@ -188,12 +188,10 @@ jobs:
         if [ -f "signing/release.jks" ] && [ -n "${{ steps.signing_creds.outputs.KEYSTORE_PASSWORD }}" ]; then
           echo "Configuring signing in local.properties..."
           
-          cat >> local.properties << EOF
-          signing.keyAlias=${{ steps.signing_creds.outputs.KEY_ALIAS }}
-          signing.keyPassword=${{ steps.signing_creds.outputs.KEY_PASSWORD }}
-          signing.storeFile=${{ github.workspace }}/signing/release.jks
-          signing.storePassword=${{ steps.signing_creds.outputs.KEYSTORE_PASSWORD }}
-          EOF
+          echo "signing.keyAlias=${{ steps.signing_creds.outputs.KEY_ALIAS }}" >> local.properties
+          echo "signing.keyPassword=${{ steps.signing_creds.outputs.KEY_PASSWORD }}" >> local.properties
+          echo "signing.storeFile=${{ github.workspace }}/signing/release.jks" >> local.properties
+          echo "signing.storePassword=${{ steps.signing_creds.outputs.KEYSTORE_PASSWORD }}" >> local.properties
           
           echo "SUCCESS: Signing configuration added to local.properties"
         else
