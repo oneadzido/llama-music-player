@@ -1,0 +1,25 @@
+name: Extract source ZIP Files
+
+on:
+  workflow_dispatch:  # Manually trigger when needed
+  push:
+    paths:
+      - 'llama-music-player.zip'  # Trigger when ZIP is updated
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Extract ZIP to repo root
+        run: |
+          unzip -o llama-music-player.zip
+      
+      - name: Commit and push changes
+        run: |
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action"
+          git add .
+          git commit -m "Extract llama-music-player source files" || echo "No changes to commit"
+          git push
