@@ -347,7 +347,23 @@ jobs:
     - name: Create settings.gradle if missing
       run: |
         if [ ! -f "settings.gradle" ]; then
-          echo "include ':app'" > settings.gradle
+          cat > settings.gradle << 'EOF'
+        pluginManagement {
+            repositories {
+                google()
+                mavenCentral()
+                gradlePluginPortal()
+            }
+        }
+        dependencyResolutionManagement {
+            repositories {
+                google()
+                mavenCentral()
+            }
+        }
+        include ':app'
+        rootProject.name = "LlamaMusicPlayer"
+        EOF
         fi
 
     # ========================================================================
@@ -374,11 +390,33 @@ jobs:
       run: |
         echo "Configuring signing in app/build.gradle..."
         
+        # Check if signingConfigs already exists
         if ! grep -q "signingConfigs" app/build.gradle; then
-          sed -i '/buildTypes {/i \    signingConfigs {\n        release {\n            storeFile file("'"${{ github.workspace }}/signing/release.jks"'")\n            storePassword "'"${{ steps.signing_creds.outputs.KEYSTORE_PASSWORD }}"'"\n            keyAlias "'"${{ steps.signing_creds.outputs.KEY_ALIAS }}"'"\n            keyPassword "'"${{ steps.signing_creds.outputs.KEY_PASSWORD }}"'"\n        }\n    }\n' app/build.gradle
+          # Use awk to insert signingConfigs block before buildTypes
+          awk -v storeFile="${{ github.workspace }}/signing/release.jks" \
+              -v storePass="${{ steps.signing_creds.outputs.KEYSTORE_PASSWORD }}" \
+              -v keyAlias="${{ steps.signing_creds.outputs.KEY_ALIAS }}" \
+              -v keyPass="${{ steps.signing_creds.outputs.KEY_PASSWORD }}" '
+            /buildTypes {/ {
+              print "    signingConfigs {"
+              print "        release {"
+              print "            storeFile file(\"" storeFile "\")"
+              print "            storePassword \"" storePass "\""
+              print "            keyAlias \"" keyAlias "\""
+              print "            keyPassword \"" keyPass "\""
+              print "        }"
+              print "    }"
+              print ""
+            }
+            { print }
+          ' app/build.gradle > app/build.gradle.tmp
+          mv app/build.gradle.tmp app/build.gradle
         fi
         
-        sed -i 's/release {/release {\n            signingConfig signingConfigs.release/' app/build.gradle
+        # Add signingConfig to release build type if not already present
+        if ! grep -q "signingConfig signingConfigs.release" app/build.gradle; then
+          sed -i '/release {/a \            signingConfig signingConfigs.release' app/build.gradle
+        fi
         
         echo "SUCCESS: app/build.gradle configured for signing"
 
