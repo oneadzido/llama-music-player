@@ -85,6 +85,9 @@ jobs:
           rm llama-release-keys.zip
           echo "Extraction complete"
           
+          # Fix permissions on extracted files (they may have restrictive permissions)
+          chmod -R 755 signing/
+          
           echo "Contents of signing directory:"
           find signing/ -type f
           
