@@ -181,17 +181,17 @@ jobs:
         fi
 
     # ========================================================================
-    # Create signing configuration for gradle
+    # Create signing configuration for gradle (using local.properties)
     # ========================================================================
-    - name: Configure signing in gradle.properties
+    - name: Configure signing in local.properties
       run: |
         if [ -f "signing/release.jks" ] && [ -n "${{ steps.signing_creds.outputs.KEYSTORE_PASSWORD }}" ]; then
           echo "Configuring signing in local.properties..."
           
-          echo "signing.keyAlias=${{ steps.signing_creds.outputs.KEY_ALIAS }}" >> local.properties
-          echo "signing.keyPassword=${{ steps.signing_creds.outputs.KEY_PASSWORD }}" >> local.properties
           echo "signing.storeFile=${{ github.workspace }}/signing/release.jks" >> local.properties
           echo "signing.storePassword=${{ steps.signing_creds.outputs.KEYSTORE_PASSWORD }}" >> local.properties
+          echo "signing.keyAlias=${{ steps.signing_creds.outputs.KEY_ALIAS }}" >> local.properties
+          echo "signing.keyPassword=${{ steps.signing_creds.outputs.KEY_PASSWORD }}" >> local.properties
           
           echo "SUCCESS: Signing configuration added to local.properties"
         else
@@ -381,44 +381,6 @@ jobs:
         org.gradle.daemon=true
         EOF
         fi
-
-    # ========================================================================
-    # Setup signing in app/build.gradle (if keys available and building release)
-    # ========================================================================
-    - name: Configure app/build.gradle for signing
-      if: github.event.inputs.build_type == 'release' && steps.signing_creds.outputs.KEYSTORE_PASSWORD != ''
-      run: |
-        echo "Configuring signing in app/build.gradle..."
-        
-        # Check if signingConfigs already exists
-        if ! grep -q "signingConfigs" app/build.gradle; then
-          # Use awk to insert signingConfigs block before buildTypes
-          awk -v storeFile="${{ github.workspace }}/signing/release.jks" \
-              -v storePass="${{ steps.signing_creds.outputs.KEYSTORE_PASSWORD }}" \
-              -v keyAlias="${{ steps.signing_creds.outputs.KEY_ALIAS }}" \
-              -v keyPass="${{ steps.signing_creds.outputs.KEY_PASSWORD }}" '
-            /buildTypes {/ {
-              print "    signingConfigs {"
-              print "        release {"
-              print "            storeFile file(\"" storeFile "\")"
-              print "            storePassword \"" storePass "\""
-              print "            keyAlias \"" keyAlias "\""
-              print "            keyPassword \"" keyPass "\""
-              print "        }"
-              print "    }"
-              print ""
-            }
-            { print }
-          ' app/build.gradle > app/build.gradle.tmp
-          mv app/build.gradle.tmp app/build.gradle
-        fi
-        
-        # Add signingConfig to release build type if not already present
-        if ! grep -q "signingConfig signingConfigs.release" app/build.gradle; then
-          sed -i '/release {/a \            signingConfig signingConfigs.release' app/build.gradle
-        fi
-        
-        echo "SUCCESS: app/build.gradle configured for signing"
 
     # ========================================================================
     # Set up JDK 17
