@@ -5,10 +5,13 @@
 # Updated for SDK 35 (Android 15) with AGP 8.1.0 and Gradle 8.0.
 #
 # Uses Node.js 24 for improved performance and modern JavaScript features.
+# Forced via FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true to resolve deprecation warnings.
 #
 # Automatically signs the release APK using:
 # - llama-release-keys.zip (contains release.jks and release.txt, may be in subfolder)
 # - release.txt format: KEYSTORE_PASSWORD=xxx\nKEY_ALIAS=xxx\nKEY_PASSWORD=xxx
+#
+# Debug builds are automatically signed with the Android debug keystore.
 #
 # @author Richard Korbla Adzido
 # @version 1.0.1
@@ -28,6 +31,11 @@ on:
         options:
           - release
           - debug
+
+env:
+  # Force GitHub Actions to use Node.js 24 for all JavaScript actions
+  # This resolves the deprecation warnings for Node.js 20
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
