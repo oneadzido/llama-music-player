@@ -4,7 +4,10 @@
 # This workflow builds the Llama Music Player APK on GitHub's runners.
 # Updated for SDK 35 (Android 15) with AGP 8.1.0 and Gradle 8.0.
 #
-# Uses native Node.js 24 support via latest action versions (v5/v6).
+# Uses native Node.js 24 support via official action versions:
+# - actions/checkout@v6 (Node.js 24 native)
+# - actions/setup-java@v5 (Node.js 24 native)
+# - actions/upload-artifact@v6 (Node.js 24 native)
 #
 # Automatically signs the release APK using:
 # - llama-release-keys.zip (contains release.jks and release.txt, may be in subfolder)
@@ -380,7 +383,7 @@ jobs:
     # Set up JDK 17
     # ========================================================================
     - name: Set up JDK 17
-      uses: actions/setup-java@v6
+      uses: actions/setup-java@v5
       with:
         java-version: '17'
         distribution: 'temurin'
@@ -439,7 +442,7 @@ jobs:
     # Upload APK
     # ========================================================================
     - name: Upload APK
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: llama-music-player-${{ github.event.inputs.build_type }}-apk
         path: app/build/outputs/apk/${{ github.event.inputs.build_type }}/*.apk
