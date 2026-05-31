@@ -58,17 +58,14 @@ jobs:
           echo "=========================================="
           
           echo "Root: $SOUNDTOUCH_ROOT"
-          echo ""
           
           # Find the directory containing the .cpp source files
-          # In SoundTouch 2.3.3, .cpp files are in source/SoundTouch/
           if [ -d "$SOUNDTOUCH_ROOT/source/SoundTouch" ]; then
             SOUNDTOUCH_CPP_DIR="$SOUNDTOUCH_ROOT/source/SoundTouch"
             echo "SOUNDTOUCH_CPP_DIR=$SOUNDTOUCH_CPP_DIR" >> $GITHUB_ENV
             echo "Found .cpp source directory: $SOUNDTOUCH_CPP_DIR"
           else
             echo "ERROR: source/SoundTouch directory not found"
-            find "$SOUNDTOUCH_ROOT" -type d -name "SoundTouch" 2>/dev/null
             exit 1
           fi
           
@@ -84,17 +81,12 @@ jobs:
           
           # List all .cpp files
           echo ""
-          echo "All .cpp files in $SOUNDTOUCH_CPP_DIR:"
-          find "$SOUNDTOUCH_CPP_DIR" -name "*.cpp" -type f 2>/dev/null | sort
+          echo "All .cpp files:"
+          find "$SOUNDTOUCH_CPP_DIR" -name "*.cpp" -type f | sort
           
-          CPP_COUNT=$(find "$SOUNDTOUCH_CPP_DIR" -name "*.cpp" -type f 2>/dev/null | wc -l)
+          CPP_COUNT=$(find "$SOUNDTOUCH_CPP_DIR" -name "*.cpp" -type f | wc -l)
           echo ""
           echo "Total .cpp files found: $CPP_COUNT"
-          
-          if [ $CPP_COUNT -eq 0 ]; then
-            echo "ERROR: No .cpp files found!"
-            exit 1
-          fi
       
       - name: Setup Android Build Directories
         run: |
@@ -105,37 +97,38 @@ jobs:
           mkdir -p "$SOUNDTOUCH_ROOT/source/Android-lib/libs"
           mkdir -p "$SOUNDTOUCH_ROOT/source/Android-lib/obj"
           
-          # Create include directory
-          mkdir -p "$SOUNDTOUCH_ROOT/source/Android-lib/jni/include/soundtouch"
-          
-          # Copy all header files from include directory
-          echo "Copying header files from $SOUNDTOUCH_INCLUDE_DIR..."
-          find "$SOUNDTOUCH_INCLUDE_DIR" -name "*.h" -type f 2>/dev/null | while read header; do
-            cp "$header" "$SOUNDTOUCH_ROOT/source/Android-lib/jni/include/soundtouch/"
-            echo "  Copied: $(basename "$header")"
-          done
-          
-          echo ""
-          echo "Headers in include directory:"
-          ls -la "$SOUNDTOUCH_ROOT/source/Android-lib/jni/include/soundtouch/"
-      
-      - name: Copy Source Files to JNI Directory
-        run: |
-          echo "Copying source files to jni directory..."
-          
-          # Create source directory
+          # Create src directory for .cpp files
           mkdir -p "$SOUNDTOUCH_ROOT/source/Android-lib/jni/src"
           
-          # Copy all .cpp files from the source/SoundTouch directory
-          echo "Copying from $SOUNDTOUCH_CPP_DIR..."
-          find "$SOUNDTOUCH_CPP_DIR" -name "*.cpp" -type f 2>/dev/null | while read src; do
+          # Copy all .cpp files to src directory
+          echo "Copying .cpp files..."
+          find "$SOUNDTOUCH_CPP_DIR" -name "*.cpp" -type f | while read src; do
             filename=$(basename "$src")
             cp "$src" "$SOUNDTOUCH_ROOT/source/Android-lib/jni/src/"
             echo "  Copied: $filename"
           done
           
+          # Copy all header files to the SAME directory as .cpp files
+          # This is critical because the .cpp files use #include "header.h"
           echo ""
-          echo "Source files in jni/src/:"
+          echo "Copying header files to src directory..."
+          find "$SOUNDTOUCH_INCLUDE_DIR" -name "*.h" -type f | while read header; do
+            filename=$(basename "$header")
+            cp "$header" "$SOUNDTOUCH_ROOT/source/Android-lib/jni/src/"
+            echo "  Copied: $filename"
+          done
+          
+          # Also copy headers from the source directory if they exist there
+          if [ -d "$SOUNDTOUCH_CPP_DIR" ]; then
+            find "$SOUNDTOUCH_CPP_DIR" -name "*.h" -type f 2>/dev/null | while read header; do
+              filename=$(basename "$header")
+              cp "$header" "$SOUNDTOUCH_ROOT/source/Android-lib/jni/src/"
+              echo "  Copied from cpp dir: $filename"
+            done
+          fi
+          
+          echo ""
+          echo "Contents of jni/src/:"
           ls -la "$SOUNDTOUCH_ROOT/source/Android-lib/jni/src/"
       
       - name: Generate Android.mk
@@ -149,7 +142,6 @@ jobs:
           
           if [ -z "$CPP_FILES" ]; then
             echo "ERROR: No .cpp files found in src/"
-            echo "Contents of src/:"
             ls -la src/
             exit 1
           fi
@@ -172,7 +164,7 @@ jobs:
             fi
           done
           
-          # Write Android.mk
+          # Write Android.mk - include path is src where headers now live
           cat > Android.mk << EOF
           LOCAL_PATH := \$(call my-dir)
           
@@ -184,7 +176,7 @@ jobs:
           LOCAL_CFLAGS := -O3 -DNDEBUG -fexceptions -frtti
           LOCAL_CFLAGS += -DANDROID -DSOUNDTOUCH_INTEGER_SAMPLES=1
           LOCAL_CPPFLAGS := -std=c++11
-          LOCAL_C_INCLUDES := \$(LOCAL_PATH)/include
+          LOCAL_C_INCLUDES := \$(LOCAL_PATH)/src
           include \$(BUILD_STATIC_LIBRARY)
           
           include \$(CLEAR_VARS)
@@ -195,13 +187,12 @@ jobs:
           LOCAL_CFLAGS := -O3 -DNDEBUG -fexceptions -frtti
           LOCAL_CFLAGS += -DANDROID -DSOUNDTOUCH_INTEGER_SAMPLES=1
           LOCAL_CPPFLAGS := -std=c++11
-          LOCAL_C_INCLUDES := \$(LOCAL_PATH)/include
+          LOCAL_C_INCLUDES := \$(LOCAL_PATH)/src
           include \$(BUILD_SHARED_LIBRARY)
           EOF
           
           echo ""
-          echo "Android.mk generated:"
-          cat Android.mk
+          echo "Android.mk generated"
       
       - name: Generate Application.mk
         run: |
@@ -222,7 +213,7 @@ jobs:
           #include <jni.h>
           #include <android/log.h>
           #include <string>
-          #include "include/soundtouch/SoundTouch.h"
+          #include "src/SoundTouch.h"
           
           #define LOG_TAG "SoundTouch"
           #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
