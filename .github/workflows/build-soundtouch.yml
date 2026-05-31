@@ -1,5 +1,5 @@
 # ============================================================================
-# Build SoundTouch Android Native Library - COMPLETE WITH ALL METHODS
+# Build SoundTouch Android Native Library - FINAL WORKING VERSION
 # ============================================================================
 
 name: Build SoundTouch Native Library
@@ -56,9 +56,11 @@ jobs:
           find "$SOUNDTOUCH_INCLUDE_DIR" -name "*.h" -type f -exec cp {} "$SOUNDTOUCH_ROOT/source/Android-lib/jni/src/" \;
           find "$SOUNDTOUCH_CPP_DIR" -name "*.h" -type f -exec cp {} "$SOUNDTOUCH_ROOT/source/Android-lib/jni/src/" \; 2>/dev/null
           
+          # Create ARM stub
           printf '%s\n' '#include "cpu_detect.h"' '' 'namespace soundtouch {' '    unsigned int detectCPUextensions() {' '        return 0;' '    }' '}' > "$SOUNDTOUCH_ROOT/source/Android-lib/jni/src/cpu_detect_arm.cpp"
           
-          printf '%s\n' '#ifndef SOUNDTOUCH_CPU_DETECT_H' '#define SOUNDTOUCH_CPU_DETECT_H' '' 'namespace soundtouch {' '    unsigned int detectCPUextensions();' '}' '' '#endif' > "$SOUNDTOUCH_ROOT/source/Android-lib/jni/src/cpu_detect.h"
+          # Create cpu_detect.h header
+          printf '%s\n' '#ifndef SOUNDTOUCH_CPU_DETECT_H' '#define SOUNDTOUCH_CPU_DETECT_H' '' '#define SUPPORT_MMX   0x0001' '#define SUPPORT_SSE   0x0002' '#define SUPPORT_SSE2  0x0004' '' 'namespace soundtouch {' '    unsigned int detectCPUextensions();' '}' '' '#endif' > "$SOUNDTOUCH_ROOT/source/Android-lib/jni/src/cpu_detect.h"
       
       - name: Generate Android.mk
         run: |
@@ -67,6 +69,7 @@ jobs:
           printf '%s\n' \
           'LOCAL_PATH := $(call my-dir)' \
           '' \
+          '# ========== Core SoundTouch Library ==========' \
           'include $(CLEAR_VARS)' \
           'LOCAL_MODULE := soundtouch_core' \
           'LOCAL_SRC_FILES := \' \
@@ -86,6 +89,7 @@ jobs:
           'LOCAL_C_INCLUDES := $(LOCAL_PATH)/src' \
           'include $(BUILD_STATIC_LIBRARY)' \
           '' \
+          '# ========== x86/x86_64 Optimizations ==========' \
           'ifneq ($(filter x86 x86_64, $(TARGET_ARCH_ABI)),)' \
           'include $(CLEAR_VARS)' \
           'LOCAL_MODULE := soundtouch_optimizations' \
@@ -93,12 +97,15 @@ jobs:
           '    src/cpu_detect_x86.cpp \' \
           '    src/mmx_optimized.cpp \' \
           '    src/sse_optimized.cpp' \
-          'LOCAL_CFLAGS := -O3 -DNDEBUG -fexceptions -frtti -DANDROID -DSOUNDTOUCH_INTEGER_SAMPLES=1 -msse -msse2 -mmmx' \
+          'LOCAL_CFLAGS := -O3 -DNDEBUG -fexceptions -frtti -DANDROID -DSOUNDTOUCH_INTEGER_SAMPLES=1' \
+          'LOCAL_CFLAGS += -msse -msse2 -mmmx' \
+          'LOCAL_CFLAGS += -DSUPPORT_MMX=1 -DSUPPORT_SSE=1 -DSUPPORT_SSE2=1' \
           'LOCAL_CPPFLAGS := -std=c++11' \
           'LOCAL_C_INCLUDES := $(LOCAL_PATH)/src' \
           'include $(BUILD_STATIC_LIBRARY)' \
           'endif' \
           '' \
+          '# ========== JNI Wrapper ==========' \
           'include $(CLEAR_VARS)' \
           'LOCAL_MODULE := soundtouch' \
           'LOCAL_SRC_FILES := soundtouch-jni.cpp' \
@@ -128,7 +135,7 @@ jobs:
           'APP_CFLAGS := -O3 -DNDEBUG' \
           'APP_OPTIM := release' > Application.mk
       
-      - name: Generate soundtouch-jni.cpp (COMPLETE - ALL METHODS)
+      - name: Generate soundtouch-jni.cpp
         run: |
           cd "$SOUNDTOUCH_ROOT/source/Android-lib/jni"
           
@@ -258,7 +265,7 @@ jobs:
           '    return st ? st->getSetting(settingId) : 0;' \
           '}' \
           '' \
-          '// ========== Utility Methods ==========' \
+          '// ========== Utility ==========' \
           'extern "C" JNIEXPORT jstring JNICALL Java_net_surina_soundtouch_SoundTouch_getVersionString(JNIEnv* env, jclass clazz) {' \
           '    const char* version = SoundTouch::getVersionString();' \
           '    LOGD("SoundTouch version: %s", version);' \
@@ -287,7 +294,7 @@ jobs:
             fi
           done
       
-      - name: Generate SoundTouch.java (COMPLETE - ALL METHODS)
+      - name: Generate SoundTouch.java
         run: |
           mkdir -p output/java/net/surina/soundtouch
           
@@ -295,7 +302,6 @@ jobs:
           'package net.surina.soundtouch;' \
           '' \
           'public final class SoundTouch {' \
-          '    // ========== Native Methods ==========' \
           '    private static native long newInstance();' \
           '    private native void deleteInstance(long handle);' \
           '    private native void setSampleRate(long handle, int sampleRate);' \
@@ -317,7 +323,6 @@ jobs:
           '    public static native String getVersionString();' \
           '    public static native String getErrorString();' \
           '' \
-          '    // ========== Setting Constants ==========' \
           '    public static final int SETTING_USE_AA_FILTER = 0;' \
           '    public static final int SETTING_AA_FILTER_LENGTH = 1;' \
           '    public static final int SETTING_USE_QUICKSEEK = 2;' \
@@ -337,25 +342,20 @@ jobs:
           '        if (handle == 0) throw new RuntimeException("Failed to create SoundTouch instance");' \
           '    }' \
           '' \
-          '    // ========== Configuration ==========' \
           '    public void setSampleRate(int sampleRate) { if (!mIsClosed) { mSampleRate = sampleRate; setSampleRate(handle, sampleRate); } }' \
           '    public int getSampleRate() { return mSampleRate; }' \
           '    public void setChannels(int channels) { if (!mIsClosed) { mChannels = channels; setChannels(handle, channels); } }' \
           '    public int getChannels() { return mChannels; }' \
           '' \
-          '    // ========== Tempo Control ==========' \
           '    public void setTempo(float tempo) { if (!mIsClosed) setTempo(handle, tempo); }' \
           '    public void setTempoChange(float tempoDelta) { if (!mIsClosed) setTempoChange(handle, tempoDelta); }' \
           '' \
-          '    // ========== Pitch Control ==========' \
           '    public void setPitchSemiTones(float pitch) { if (!mIsClosed) setPitchSemiTones(handle, pitch); }' \
           '    public void setPitchOctaves(float pitch) { if (!mIsClosed) setPitchOctaves(handle, pitch); }' \
           '' \
-          '    // ========== Rate Control ==========' \
           '    public void setRate(float rate) { if (!mIsClosed) setRate(handle, rate); }' \
           '    public void setRateChange(float rateDelta) { if (!mIsClosed) setRateChange(handle, rateDelta); }' \
           '' \
-          '    // ========== Streaming Methods ==========' \
           '    public void putSamples(short[] samples, int numSamples) { if (!mIsClosed) putSamples(handle, samples, numSamples); }' \
           '    public void putSamples(short[] samples) { putSamples(samples, samples.length); }' \
           '    public int receiveSamples(short[] buffer, int maxSamples) { return mIsClosed ? 0 : receiveSamples(handle, buffer, maxSamples); }' \
@@ -365,11 +365,9 @@ jobs:
           '    public boolean isEmpty() { return mIsClosed ? true : isEmpty(handle); }' \
           '    public int process(short[] input, short[] output) { putSamples(input); return receiveSamples(output); }' \
           '' \
-          '    // ========== Buffer Management ==========' \
           '    public void clear() { if (!mIsClosed) clear(handle); }' \
           '    public void flush() { if (!mIsClosed) flush(handle); }' \
           '' \
-          '    // ========== Settings ==========' \
           '    public void setSetting(int settingId, int value) { if (!mIsClosed) setSetting(handle, settingId, value); }' \
           '    public int getSetting(int settingId) { return mIsClosed ? 0 : getSetting(handle, settingId); }' \
           '    public void setUseAntiAliasFilter(boolean enable) { setSetting(SETTING_USE_AA_FILTER, enable ? 1 : 0); }' \
@@ -378,7 +376,6 @@ jobs:
           '    public void setSeekWindowMs(int ms) { setSetting(SETTING_SEEKWINDOW_MS, ms); }' \
           '    public void setOverlapMs(int ms) { setSetting(SETTING_OVERLAP_MS, ms); }' \
           '' \
-          '    // ========== Utility ==========' \
           '    public boolean isClosed() { return mIsClosed; }' \
           '    public void close() { if (!mIsClosed && handle != 0) { deleteInstance(handle); handle = 0; mIsClosed = true; } }' \
           '    public static boolean isAvailable() { try { return getVersionString() != null; } catch (UnsatisfiedLinkError e) { return false; } }' \
@@ -396,29 +393,11 @@ jobs:
             fi
           done
           
-          printf '%s\n' \
-          '# SoundTouch Android Libraries' \
-          '' \
-          '## Version: ${{ inputs.soundtouch_version }}' \
-          '## Supported ABIs: armeabi-v7a, arm64-v8a, x86, x86_64' \
-          '' \
-          '## ALL METHODS INCLUDED:' \
-          '- setSampleRate(), setChannels()' \
-          '- setTempo(), setTempoChange()' \
-          '- setPitchSemiTones(), setPitchOctaves()' \
-          '- setRate(), setRateChange()' \
-          '- putSamples(), receiveSamples(), numSamples(), isEmpty()' \
-          '- clear(), flush()' \
-          '- setSetting(), getSetting() (with constants)' \
-          '- getVersionString(), getErrorString()' \
-          '' \
-          '## Installation:' \
-          '1. Copy jniLibs/ to app/src/main/jniLibs/' \
-          '2. Copy SoundTouch.java to app/src/main/java/net/surina/soundtouch/' > output/README.md
+          printf '%s\n' '# SoundTouch Android Libraries' '' 'Version: ${{ inputs.soundtouch_version }}' 'ABIs: armeabi-v7a, arm64-v8a, x86, x86_64' > output/README.md
       
       - name: Upload SoundTouch Libraries
         uses: actions/upload-artifact@v6
         with:
-          name: soundtouch-${{ inputs.soundtouch_version }}-android-libs-complete
+          name: soundtouch-${{ inputs.soundtouch_version }}-android-libs
           path: output/
           retention-days: 90
