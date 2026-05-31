@@ -1,22 +1,6 @@
 # ============================================================================
 # Build SoundTouch Android Native Library
 # ============================================================================
-# 
-# This workflow downloads the official SoundTouch source code and compiles it
-# into native Android libraries (.so files) with complete streaming method
-# support for real-time pitch and tempo control.
-# 
-# The workflow automatically scans the source directory and includes all
-# .cpp files found, making it compatible with any version of SoundTouch.
-# 
-# Output artifacts:
-# - libsoundtouch.so for armeabi-v7a, arm64-v8a, x86, x86_64
-# - Complete SoundTouch.java wrapper with all streaming methods
-# 
-# @author Richard Korbla Adzido
-# @version 1.0.0
-# @since 1.0
-# ============================================================================
 
 name: Build SoundTouch Native Library
 
@@ -35,10 +19,6 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      # ====================================================================
-      # Setup Build Environment
-      # ====================================================================
-      
       - name: Setup Java
         uses: actions/setup-java@v5
         with:
@@ -50,162 +30,86 @@ jobs:
       
       - name: Install NDK
         run: |
-          echo "=========================================="
-          echo "Installing Android NDK 25.1.8937393"
-          echo "=========================================="
+          echo "Installing NDK 25.1.8937393..."
           yes | sdkmanager "ndk;25.1.8937393"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.1.8937393" >> $GITHUB_ENV
           echo "NDK_HOME=$ANDROID_HOME/ndk/25.1.8937393" >> $GITHUB_ENV
-          echo "NDK installation complete"
-      
-      - name: Verify NDK Installation
-        run: |
-          echo "=========================================="
-          echo "Verifying NDK Installation"
-          echo "=========================================="
-          $ANDROID_HOME/ndk/25.1.8937393/ndk-build --version
-          echo "NDK ready"
-      
-      # ====================================================================
-      # Download and Extract SoundTouch Source
-      # ====================================================================
       
       - name: Download SoundTouch Source
         run: |
           VERSION="${{ inputs.soundtouch_version }}"
-          echo "=========================================="
-          echo "Downloading SoundTouch $VERSION"
-          echo "=========================================="
+          echo "Downloading SoundTouch $VERSION..."
+          curl -L -o "soundtouch-$VERSION.tar.gz" "https://www.surina.net/soundtouch/soundtouch-$VERSION.tar.gz"
           
-          curl -L --progress-bar -o "soundtouch-$VERSION.tar.gz" \
-            "https://www.surina.net/soundtouch/soundtouch-$VERSION.tar.gz"
-          
-          if [ ! -f "soundtouch-$VERSION.tar.gz" ]; then
-            echo "ERROR: Download failed"
-            exit 1
-          fi
-          
-          FILE_SIZE=$(ls -lh "soundtouch-$VERSION.tar.gz" | awk '{print $5}')
-          echo "Downloaded: soundtouch-$VERSION.tar.gz ($FILE_SIZE)"
-          
-          echo "Extracting archive..."
           tar -xzf "soundtouch-$VERSION.tar.gz"
           
-          # Determine the extracted directory name
           if [ -d "soundtouch" ]; then
             echo "SOUNDTOUCH_DIR=soundtouch" >> $GITHUB_ENV
             echo "Extracted to: soundtouch/"
-          elif [ -d "SoundTouch" ]; then
-            echo "SOUNDTOUCH_DIR=SoundTouch" >> $GITHUB_ENV
-            echo "Extracted to: SoundTouch/"
           else
-            echo "ERROR: Could not find extracted SoundTouch directory"
-            echo "Contents of current directory:"
+            echo "ERROR: Could not find extracted directory"
             ls -la
             exit 1
           fi
       
-      - name: Inspect SoundTouch Source Structure
-        run: |
-          echo "=========================================="
-          echo "SoundTouch Source Structure"
-          echo "=========================================="
-          echo "Root directory: $SOUNDTOUCH_DIR"
-          echo ""
-          echo "Top-level contents:"
-          ls -la "$SOUNDTOUCH_DIR/"
-          echo ""
-          echo "Source directory contents:"
-          ls -la "$SOUNDTOUCH_DIR/source/"
-          echo ""
-          echo "SoundTouch core source files:"
-          ls -la "$SOUNDTOUCH_DIR/source/SoundTouch/" | head -20
-          echo ""
-          
-          # Count all .cpp files
-          CPP_COUNT=$(find "$SOUNDTOUCH_DIR" -type f -name "*.cpp" | wc -l)
-          H_COUNT=$(find "$SOUNDTOUCH_DIR" -type f -name "*.h" | wc -l)
-          echo "Found $CPP_COUNT .cpp files and $H_COUNT .h files"
-      
-      # ====================================================================
-      # Setup Android Build Directories
-      # ====================================================================
-      
       - name: Setup Android Build Directories
         run: |
-          echo "=========================================="
-          echo "Setting up Android build directories"
-          echo "=========================================="
-          
           mkdir -p "$SOUNDTOUCH_DIR/source/Android-lib/jni"
           mkdir -p "$SOUNDTOUCH_DIR/source/Android-lib/libs"
-          mkdir -p "$SOUNDTOUCH_DIR/source/Android-lib/obj"
-          
-          echo "Created directories:"
-          echo "  - $SOUNDTOUCH_DIR/source/Android-lib/jni"
-          echo "  - $SOUNDTOUCH_DIR/source/Android-lib/libs"
-          echo "  - $SOUNDTOUCH_DIR/source/Android-lib/obj"
-      
-      # ====================================================================
-      # Create Android.mk with Full Recursive File Detection
-      # ====================================================================
+          echo "Created Android build directories"
       
       - name: Create Android.mk
         run: |
-          echo "=========================================="
-          echo "Creating Android.mk with full file scan"
-          echo "=========================================="
-          
           cd "$SOUNDTOUCH_DIR/source/Android-lib/jni"
-          SOUNDTOUCH_SRC_DIR="$SOUNDTOUCH_DIR/source/SoundTouch"
           
-          echo "Scanning for .cpp files in: $SOUNDTOUCH_SRC_DIR"
-          echo ""
+          # Path to SoundTouch source from jni directory
+          SOUNDTOUCH_SRC="../../SoundTouch"
           
-          # Find all .cpp files recursively
-          ALL_CPP=$(find "$SOUNDTOUCH_SRC_DIR" -type f -name "*.cpp" | sort)
+          echo "Scanning for .cpp files in: $SOUNDTOUCH_SRC"
           
-          if [ -z "$ALL_CPP" ]; then
-            echo "ERROR: No .cpp files found!"
+          if [ ! -d "$SOUNDTOUCH_SRC" ]; then
+            echo "ERROR: SoundTouch source not found at $SOUNDTOUCH_SRC"
+            echo "Contents of ../../:"
+            ls -la ../../
             exit 1
           fi
           
-          echo "Found the following .cpp files:"
-          for file in $ALL_CPP; do
-            rel_path=$(echo "$file" | sed "s|$SOUNDTOUCH_DIR/source/||")
-            echo "  - $rel_path"
-          done
-          echo ""
+          # Find all .cpp files
+          ALL_CPP=$(find "$SOUNDTOUCH_SRC" -maxdepth 1 -type f -name "*.cpp" | sort)
           
-          # Build the source list
+          if [ -z "$ALL_CPP" ]; then
+            echo "ERROR: No .cpp files found"
+            echo "Contents of $SOUNDTOUCH_SRC:"
+            ls -la "$SOUNDTOUCH_SRC/"
+            exit 1
+          fi
+          
+          echo "Found .cpp files:"
+          echo "$ALL_CPP"
+          
+          # Build source list (relative paths from jni directory)
           SRC_LIST=""
           for file in $ALL_CPP; do
-            rel_path=$(echo "$file" | sed "s|$SOUNDTOUCH_DIR/source/||")
-            SRC_LIST="${SRC_LIST} ../../${rel_path}"$'\n'
+            # Get filename only (files are in same directory)
+            filename=$(basename "$file")
+            SRC_LIST="${SRC_LIST} ../../SoundTouch/${filename}"$'\n'
+            echo "  Adding: ../../SoundTouch/${filename}"
           done
           
-          # Create Android.mk
-          cat > Android.mk << 'EOF'
-          LOCAL_PATH := $(call my-dir)
+          cat > Android.mk << EOF
+          LOCAL_PATH := \$(call my-dir)
 
-          include $(CLEAR_VARS)
+          include \$(CLEAR_VARS)
           LOCAL_MODULE := soundtouch_core
-          LOCAL_SRC_FILES := \
-          EOF
-          
-          # Append all source files
-          echo "$SRC_LIST" >> Android.mk
-          
-          cat >> Android.mk << 'EOF'
-
+          LOCAL_SRC_FILES := \\
+          $SRC_LIST
           LOCAL_CFLAGS := -O3 -DNDEBUG -fexceptions -frtti
           LOCAL_CFLAGS += -DANDROID -DSOUNDTOUCH_INTEGER_SAMPLES=1
           LOCAL_CPPFLAGS := -std=c++11
-          LOCAL_C_INCLUDES := $(LOCAL_PATH)/../../SoundTouch $(LOCAL_PATH)/../../include
-          LOCAL_EXPORT_C_INCLUDES := $(LOCAL_PATH)/../../SoundTouch
-          include $(BUILD_STATIC_LIBRARY)
+          LOCAL_C_INCLUDES := \$(LOCAL_PATH)/../../SoundTouch
+          include \$(BUILD_STATIC_LIBRARY)
 
-          include $(CLEAR_VARS)
+          include \$(CLEAR_VARS)
           LOCAL_MODULE := soundtouch
           LOCAL_SRC_FILES := soundtouch-jni.cpp
           LOCAL_STATIC_LIBRARIES := soundtouch_core
@@ -213,92 +117,29 @@ jobs:
           LOCAL_CFLAGS := -O3 -DNDEBUG -fexceptions -frtti
           LOCAL_CFLAGS += -DANDROID -DSOUNDTOUCH_INTEGER_SAMPLES=1
           LOCAL_CPPFLAGS := -std=c++11
-          LOCAL_C_INCLUDES := $(LOCAL_PATH)/../../SoundTouch $(LOCAL_PATH)/../../include
-          include $(BUILD_SHARED_LIBRARY)
+          LOCAL_C_INCLUDES := \$(LOCAL_PATH)/../../SoundTouch
+          include \$(BUILD_SHARED_LIBRARY)
           EOF
           
-          echo ""
-          echo "Android.mk created successfully"
-          echo "Total lines: $(wc -l < Android.mk)"
-          echo "Included $(echo "$ALL_CPP" | wc -l) source files"
-      
-      # ====================================================================
-      # Create Application.mk
-      # ====================================================================
+          echo "Android.mk created with $(echo "$ALL_CPP" | wc -l) source files"
+          cat Android.mk
       
       - name: Create Application.mk
         run: |
-          echo "=========================================="
-          echo "Creating Application.mk"
-          echo "=========================================="
-          
           cat > "$SOUNDTOUCH_DIR/source/Android-lib/jni/Application.mk" << 'EOF'
-          # ============================================================================
-          # Application.mk - SoundTouch Application Configuration
-          # ============================================================================
-          #
-          # This file configures the Android NDK build for the SoundTouch library.
-          # It specifies the target ABIs, C++ runtime, and build options.
-          #
-          # @author Richard Korbla Adzido
-          # @version 1.0.0
-          # @since 1.0
-          # ============================================================================
-
-          # Target Android API level (minimum API 21 for modern features)
           APP_PLATFORM := android-21
-
-          # Supported ABIs (Application Binary Interfaces)
           APP_ABI := armeabi-v7a arm64-v8a x86 x86_64
-
-          # C++ runtime library (c++_shared is the modern LLVM libc++ runtime)
           APP_STL := c++_shared
-
-          # Enable C++11 features
           APP_CPPFLAGS := -std=c++11 -frtti -fexceptions
-
-          # Optimize for performance
           APP_CFLAGS := -O3 -DNDEBUG
-
-          # Release build optimization
           APP_OPTIM := release
           EOF
           
           echo "Application.mk created"
-          cat "$SOUNDTOUCH_DIR/source/Android-lib/jni/Application.mk"
-      
-      # ====================================================================
-      # Create Complete soundtouch-jni.cpp with All Streaming Methods
-      # ====================================================================
       
       - name: Create soundtouch-jni.cpp
         run: |
-          echo "=========================================="
-          echo "Creating soundtouch-jni.cpp"
-          echo "=========================================="
-          
           cat > "$SOUNDTOUCH_DIR/source/Android-lib/jni/soundtouch-jni.cpp" << 'EOF'
-          /**
-           * SoundTouch Android JNI Wrapper - Complete Streaming Interface
-           * ============================================================================
-           * 
-           * This file implements the complete JNI bridge for SoundTouch with all
-           * streaming methods required for real-time audio processing.
-           * 
-           * Methods implemented:
-           * - Instance management: newInstance, deleteInstance
-           * - Configuration: setSampleRate, setChannels
-           * - Parameter control: setTempo, setPitchSemiTones, setRate
-           * - Streaming: putSamples, receiveSamples, numSamples
-           * - Buffer management: clear, flush
-           * - Utility: getVersionString, getErrorString
-           * 
-           * @author Olli Parviainen (SoundTouch)
-           * @author Richard Korbla Adzido (JNI wrapper)
-           * @version 2.3.3
-           * @since 1.0
-           */
-
           #include <jni.h>
           #include <android/log.h>
           #include <string>
@@ -306,204 +147,95 @@ jobs:
 
           #define LOG_TAG "SoundTouch"
           #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
-          #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
-          #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
           using namespace soundtouch;
-
           static std::string g_lastError = "";
-
-          static void setError(const char* error) {
-              g_lastError = error;
-              LOGE("%s", error);
-          }
-
-          static void clearError() {
-              g_lastError.clear();
-          }
-
-          // ============================================================================
-          // Instance Management
-          // ============================================================================
 
           extern "C" JNIEXPORT jlong JNICALL
           Java_net_surina_soundtouch_SoundTouch_newInstance(JNIEnv* env, jclass clazz) {
-              clearError();
               SoundTouch* st = new SoundTouch();
-              if (st == nullptr) {
-                  setError("Failed to allocate SoundTouch instance");
-                  return 0;
-              }
-              st->clear();
-              LOGD("SoundTouch instance created: %p", st);
               return reinterpret_cast<jlong>(st);
           }
 
           extern "C" JNIEXPORT void JNICALL
           Java_net_surina_soundtouch_SoundTouch_deleteInstance(JNIEnv* env, jobject obj, jlong handle) {
               SoundTouch* st = reinterpret_cast<SoundTouch*>(handle);
-              if (st != nullptr) {
-                  LOGD("SoundTouch instance destroyed: %p", st);
-                  delete st;
-              }
+              if (st) delete st;
           }
-
-          // ============================================================================
-          // Configuration Methods
-          // ============================================================================
 
           extern "C" JNIEXPORT void JNICALL
           Java_net_surina_soundtouch_SoundTouch_setSampleRate(JNIEnv* env, jobject obj, jlong handle, jint sampleRate) {
               SoundTouch* st = reinterpret_cast<SoundTouch*>(handle);
-              if (st == nullptr) {
-                  setError("setSampleRate: Invalid handle");
-                  return;
-              }
-              st->setSampleRate(static_cast<uint>(sampleRate));
-              LOGD("Sample rate set to %d Hz", sampleRate);
+              if (st) st->setSampleRate(sampleRate);
           }
 
           extern "C" JNIEXPORT void JNICALL
           Java_net_surina_soundtouch_SoundTouch_setChannels(JNIEnv* env, jobject obj, jlong handle, jint channels) {
               SoundTouch* st = reinterpret_cast<SoundTouch*>(handle);
-              if (st == nullptr) {
-                  setError("setChannels: Invalid handle");
-                  return;
-              }
-              st->setChannels(static_cast<uint>(channels));
-              LOGD("Channels set to %d", channels);
+              if (st) st->setChannels(channels);
           }
-
-          // ============================================================================
-          // Parameter Control Methods
-          // ============================================================================
 
           extern "C" JNIEXPORT void JNICALL
           Java_net_surina_soundtouch_SoundTouch_setTempo(JNIEnv* env, jobject obj, jlong handle, jfloat tempo) {
               SoundTouch* st = reinterpret_cast<SoundTouch*>(handle);
-              if (st == nullptr) {
-                  setError("setTempo: Invalid handle");
-                  return;
-              }
-              st->setTempo(static_cast<double>(tempo));
-              LOGD("Tempo set to %.2f", tempo);
+              if (st) st->setTempo(tempo);
           }
 
           extern "C" JNIEXPORT void JNICALL
           Java_net_surina_soundtouch_SoundTouch_setPitchSemiTones(JNIEnv* env, jobject obj, jlong handle, jfloat pitch) {
               SoundTouch* st = reinterpret_cast<SoundTouch*>(handle);
-              if (st == nullptr) {
-                  setError("setPitchSemiTones: Invalid handle");
-                  return;
-              }
-              st->setPitchSemiTones(static_cast<double>(pitch));
-              LOGD("Pitch set to %.2f semitones", pitch);
+              if (st) st->setPitchSemiTones(pitch);
           }
 
           extern "C" JNIEXPORT void JNICALL
           Java_net_surina_soundtouch_SoundTouch_setRate(JNIEnv* env, jobject obj, jlong handle, jfloat rate) {
               SoundTouch* st = reinterpret_cast<SoundTouch*>(handle);
-              if (st == nullptr) {
-                  setError("setRate: Invalid handle");
-                  return;
-              }
-              st->setRate(static_cast<double>(rate));
-              LOGD("Rate set to %.2f", rate);
+              if (st) st->setRate(rate);
           }
-
-          // ============================================================================
-          // Streaming Processing Methods
-          // ============================================================================
 
           extern "C" JNIEXPORT void JNICALL
           Java_net_surina_soundtouch_SoundTouch_putSamples(JNIEnv* env, jobject obj, jlong handle, jshortArray samples, jint numSamples) {
               SoundTouch* st = reinterpret_cast<SoundTouch*>(handle);
-              if (st == nullptr) {
-                  setError("putSamples: Invalid handle");
-                  return;
+              if (!st) return;
+              jshort* arr = env->GetShortArrayElements(samples, nullptr);
+              if (arr) {
+                  st->putSamples((SAMPLETYPE*)arr, numSamples);
+                  env->ReleaseShortArrayElements(samples, arr, JNI_ABORT);
               }
-              
-              if (samples == nullptr) {
-                  setError("putSamples: Null sample array");
-                  return;
-              }
-              
-              jshort* sampleArray = env->GetShortArrayElements(samples, nullptr);
-              if (sampleArray == nullptr) {
-                  setError("putSamples: Failed to get sample array");
-                  return;
-              }
-              
-              st->putSamples(reinterpret_cast<const SAMPLETYPE*>(sampleArray), static_cast<uint>(numSamples));
-              env->ReleaseShortArrayElements(samples, sampleArray, JNI_ABORT);
           }
 
           extern "C" JNIEXPORT jint JNICALL
           Java_net_surina_soundtouch_SoundTouch_receiveSamples(JNIEnv* env, jobject obj, jlong handle, jshortArray buffer, jint maxSamples) {
               SoundTouch* st = reinterpret_cast<SoundTouch*>(handle);
-              if (st == nullptr) {
-                  setError("receiveSamples: Invalid handle");
-                  return 0;
-              }
-              
-              if (buffer == nullptr) {
-                  setError("receiveSamples: Null buffer array");
-                  return 0;
-              }
-              
-              jshort* bufferArray = env->GetShortArrayElements(buffer, nullptr);
-              if (bufferArray == nullptr) {
-                  setError("receiveSamples: Failed to get buffer array");
-                  return 0;
-              }
-              
-              uint received = st->receiveSamples(reinterpret_cast<SAMPLETYPE*>(bufferArray), static_cast<uint>(maxSamples));
-              env->ReleaseShortArrayElements(buffer, bufferArray, 0);
-              
-              return static_cast<jint>(received);
+              if (!st) return 0;
+              jshort* arr = env->GetShortArrayElements(buffer, nullptr);
+              if (!arr) return 0;
+              uint received = st->receiveSamples((SAMPLETYPE*)arr, maxSamples);
+              env->ReleaseShortArrayElements(buffer, arr, 0);
+              return received;
           }
 
           extern "C" JNIEXPORT jint JNICALL
           Java_net_surina_soundtouch_SoundTouch_numSamples(JNIEnv* env, jobject obj, jlong handle) {
               SoundTouch* st = reinterpret_cast<SoundTouch*>(handle);
-              if (st == nullptr) {
-                  setError("numSamples: Invalid handle");
-                  return 0;
-              }
-              return static_cast<jint>(st->numSamples());
+              return st ? st->numSamples() : 0;
           }
 
           extern "C" JNIEXPORT void JNICALL
           Java_net_surina_soundtouch_SoundTouch_clear(JNIEnv* env, jobject obj, jlong handle) {
               SoundTouch* st = reinterpret_cast<SoundTouch*>(handle);
-              if (st == nullptr) {
-                  setError("clear: Invalid handle");
-                  return;
-              }
-              st->clear();
-              LOGD("SoundTouch buffers cleared");
+              if (st) st->clear();
           }
 
           extern "C" JNIEXPORT void JNICALL
           Java_net_surina_soundtouch_SoundTouch_flush(JNIEnv* env, jobject obj, jlong handle) {
               SoundTouch* st = reinterpret_cast<SoundTouch*>(handle);
-              if (st == nullptr) {
-                  setError("flush: Invalid handle");
-                  return;
-              }
-              st->flush();
-              LOGD("SoundTouch flushed");
+              if (st) st->flush();
           }
-
-          // ============================================================================
-          // Utility Methods
-          // ============================================================================
 
           extern "C" JNIEXPORT jstring JNICALL
           Java_net_surina_soundtouch_SoundTouch_getVersionString(JNIEnv* env, jclass clazz) {
-              const char* version = SoundTouch::getVersionString();
-              LOGI("SoundTouch version: %s", version);
-              return env->NewStringUTF(version);
+              return env->NewStringUTF(SoundTouch::getVersionString());
           }
 
           extern "C" JNIEXPORT jstring JNICALL
@@ -513,123 +245,37 @@ jobs:
           EOF
           
           echo "soundtouch-jni.cpp created"
-          echo "File size: $(wc -l < "$SOUNDTOUCH_DIR/source/Android-lib/jni/soundtouch-jni.cpp") lines"
-      
-      # ====================================================================
-      # Compile Native Libraries
-      # ====================================================================
       
       - name: Compile SoundTouch Native Libraries
         run: |
-          echo "=========================================="
-          echo "Compiling SoundTouch Native Libraries"
-          echo "=========================================="
-          
           cd "$SOUNDTOUCH_DIR/source/Android-lib"
           
           export PATH=$ANDROID_HOME/ndk/25.1.8937393:$PATH
           
-          echo "NDK Path: $ANDROID_HOME/ndk/25.1.8937393"
-          echo "Current directory: $(pwd)"
-          echo ""
-          
           echo "Starting NDK build..."
           cd jni
-          
-          echo "Cleaning previous build..."
           ndk-build clean
-          
-          echo ""
-          echo "Building for all architectures..."
           ndk-build -j4
           
-          BUILD_RESULT=$?
-          
-          if [ $BUILD_RESULT -eq 0 ]; then
-            echo ""
-            echo "✓ Build successful!"
+          if [ $? -eq 0 ]; then
+            echo "Build successful!"
           else
-            echo ""
-            echo "✗ Build failed with exit code: $BUILD_RESULT"
+            echo "Build failed!"
             exit 1
           fi
           
           cd ..
-          echo ""
           echo "Build output:"
           ls -la libs/
-          echo ""
-          
-          # Verify each architecture was built
-          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
-            if [ -f "libs/$abi/libsoundtouch.so" ]; then
-              SIZE=$(ls -lh "libs/$abi/libsoundtouch.so" | awk '{print $5}')
-              echo "✓ $abi/libsoundtouch.so ($SIZE)"
-            else
-              echo "✗ $abi/libsoundtouch.so not found"
-            fi
-          done
-      
-      # ====================================================================
-      # Create SoundTouch.java Wrapper
-      # ====================================================================
       
       - name: Create SoundTouch.java Wrapper
         run: |
-          echo "=========================================="
-          echo "Creating SoundTouch.java Wrapper"
-          echo "=========================================="
-          
           mkdir -p output/java/net/surina/soundtouch
           
           cat > output/java/net/surina/soundtouch/SoundTouch.java << 'EOF'
-          /**
-           * SoundTouch - Complete Java wrapper for the SoundTouch native library
-           * ============================================================================
-           * 
-           * This class provides the complete JNI interface to the SoundTouch native library
-           * for real-time pitch and tempo shifting of 16-bit PCM audio.
-           * 
-           * <p>Key features:</p>
-           * <ul>
-           *   <li>Independent pitch control from -6 to +6 semitones</li>
-           *   <li>Independent tempo control from 0.5x to 1.5x speed</li>
-           *   <li>Real-time streaming processing with low latency</li>
-           *   <li>Support for both mono and stereo audio</li>
-           *   <li>16-bit integer sample processing for Android compatibility</li>
-           * </ul>
-           * 
-           * <h3>Usage Example</h3>
-           * <pre>
-           * SoundTouch processor = new SoundTouch();
-           * processor.setSampleRate(44100);
-           * processor.setChannels(2);
-           * processor.setTempo(1.25f);
-           * processor.setPitchSemiTones(2.0f);
-           * 
-           * short[] input = new short[8192];
-           * short[] output = new short[8192];
-           * processor.putSamples(input, input.length);
-           * 
-           * int available = processor.numSamples();
-           * int received = processor.receiveSamples(output, available);
-           * 
-           * processor.close();
-           * </pre>
-           * 
-           * @author Olli Parviainen (SoundTouch)
-           * @author Richard Korbla Adzido (Java wrapper)
-           * @version 2.3.3
-           * @since 1.0
-           */
           package net.surina.soundtouch;
 
           public final class SoundTouch {
-              
-              // ========================================================================
-              // Native Method Declarations
-              // ========================================================================
-              
               private static native long newInstance();
               private native void deleteInstance(long handle);
               private native void setSampleRate(long handle, int sampleRate);
@@ -644,296 +290,53 @@ jobs:
               private native void flush(long handle);
               public static native String getVersionString();
               public static native String getErrorString();
-              
-              // ========================================================================
-              // Static Initializer
-              // ========================================================================
-              
-              static {
-                  System.loadLibrary("soundtouch");
-              }
-              
-              // ========================================================================
-              // Member Variables
-              // ========================================================================
-              
+
+              static { System.loadLibrary("soundtouch"); }
+
               private long handle = 0;
               private int mSampleRate = 0;
               private int mChannels = 0;
               private boolean mIsClosed = false;
-              
-              // ========================================================================
-              // Constructor
-              // ========================================================================
-              
-              /**
-               * Constructs a new SoundTouch processor instance.
-               * 
-               * @throws RuntimeException if the native instance cannot be created
-               */
+
               public SoundTouch() {
                   handle = newInstance();
-                  if (handle == 0) {
-                      throw new RuntimeException("Failed to create SoundTouch instance");
-                  }
+                  if (handle == 0) throw new RuntimeException("Failed to create SoundTouch instance");
               }
-              
-              // ========================================================================
-              // Configuration Methods
-              // ========================================================================
-              
-              /**
-               * Sets the audio sample rate.
-               * 
-               * @param sampleRate Sample rate in Hz (8000 to 192000)
-               */
-              public void setSampleRate(int sampleRate) {
-                  if (!mIsClosed) {
-                      mSampleRate = sampleRate;
-                      setSampleRate(handle, sampleRate);
-                  }
-              }
-              
-              /**
-               * Sets the number of audio channels.
-               * 
-               * @param channels 1 for mono, 2 for stereo
-               */
-              public void setChannels(int channels) {
-                  if (!mIsClosed) {
-                      mChannels = channels;
-                      setChannels(handle, channels);
-                  }
-              }
-              
-              /**
-               * Sets the tempo multiplier.
-               * 
-               * @param tempo Tempo multiplier (0.5 to 1.5 recommended)
-               */
-              public void setTempo(float tempo) {
-                  if (!mIsClosed) setTempo(handle, tempo);
-              }
-              
-              /**
-               * Sets the pitch shift in semitones.
-               * 
-               * @param pitch Pitch shift amount (-6 to +6 recommended)
-               */
-              public void setPitchSemiTones(float pitch) {
-                  if (!mIsClosed) setPitchSemiTones(handle, pitch);
-              }
-              
-              /**
-               * Sets the playback rate (affects both tempo and pitch).
-               * 
-               * @param rate Playback rate multiplier
-               */
-              public void setRate(float rate) {
-                  if (!mIsClosed) setRate(handle, rate);
-              }
-              
-              // ========================================================================
-              // Streaming Processing Methods
-              // ========================================================================
-              
-              /**
-               * Feeds PCM samples into the processor for real-time processing.
-               * 
-               * @param samples Array of 16-bit PCM samples
-               * @param numSamples Number of samples to process
-               */
-              public void putSamples(short[] samples, int numSamples) {
-                  if (!mIsClosed) putSamples(handle, samples, numSamples);
-              }
-              
-              /**
-               * Retrieves processed samples from the processor.
-               * 
-               * @param buffer Array to receive the processed samples
-               * @param maxSamples Maximum number of samples to retrieve
-               * @return Number of samples actually retrieved
-               */
-              public int receiveSamples(short[] buffer, int maxSamples) {
-                  return mIsClosed ? 0 : receiveSamples(handle, buffer, maxSamples);
-              }
-              
-              /**
-               * Returns the number of samples available in the output buffer.
-               * 
-               * @return Number of available samples
-               */
-              public int numSamples() {
-                  return mIsClosed ? 0 : numSamples(handle);
-              }
-              
-              /**
-               * Clears all internal buffers and resets processor state.
-               */
-              public void clear() {
-                  if (!mIsClosed) clear(handle);
-              }
-              
-              /**
-               * Flushes any remaining samples from the processor.
-               */
-              public void flush() {
-                  if (!mIsClosed) flush(handle);
-              }
-              
-              // ========================================================================
-              // Getter Methods
-              // ========================================================================
-              
-              /**
-               * Returns the sample rate currently configured.
-               * 
-               * @return Sample rate in Hz, or 0 if not set
-               */
+
+              public void setSampleRate(int sampleRate) { if (!mIsClosed) { mSampleRate = sampleRate; setSampleRate(handle, sampleRate); } }
+              public void setChannels(int channels) { if (!mIsClosed) { mChannels = channels; setChannels(handle, channels); } }
+              public void setTempo(float tempo) { if (!mIsClosed) setTempo(handle, tempo); }
+              public void setPitchSemiTones(float pitch) { if (!mIsClosed) setPitchSemiTones(handle, pitch); }
+              public void setRate(float rate) { if (!mIsClosed) setRate(handle, rate); }
+              public void putSamples(short[] samples, int numSamples) { if (!mIsClosed) putSamples(handle, samples, numSamples); }
+              public int receiveSamples(short[] buffer, int maxSamples) { return mIsClosed ? 0 : receiveSamples(handle, buffer, maxSamples); }
+              public int numSamples() { return mIsClosed ? 0 : numSamples(handle); }
+              public void clear() { if (!mIsClosed) clear(handle); }
+              public void flush() { if (!mIsClosed) flush(handle); }
               public int getSampleRate() { return mSampleRate; }
-              
-              /**
-               * Returns the channel count currently configured.
-               * 
-               * @return Number of channels (1 or 2), or 0 if not set
-               */
               public int getChannels() { return mChannels; }
-              
-              /**
-               * Checks whether the processor has been closed.
-               * 
-               * @return true if closed, false otherwise
-               */
-              public boolean isClosed() { return mIsClosed; }
-              
-              // ========================================================================
-              // Resource Management
-              // ========================================================================
-              
-              /**
-               * Releases the native SoundTouch processor and frees all resources.
-               */
-              public void close() {
-                  if (!mIsClosed && handle != 0) {
-                      deleteInstance(handle);
-                      handle = 0;
-                      mIsClosed = true;
-                  }
-              }
-              
-              /**
-               * Checks if the native library is available for use.
-               * 
-               * @return true if the native library is available, false otherwise
-               */
-              public static boolean isAvailable() {
-                  try {
-                      String version = getVersionString();
-                      return version != null && !version.isEmpty();
-                  } catch (UnsatisfiedLinkError e) {
-                      return false;
-                  }
-              }
-              
-              // ========================================================================
-              // Finalization
-              // ========================================================================
-              
-              @Override
-              protected void finalize() throws Throwable {
-                  try {
-                      if (!mIsClosed && handle != 0) {
-                          deleteInstance(handle);
-                          handle = 0;
-                      }
-                  } finally {
-                      super.finalize();
-                  }
-              }
+              public void close() { if (!mIsClosed && handle != 0) { deleteInstance(handle); handle = 0; mIsClosed = true; } }
+              public static boolean isAvailable() { try { return getVersionString() != null; } catch (UnsatisfiedLinkError e) { return false; } }
           }
           EOF
           
           echo "SoundTouch.java created"
-          echo "File size: $(wc -l < output/java/net/surina/soundtouch/SoundTouch.java) lines"
-      
-      # ====================================================================
-      # Package Artifacts
-      # ====================================================================
       
       - name: Package Artifacts
         run: |
-          echo "=========================================="
-          echo "Packaging Build Artifacts"
-          echo "=========================================="
-          
           mkdir -p output/jniLibs
           
-          # Copy all built .so files
           for abi in armeabi-v7a arm64-v8a x86 x86_64; do
-            SOURCE_FILE="$SOUNDTOUCH_DIR/source/Android-lib/libs/$abi/libsoundtouch.so"
-            if [ -f "$SOURCE_FILE" ]; then
+            SOURCE="soundtouch/source/Android-lib/libs/$abi/libsoundtouch.so"
+            if [ -f "$SOURCE" ]; then
               mkdir -p "output/jniLibs/$abi"
-              cp "$SOURCE_FILE" "output/jniLibs/$abi/"
-              SIZE=$(ls -lh "$SOURCE_FILE" | awk '{print $5}')
-              echo "✓ Copied $abi/libsoundtouch.so ($SIZE)"
-            else
-              echo "✗ Warning: $abi/libsoundtouch.so not found"
+              cp "$SOURCE" "output/jniLibs/$abi/"
+              echo "Copied $abi/libsoundtouch.so"
             fi
           done
           
-          echo ""
-          echo "Creating README.md..."
-          cat > output/README.md << 'EOF'
-          # SoundTouch Android Libraries
-
-          This package contains the complete SoundTouch native libraries (.so files)
-          and Java wrapper built from official source with full streaming method support.
-
-          ## Version Information
-          - SoundTouch: 2.3.3
-          - Build date: See artifact timestamp
-          - Supported ABIs: armeabi-v7a, arm64-v8a, x86, x86_64
-
-          ## Included Methods
-
-          The library includes all streaming methods required for real-time audio processing:
-          - setSampleRate(), setChannels() - Configuration
-          - setTempo(), setPitchSemiTones(), setRate() - Parameter control
-          - putSamples(), receiveSamples(), numSamples() - Streaming
-          - clear(), flush() - Buffer management
-          - getVersionString(), getErrorString() - Utility
-
-          ## Installation
-
-          1. Copy the contents of `jniLibs/` to `app/src/main/jniLibs/` in your Android project
-          2. Copy `java/net/surina/soundtouch/SoundTouch.java` to `app/src/main/java/net/surina/soundtouch/`
-
-          ## Verification
-
-          To verify the library is working correctly:
-          ```java
-          SoundTouch st = new SoundTouch();
-          Log.d("SoundTouch", "Version: " + st.getVersionString());
-          st.setSampleRate(44100);
-          st.setChannels(2);
-          st.close();
-          ```
-
-          ## License
-
-          SoundTouch is licensed under the LGPL license.
-          See https://www.surina.net/soundtouch/ for details.
-          EOF
-          
-          echo "README.md created"
-          
-          echo ""
-          echo "Final artifact structure:"
-          find output -type f | sort
-      
-      # ====================================================================
-      # Upload Artifacts
-      # ====================================================================
+          echo "Final artifacts:"
+          find output -type f
       
       - name: Upload SoundTouch Libraries
         uses: actions/upload-artifact@v6
@@ -941,37 +344,3 @@ jobs:
           name: soundtouch-${{ inputs.soundtouch_version }}-android-libs
           path: output/
           retention-days: 90
-          compression-level: 9
-      
-      # ====================================================================
-      # Build Summary
-      # ====================================================================
-      
-      - name: Build Summary
-        run: |
-          echo "=========================================="
-          echo "BUILD SUMMARY"
-          echo "=========================================="
-          echo ""
-          echo "SoundTouch Version: ${{ inputs.soundtouch_version }}"
-          echo "Build Status: Successful"
-          echo ""
-          echo "Artifacts available for download:"
-          echo "  - soundtouch-${{ inputs.soundtouch_version }}-android-libs.zip"
-          echo ""
-          echo "Contents:"
-          echo "  - jniLibs/armeabi-v7a/libsoundtouch.so"
-          echo "  - jniLibs/arm64-v8a/libsoundtouch.so"
-          echo "  - jniLibs/x86/libsoundtouch.so"
-          echo "  - jniLibs/x86_64/libsoundtouch.so"
-          echo "  - java/net/surina/soundtouch/SoundTouch.java"
-          echo "  - README.md"
-          echo ""
-          echo "Next steps:"
-          echo "  1. Download the artifact"
-          echo "  2. Extract the zip file"
-          echo "  3. Copy jniLibs/ to your Android project's app/src/main/"
-          echo "  4. Copy SoundTouch.java to app/src/main/java/net/surina/soundtouch/"
-          echo "  5. Rebuild your Android project"
-          echo ""
-          echo "=========================================="
