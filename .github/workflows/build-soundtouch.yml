@@ -42,13 +42,9 @@ jobs:
           curl -L -o "soundtouch-$VERSION.tar.gz" "https://www.surina.net/soundtouch/soundtouch-$VERSION.tar.gz"
           tar -xzf "soundtouch-$VERSION.tar.gz"
           
-          # Find the extracted directory
           if [ -d "soundtouch" ]; then
             echo "SOUNDTOUCH_ROOT=soundtouch" >> $GITHUB_ENV
             echo "Extracted to: soundtouch/"
-          elif [ -d "SoundTouch" ]; then
-            echo "SOUNDTOUCH_ROOT=SoundTouch" >> $GITHUB_ENV
-            echo "Extracted to: SoundTouch/"
           else
             echo "ERROR: Could not find extracted directory"
             ls -la
@@ -66,7 +62,7 @@ jobs:
           echo "Directory structure:"
           ls -la "$SOUNDTOUCH_ROOT/"
           echo ""
-          ls -la "$SOUNDTOUCH_ROOT/source/" 2>/dev/null || echo "source/ not found"
+          ls -la "$SOUNDTOUCH_ROOT/source/"
           echo ""
           
           # Find SoundTouch.h location
@@ -77,7 +73,6 @@ jobs:
             echo "Found SoundTouch.h in: $SOUNDTOUCH_SRC"
           else
             echo "ERROR: SoundTouch.h not found"
-            find "$SOUNDTOUCH_ROOT" -name "*.h" -type f 2>/dev/null | head -10
             exit 1
           fi
           
@@ -86,7 +81,6 @@ jobs:
           echo "All .cpp files:"
           find "$SOUNDTOUCH_SRC" -name "*.cpp" -type f 2>/dev/null | sort
           
-          # Count .cpp files
           CPP_COUNT=$(find "$SOUNDTOUCH_SRC" -name "*.cpp" -type f 2>/dev/null | wc -l)
           echo ""
           echo "Total .cpp files found: $CPP_COUNT"
@@ -122,23 +116,23 @@ jobs:
           echo "Headers in include directory:"
           ls -la "$SOUNDTOUCH_ROOT/source/Android-lib/jni/include/soundtouch/"
       
-      - name: Copy Source Files
+      - name: Copy Source Files to JNI Directory
         run: |
           echo "Copying source files to jni directory..."
           
-          # Create source directory
-          mkdir -p "$SOUNDTOUCH_ROOT/source/Android-lib/jni/soundtouch"
+          # Create source directory - directly in jni, not jni/soundtouch
+          mkdir -p "$SOUNDTOUCH_ROOT/source/Android-lib/jni/src"
           
-          # Copy all .cpp files
+          # Copy all .cpp files directly to jni/src/
           find "$SOUNDTOUCH_SRC" -name "*.cpp" -type f 2>/dev/null | while read src; do
             filename=$(basename "$src")
-            cp "$src" "$SOUNDTOUCH_ROOT/source/Android-lib/jni/soundtouch/"
+            cp "$src" "$SOUNDTOUCH_ROOT/source/Android-lib/jni/src/"
             echo "  Copied: $filename"
           done
           
           echo ""
-          echo "Source files in jni/soundtouch/:"
-          ls -la "$SOUNDTOUCH_ROOT/source/Android-lib/jni/soundtouch/"
+          echo "Source files in jni/src/:"
+          ls -la "$SOUNDTOUCH_ROOT/source/Android-lib/jni/src/"
       
       - name: Generate Android.mk
         run: |
@@ -146,13 +140,13 @@ jobs:
           
           cd "$SOUNDTOUCH_ROOT/source/Android-lib/jni"
           
-          # Get list of .cpp files (relative to jni directory)
-          CPP_FILES=$(find soundtouch -maxdepth 1 -name "*.cpp" -type f | sort)
+          # Get list of .cpp files from src directory
+          CPP_FILES=$(find src -maxdepth 1 -name "*.cpp" -type f | sort)
           
           if [ -z "$CPP_FILES" ]; then
-            echo "ERROR: No .cpp files found in soundtouch/"
-            echo "Contents of soundtouch/:"
-            ls -la soundtouch/
+            echo "ERROR: No .cpp files found in src/"
+            echo "Contents of src/:"
+            ls -la src/
             exit 1
           fi
           
