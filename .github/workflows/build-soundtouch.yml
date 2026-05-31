@@ -59,31 +59,42 @@ jobs:
           
           echo "Root: $SOUNDTOUCH_ROOT"
           echo ""
-          echo "Directory structure:"
-          ls -la "$SOUNDTOUCH_ROOT/"
-          echo ""
-          ls -la "$SOUNDTOUCH_ROOT/source/"
-          echo ""
           
-          # Find SoundTouch.h location
-          SOUNDTOUCH_H=$(find "$SOUNDTOUCH_ROOT" -name "SoundTouch.h" -type f 2>/dev/null | head -1)
-          if [ -n "$SOUNDTOUCH_H" ]; then
-            SOUNDTOUCH_SRC=$(dirname "$SOUNDTOUCH_H")
-            echo "SOUNDTOUCH_SRC=$SOUNDTOUCH_SRC" >> $GITHUB_ENV
-            echo "Found SoundTouch.h in: $SOUNDTOUCH_SRC"
+          # Find the directory containing the .cpp source files
+          # In SoundTouch 2.3.3, .cpp files are in source/SoundTouch/
+          if [ -d "$SOUNDTOUCH_ROOT/source/SoundTouch" ]; then
+            SOUNDTOUCH_CPP_DIR="$SOUNDTOUCH_ROOT/source/SoundTouch"
+            echo "SOUNDTOUCH_CPP_DIR=$SOUNDTOUCH_CPP_DIR" >> $GITHUB_ENV
+            echo "Found .cpp source directory: $SOUNDTOUCH_CPP_DIR"
           else
-            echo "ERROR: SoundTouch.h not found"
+            echo "ERROR: source/SoundTouch directory not found"
+            find "$SOUNDTOUCH_ROOT" -type d -name "SoundTouch" 2>/dev/null
+            exit 1
+          fi
+          
+          # Find the include directory with headers
+          if [ -d "$SOUNDTOUCH_ROOT/include" ]; then
+            SOUNDTOUCH_INCLUDE_DIR="$SOUNDTOUCH_ROOT/include"
+            echo "SOUNDTOUCH_INCLUDE_DIR=$SOUNDTOUCH_INCLUDE_DIR" >> $GITHUB_ENV
+            echo "Found include directory: $SOUNDTOUCH_INCLUDE_DIR"
+          else
+            echo "ERROR: include directory not found"
             exit 1
           fi
           
           # List all .cpp files
           echo ""
-          echo "All .cpp files:"
-          find "$SOUNDTOUCH_SRC" -name "*.cpp" -type f 2>/dev/null | sort
+          echo "All .cpp files in $SOUNDTOUCH_CPP_DIR:"
+          find "$SOUNDTOUCH_CPP_DIR" -name "*.cpp" -type f 2>/dev/null | sort
           
-          CPP_COUNT=$(find "$SOUNDTOUCH_SRC" -name "*.cpp" -type f 2>/dev/null | wc -l)
+          CPP_COUNT=$(find "$SOUNDTOUCH_CPP_DIR" -name "*.cpp" -type f 2>/dev/null | wc -l)
           echo ""
           echo "Total .cpp files found: $CPP_COUNT"
+          
+          if [ $CPP_COUNT -eq 0 ]; then
+            echo "ERROR: No .cpp files found!"
+            exit 1
+          fi
       
       - name: Setup Android Build Directories
         run: |
@@ -97,20 +108,12 @@ jobs:
           # Create include directory
           mkdir -p "$SOUNDTOUCH_ROOT/source/Android-lib/jni/include/soundtouch"
           
-          # Copy all header files to include directory
-          echo "Copying header files..."
-          find "$SOUNDTOUCH_SRC" -name "*.h" -type f 2>/dev/null | while read header; do
+          # Copy all header files from include directory
+          echo "Copying header files from $SOUNDTOUCH_INCLUDE_DIR..."
+          find "$SOUNDTOUCH_INCLUDE_DIR" -name "*.h" -type f 2>/dev/null | while read header; do
             cp "$header" "$SOUNDTOUCH_ROOT/source/Android-lib/jni/include/soundtouch/"
             echo "  Copied: $(basename "$header")"
           done
-          
-          # Also copy headers from include directory if it exists
-          if [ -d "$SOUNDTOUCH_ROOT/include" ]; then
-            find "$SOUNDTOUCH_ROOT/include" -name "*.h" -type f 2>/dev/null | while read header; do
-              cp "$header" "$SOUNDTOUCH_ROOT/source/Android-lib/jni/include/soundtouch/"
-              echo "  Copied from include: $(basename "$header")"
-            done
-          fi
           
           echo ""
           echo "Headers in include directory:"
@@ -120,11 +123,12 @@ jobs:
         run: |
           echo "Copying source files to jni directory..."
           
-          # Create source directory - directly in jni, not jni/soundtouch
+          # Create source directory
           mkdir -p "$SOUNDTOUCH_ROOT/source/Android-lib/jni/src"
           
-          # Copy all .cpp files directly to jni/src/
-          find "$SOUNDTOUCH_SRC" -name "*.cpp" -type f 2>/dev/null | while read src; do
+          # Copy all .cpp files from the source/SoundTouch directory
+          echo "Copying from $SOUNDTOUCH_CPP_DIR..."
+          find "$SOUNDTOUCH_CPP_DIR" -name "*.cpp" -type f 2>/dev/null | while read src; do
             filename=$(basename "$src")
             cp "$src" "$SOUNDTOUCH_ROOT/source/Android-lib/jni/src/"
             echo "  Copied: $filename"
