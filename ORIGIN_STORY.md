@@ -237,9 +237,7 @@ I see a future where:
 
 **It all begins with a thought...**
 
----
-
-***~ Richard Korbla Adzido, 2026***
+***Richard Korbla Adzido, 2026***
 
 ---
 
