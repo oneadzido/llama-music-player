@@ -10,6 +10,20 @@ A high quality Android music player with custom playback engine, pitch and playb
 
 ---
 
+## Origin Story
+
+**Llama Music Player** was developed by a self-motivated, self-learning developer from Ghana.
+
+He has always been passionate about computers since he was a child.
+
+He developed Llama Music Player on his Android smartphone, in a deep partnership with AI.
+
+He is not a developer by training. He is a developer by passion.
+
+Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
+
+---
+
 ## Features
 
 - Audio Formats: MP3, FLAC, OGG, M4A, AAC, WAV
