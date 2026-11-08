@@ -8,7 +8,7 @@ scoping, and sixteen languages.
 [![Android](https://img.shields.io/badge/Android-6.0%2B-brightgreen.svg)](https://developer.android.com)
 [![Privacy](https://img.shields.io/badge/Privacy-Policy-blue.svg)](PRIVACY.md)
 
-[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.4.2.apk)
+[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.4.3.apk)
 
 [![Build](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml/badge.svg)](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml)
 
@@ -83,6 +83,21 @@ Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
   survives a missing `POST_NOTIFICATIONS` grant on Android 13+, a
   sticky restart after a process kill, and the brief `IDLE` window
   during a prepare failure's recovery.
+- **Resume after a phone call:** A call, a navigation prompt, or
+  any other audio-focus interruption is recorded once, and playback
+  resumes when focus returns. Focus acquisition is retried for up
+  to six seconds, so the resume lands on devices where the
+  telephony stack releases focus late. A user action during the
+  interruption — a tap, a next, a stop, a volume change to zero —
+  clears the record and the automatic resume does not fire.
+- **Notification continuity through an interruption:** The
+  playback notification stays a foreground notification while an
+  interruption is in progress and playback is resumable, so the
+  shade entry, the lockscreen controls, and the media session
+  survive a phone call and resume with the playback.
+- **Automatic ducking:** A short interruption lowers the music's own
+  output volume for its duration instead of pausing. The system stream
+  volume is not touched.
 - **Home button:** The main player screen's home button uses a Home
   icon and returns the app to the Android home screen with a
   deliberate two-tap gesture, leaving the music playing in the
@@ -101,12 +116,6 @@ Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
   change the music volume.
 - **Volume-aware playback:** Music pauses at volume 0 and resumes when
   the volume is raised.
-- **Auto-resume after transient focus loss:** A phone call or
-  navigation prompt pauses the music; when focus returns, playback
-  resumes from where it paused. A permanent loss is respected.
-- **Automatic ducking:** A short interruption lowers the music's own
-  output volume for its duration instead of pausing. The system stream
-  volume is not touched.
 - **Live search:** A search bar at the top of the playlist filters
   on every keystroke, case-insensitively, across title, artist, album,
   and genre. The header shows the visible count over the total while a
@@ -136,7 +145,13 @@ Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
 - **Split-screen layout:** The album art resizes, shrinks, or hides
   with the window height; every screen adjusts its own content so the
   controls always fit.
-- **Bluetooth support:** Headset controls.
+- **Bluetooth support:** Headset controls, with the pause on
+  disconnect scoped to the case it describes. A disconnect pauses
+  playback only when the headset was the active output, no other
+  interruption is already handling the pause, and playback was
+  running. A link flap that restores the route within 400 ms
+  suppresses the pause, and a user action during the window cancels
+  it.
 - **Background playback:** Persistent notification with album art.
 - **Lock-screen controls:** `MediaSession` integration.
 
@@ -239,7 +254,7 @@ calls run on a dedicated `HandlerThread`. Only marshalled `Runnable`s
 cross between them. The `READY` state is the state a song sits in
 when it has been prepared and is waiting for the play button.
 
-Six rules belong to this machine.
+Seven rules belong to this machine.
 
 First, the music-stream volume receiver is a facet of it: registered
 in `onBind(Intent)` and unregistered in `onDestroy()`, so once the
@@ -249,13 +264,33 @@ restart, a Bluetooth connect, a media-button press — never registers
 the receiver, so a hardware volume press on those paths is not
 treated as a transport control.
 
-Second, a pause caused by a transient audio-focus loss is remembered;
-when the framework returns `AUDIOFOCUS_GAIN` and the machine is still
-paused, playback resumes from the paused position. A permanent loss
-is not remembered: the user has moved on, and playback does not
-restart on its own.
+Second, an audio-focus interruption is recorded once, as an
+`Interruption`, on the first loss that interrupts a live transition.
+A subsequent loss of a different kind during the same interruption
+does not overwrite the record, so a dialer that sends
+`AUDIOFOCUS_LOSS` for the ringtone and `AUDIOFOCUS_LOSS_TRANSIENT`
+for the call produces one record, and the gain that follows resumes
+from it. The record is cleared by any user-initiated transition, by
+a successful resume, and by a transition to idle. The record drives
+three decisions: whether a gain resumes playback, whether the
+playback notification stays a foreground notification through the
+interruption, and whether a subsequent loss of a different kind is
+ignored.
 
-Third, a duck request —
+Third, the gain that ends an interruption goes through
+`resumeAfterInterruption()`, which retries focus acquisition on a
+bounded cadence — twelve attempts at five hundred milliseconds —
+because the telephony stack holds focus through its own teardown
+after a call ends, and a single request inside the gain callback
+fails on a meaningful fraction of devices. A gain that arrives while
+`AudioManager.getMode()` reports a call mode skips the first focus
+attempt and enters the retry path directly. When the retry budget
+is exhausted, the interruption record is left in place: the
+notification stays foreground, the shade entry and lockscreen
+controls survive, and the play button resumes through the ordinary
+transport path.
+
+Fourth, a duck request —
 `AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK`, what a navigation prompt or a
 notification tone sends — does not pause. The machine lowers the
 `MediaPlayer`'s own output volume to `DUCK_VOLUME_FRACTION` for the
@@ -263,7 +298,7 @@ duration of the interruption and restores it to full on
 `AUDIOFOCUS_GAIN`. The system stream volume is not touched, so the
 volume slider does not move and the receiver is not involved.
 
-Fourth, volume-up at the device maximum does not emit
+Fifth, volume-up at the device maximum does not emit
 `VOLUME_CHANGED_ACTION` — no value changed — so `MusicPlayer`
 overrides `dispatchKeyEvent` to resume a paused song from the
 foreground when the volume is already at max. When the player is
@@ -271,7 +306,7 @@ backgrounded and the song is deliberately paused, resuming goes
 through the notification's play action, which reaches the service
 through the media session in every screen state.
 
-Fifth, every transition the machine begins names its direction and
+Sixth, every transition the machine begins names its direction and
 its restart as properties of the generation that produces it. A next
 or previous request notes `+1` or `−1`; an automatic advance notes
 `+1`; a reprepare of the same song notes `0`; a wrap that restarts
@@ -280,10 +315,19 @@ the generation when the transition starts and published alongside
 the window on the same broadcast, so the carousel's animation and the
 audio's transition are the same value by construction.
 
-Sixth, a headset disconnect is a facet of the same machine: the
+Seventh, a Bluetooth disconnect is a facet of the same machine. The
 service registers a receiver for the pause request in `onCreate` and
-unregisters it in `onDestroy`, so the pause fires whether or not the
-player activity is alive.
+unregisters it in `onDestroy`, so the pause fires whether or not
+the player activity is alive. The pause is gated on three
+conditions, all required: the Bluetooth device is the current audio
+route, no interruption is already handling the pause, and the state
+is playing. A disconnect during a call, a link loss on a
+paired-but-inactive device, and a disconnect while already paused
+are ignored and logged. When all three pass, the pause is confirmed
+after a four-hundred-millisecond settling window, which
+distinguishes a disconnect from a link flap; a restored route
+within the window suppresses the pause, and a user-initiated
+transition during the window cancels it.
 
 The same machine also owns the three-tier playlist and the incoming-
 file hand-off.
@@ -501,14 +545,20 @@ commit also writes the media-session playback state from
 notification, and the player screen all agree about what is playing
 at every instant.
 
-The controller's resilience has five parts:
+The controller's resilience has six parts:
 
 1. The cancel branch — the `isIdle()` check — is refused while the
    service reports a transition pending through
    `MusicService.isTransitionPending()`.
 2. The foreground promotion is attempted after `notify()`, not
    before, and a promotion failure leaves the notification visible
-   and `mPlaybackForeground` false, so the next sync retries.
+   and `mPlaybackForeground` false, so the next sync retries. The
+   promotion decision is a two-input expression: the state is
+   playing, or the service reports that an interruption is in
+   progress and the notification must stay foreground. The second
+   input is what keeps the notification, the shade entry, and the
+   lockscreen controls alive through a phone call, when playback is
+   paused but expected to resume.
 3. `mLastCommittedGeneration` is advanced only when the render
    succeeds, so a failed render is retried rather than recorded as
    already committed.
@@ -519,6 +569,13 @@ The controller's resilience has five parts:
    process kill — restores the notification from the persisted state
    through `MusicService.restoreNotificationFromPersistedState()`,
    so the shade is not empty after the process has been reclaimed.
+6. The notification's foreground lifetime is projected from the
+   service through `ServiceStateSource.shouldRemainForeground()`,
+   which returns true while an interruption is in progress, the
+   state is resumable, and the playlist is non-empty. The
+   projection is a pure function of the interruption record, so
+   the notification and the audio-focus handling cannot disagree
+   about whether the interruption is still in effect.
 
 ### 8. The Metadata Editor (`MetadataEditor`, `MetadataReader`, `MetadataWriter`)
 

@@ -5,6 +5,252 @@ All notable changes to Llama Music Player are documented in this file.
 Current technical specifications, installation, and usage are
 documented in the [README](README.md).
 
+## [1.4.3] - Nov 08, 2026
+
+### Overview
+
+Playback resumes reliably after a phone call in this release, and the
+playback notification stays a foreground notification through the
+interruption that paused it. The Bluetooth-disconnect pause is
+scoped to the case it describes: a disconnect pauses playback only
+when the headset was the active output, no other interruption is
+already handling the pause, and playback was running. Every
+refinement in the release exists so that an interruption the user
+did not cause, and cannot see, cannot leave the service paused with
+no way back.
+
+The resume path rests on one record. An audio-focus interruption —
+a call, a navigation prompt, a ducking app from the focus stack's
+point of view — is recorded once, as an `Interruption`, on the
+first loss that interrupts a live transition. A subsequent loss of
+a different kind during the same interruption does not overwrite
+the record, so a dialer that sends `AUDIOFOCUS_LOSS` for the
+ringtone and `AUDIOFOCUS_LOSS_TRANSIENT` for the call produces one
+record, and the gain that follows resumes from it. The record is
+cleared by any user-initiated transition, by a successful resume,
+and by a transition to idle. Three decisions read from it: whether
+a gain resumes playback, whether the notification stays a
+foreground notification through the interruption, and whether a
+subsequent loss of a different kind is ignored.
+
+The gain that ends an interruption goes through a bounded retry.
+The telephony stack holds audio focus through its own teardown
+after a call ends, and a single `requestAudioFocus` inside the gain
+callback fails on a meaningful fraction of devices. The retry budget
+is twelve attempts at five hundred milliseconds. When the retry
+budget is exhausted, the record is left in place: the notification
+stays foreground, the shade entry and lockscreen controls survive,
+and the play button resumes through the ordinary transport path.
+
+The playback notification is promoted to foreground while an
+interruption is in progress and playback is resumable, not only
+while playback is running. This is the second half of the
+resilience: the shade entry, the lockscreen controls, and the media
+session stay present for the duration of the call and resume with
+the playback. Without the promotion, an interrupted pause demoted
+the notification and the shade entry was eligible for reclamation
+while the call was up.
+
+The Bluetooth-disconnect pause is now a three-gate decision. The
+headset must be the current audio route, no interruption may
+already be handling the pause, and the state must be playing. A
+disconnect during a call, a link loss on a paired-but-inactive
+device, and a disconnect while already paused are ignored and
+logged. When all three pass, the pause is confirmed after a
+four-hundred-millisecond settling window, which distinguishes a
+disconnect from a link flap; a restored route within the window
+suppresses the pause, and a user-initiated transition during the
+window cancels it.
+
+Every user-initiated transition — a tap, a next, a stop, a volume
+change to zero, a media-session command, a hardware media key, a
+manual resume — clears the interruption record as its first action.
+The automatic resume does not fire after the user has chosen
+otherwise. This is what makes "no other user action intervened" a
+mechanical property rather than a hope.
+
+### Fixed
+
+- **Playback resumes after a phone call.** An answered call
+  produces `AUDIOFOCUS_LOSS_TRANSIENT` (or a `LOSS` followed by a
+  `_TRANSIENT` on some dialers), then `AUDIOFOCUS_GAIN` when the
+  call ends. Previously the resume was attempted with a single
+  focus request inside the gain callback, and that request was
+  refused on devices where the telephony stack still held focus
+  through its own teardown. The service stayed paused with no
+  further gain to wake it. The resume now goes through
+  `resumeAfterInterruption`, which retries focus acquisition on
+  the bounded cadence above. The first attempt is skipped and the
+  retry path is entered directly when
+  `AudioManager.getMode()` reports a call mode at the moment of
+  the gain, because the first attempt would almost certainly be
+  refused.
+
+- **The interruption record is set on the first loss and not
+  overwritten by a second.** Some dialers send
+  `AUDIOFOCUS_LOSS` for the ringtone followed by
+  `AUDIOFOCUS_LOSS_TRANSIENT` for the call, and some send the two
+  in the opposite order. The record is set on the first loss that
+  interrupts a live transition and a subsequent loss of a
+  different kind is ignored, so the gain that follows sees the
+  record regardless of the order. A user action during the
+  interruption clears the record, so the automatic resume does not
+  fire after the user has chosen otherwise.
+
+- **The playback notification stays foreground through the
+  interruption.** The foreground promotion is now a two-input
+  expression: the state is playing, or the service reports that
+  an interruption is in progress and the notification must stay
+  foreground. The second input keeps the notification, the shade
+  entry, and the lockscreen controls alive through a phone call,
+  when playback is paused but expected to resume. Without it, an
+  interrupted pause demoted the notification and the shade entry
+  was eligible for reclamation.
+
+- **A Bluetooth disconnect pauses only when the headset was the
+  active output.** The disconnect broadcast is gated on three
+  conditions: the Bluetooth device is the current audio route, no
+  interruption is already handling the pause, and the state is
+  playing. A disconnect during a call, a link loss on a
+  paired-but-inactive device, and a disconnect while already
+  paused are ignored and logged. The broadcast carries the
+  disconnecting profile and the state value, and the service
+  logs both on each gate the request passes through.
+
+- **A link flap no longer pauses playback.** The disconnect
+  broadcast schedules the pause after a four-hundred-millisecond
+  settling window. If the Bluetooth route is restored within the
+  window, the pause is suppressed. A user-initiated transition
+  during the window cancels it through `clearInterruption`.
+
+- **The service does not leave the playback notification
+  foreground after an interruption resolves.** `clearInterruption`
+  is called by every user-initiated transition and on a successful
+  resume. The notification's foreground lifetime is projected
+  from the interruption record through
+  `ServiceStateSource.shouldRemainForeground`, so the notification
+  and the audio-focus handling cannot disagree about whether the
+  interruption is still in effect.
+
+### Under the Hood
+
+- `MusicService.Interruption` — new value type. Holds the loss
+  kind (`TRANSIENT_LOSS` or `PERMANENT_LOSS`), the elapsed time it
+  began, whether playback was running, and the generation the
+  transition carried. The record replaces the previous
+  `mPausedByTransientLoss` boolean, which a subsequent loss of a
+  different kind could clear before the gain read it.
+
+- `MusicService.mInterruption` — new field. The single record of
+  an interruption in progress. Written only by
+  `handleAudioFocusChange` on the first loss that interrupts a
+  live transition; cleared only by `clearInterruption`.
+
+- `MusicService.shouldResumeAfterInterruption()` — new method.
+  Three conditions, all required: the state was playing when the
+  interruption began, the generation has not advanced since the
+  interruption began, and the state machine is in a state a
+  resume can act on. The generation check is what makes "no other
+  user action intervened" mechanical.
+
+- `MusicService.shouldRemainForeground()` — new method. True
+  while an interruption is in progress, the state is resumable,
+  and the playlist is non-empty. Surfaced to the notification
+  controller through `ServiceStateSource.shouldRemainForeground`.
+
+- `MusicService.resumeAfterInterruption()` — new method. The
+  bounded retry that ends an interruption. Focus acquisition
+  succeeds → clear the record and dispatch the resume.
+  Focus refused → post the next retry at
+  `RESUME_RETRY_INTERVAL_MS`, up to
+  `RESUME_RETRY_ATTEMPTS`. Budget exhausted → leave the record
+  in place so the notification stays foreground and the user
+  can revive with one tap. The retry runnable is cancelled by
+  `clearInterruption`.
+
+- `MusicService.clearInterruption()` — new method. Clears the
+  record, cancels the resume retry, and cancels any pending
+  Bluetooth pause confirmation. Called by every user-initiated
+  transition and by `onDestroy`.
+
+- `MusicService.handleAudioFocusChange(int)` — first-loss-wins.
+  The `AUDIOFOCUS_LOSS` and `AUDIOFOCUS_LOSS_TRANSIENT` cases set
+  the interruption record when the state was PLAYING or when
+  the state was PREPARING and the transition was heading toward
+  playback. The `AUDIOFOCUS_GAIN` case routes through
+  `resumeAfterInterruption`. The duck path is unchanged.
+
+- `MusicService.doResume()` — split into a public wrapper and
+  `doResumeInternal`. The wrapper requests focus and leaves the
+  interruption record in place when focus is refused, so a later
+  gain or a volume raise can complete the resume.
+  `doResumeInternal` assumes focus is held and runs the
+  synchronous PLAYING commit, the async `player.start()`, and
+  the failure rollback.
+
+- `MusicService.onBluetoothDisconnect(Intent)` — new method.
+  Three gates: no interruption in progress, the Bluetooth
+  device is the active output, and the state is PLAYING. When
+  all three pass, posts the confirmation runnable at
+  `BLUETOOTH_DISCONNECT_CONFIRM_MS`. The confirmation re-checks
+  the route and calls `pause()` only when the route has not
+  been restored.
+
+- `MusicService.isBluetoothChosenOutput()` — new method.
+  `AudioManager.isBluetoothA2dpOn()` for the active route. A
+  link loss on a paired-but-inactive device is not about the
+  user's listening and must not pause playback that was going
+  to the phone's speaker or a wired headset.
+
+- `MusicService.cancelBluetoothPauseConfirmation()` — new
+  method. Cancels the pending Bluetooth pause confirmation.
+  Called from `clearInterruption`.
+
+- `MusicService.mBluetoothPauseConfirmRunnable` — new field. The
+  pending pause confirmation. Set by `onBluetoothDisconnect`,
+  cleared when it runs or when `clearInterruption` cancels it.
+
+- `MusicService.registerBluetoothPauseReceiver()` — the
+  receiver now dispatches to `onBluetoothDisconnect(intent)` on
+  the main thread instead of calling `pause()` directly. The
+  gates and the settling window run inside that method.
+
+- `MusicService.mStateSource.shouldRemainForeground()` — new
+  override. Projects `MusicService.this.shouldRemainForeground`
+  to the notification controller.
+
+- `MusicService` user-initiated transitions —
+  `playSong`, `playSongAtPosition`, `playSongByPath`,
+  `requestIncomingFile`, `playNextSong`, `playPreviousSong`,
+  `togglePlayPause`, `pause`, `resume`, `stop`,
+  `stopCompletely`, `transitionToIdle`, `handleMediaButton`,
+  the media-session `onPlay` / `onPause` / `onStop` callbacks,
+  and the volume-drop path in `onMusicVolumeChanged` each call
+  `clearInterruption()` as their first action.
+
+- `MusicService.onDestroy()` — calls `clearInterruption()` at
+  the top, so the resume retry and the Bluetooth pause
+  confirmation are cancelled before the rest of the teardown
+  runs.
+
+- `BluetoothReceiver.handleBluetoothDisconnect` — the pause
+  broadcast now carries the disconnecting profile's action and
+  the state value under `EXTRA_PROFILE_ACTION` and
+  `EXTRA_PROFILE_STATE`. `handleConnectionStateChanged` forwards
+  the intent to the disconnect handler.
+
+- `NotificationController.ServiceStateSource` — gained
+  `shouldRemainForeground()`. The controller consults it when
+  deciding whether to promote or demote the playback
+  notification.
+
+- `NotificationController.performPlaybackUpdate()` — the
+  foreground-promotion decision is now `PLAYING || service
+  reports an interruption in progress`. A failed
+  `startForeground` leaves the flag false and the next sync
+  retries, so the notification is visible in the shade whether
+  or not the promotion succeeded.
+
 ## [1.4.2] - Nov 07, 2026
 
 ### Overview
