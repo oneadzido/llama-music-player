@@ -9,15 +9,17 @@ documented in the [README](README.md).
 
 ### Overview
 
-Playback resumes reliably after a phone call in this release, and the
+Playback resumes after a phone call in this release, and the
 playback notification stays a foreground notification through the
 interruption that paused it. The Bluetooth-disconnect pause is
 scoped to the case it describes: a disconnect pauses playback only
 when the headset was the active output, no other interruption is
-already handling the pause, and playback was running. Every
-refinement in the release exists so that an interruption the user
-did not cause, and cannot see, cannot leave the service paused with
-no way back.
+already handling the pause, and playback was running. The Home
+button's return-home confirmation becomes a colour the user sees.
+Every refinement in the release exists so that an interruption the
+user did not cause, and cannot see, cannot leave the service paused
+with no way back, and so that a gesture the user did cause has a
+visible step between the request and the result.
 
 The resume path rests on one record. An audio-focus interruption —
 a call, a navigation prompt, a ducking app from the focus stack's
@@ -69,22 +71,31 @@ The automatic resume does not fire after the user has chosen
 otherwise. This is what makes "no other user action intervened" a
 mechanical property rather than a hope.
 
+The Home button's two-tap gesture gains a third visible state. The
+first tap enters `ARMED` and paints the button in the pending
+colour; the second tap enters `CONFIRMED`, paints the button in the
+themed active colour, and schedules the return-home at a half-second
+dwell, so the user perceives the confirmation as a colour rather
+than as an intent that fires before the screen updates. A tap on
+any other button in either phase cancels the gesture and restores
+the Home button to its steady inactive colour. The two phases are
+carried by one runnable whose body branches on the state, and by
+one cancel method that does not need to know which phase scheduled
+it.
+
 ### Fixed
 
 - **Playback resumes after a phone call.** An answered call
   produces `AUDIOFOCUS_LOSS_TRANSIENT` (or a `LOSS` followed by a
   `_TRANSIENT` on some dialers), then `AUDIOFOCUS_GAIN` when the
-  call ends. Previously the resume was attempted with a single
-  focus request inside the gain callback, and that request was
-  refused on devices where the telephony stack still held focus
-  through its own teardown. The service stayed paused with no
+  call ends. A single focus request inside the gain callback is
+  refused on devices where the telephony stack still holds focus
+  through its own teardown, and the service stays paused with no
   further gain to wake it. The resume now goes through
   `resumeAfterInterruption`, which retries focus acquisition on
   the bounded cadence above. The first attempt is skipped and the
-  retry path is entered directly when
-  `AudioManager.getMode()` reports a call mode at the moment of
-  the gain, because the first attempt would almost certainly be
-  refused.
+  retry path is entered directly when `AudioManager.getMode()`
+  reports a call mode at the moment of the gain.
 
 - **The interruption record is set on the first loss and not
   overwritten by a second.** Some dialers send
@@ -103,9 +114,7 @@ mechanical property rather than a hope.
   an interruption is in progress and the notification must stay
   foreground. The second input keeps the notification, the shade
   entry, and the lockscreen controls alive through a phone call,
-  when playback is paused but expected to resume. Without it, an
-  interrupted pause demoted the notification and the shade entry
-  was eligible for reclamation.
+  when playback is paused but expected to resume.
 
 - **A Bluetooth disconnect pauses only when the headset was the
   active output.** The disconnect broadcast is gated on three
@@ -128,9 +137,22 @@ mechanical property rather than a hope.
   is called by every user-initiated transition and on a successful
   resume. The notification's foreground lifetime is projected
   from the interruption record through
-  `ServiceStateSource.shouldRemainForeground`, so the notification
-  and the audio-focus handling cannot disagree about whether the
-  interruption is still in effect.
+  `ServiceStateSource.shouldRemainForeground`, so the
+  notification and the audio-focus handling cannot disagree about
+  whether the interruption is still in effect.
+
+- **The Home button's confirmation is visible.** The two-tap
+  return-home gesture previously fired the return-home on the
+  same turn as the second tap, so the button's themed colour was
+  never seen — the app left before the colour change was drawn.
+  The second tap now transitions the button to the themed colour
+  and dwells for half a second before the task moves to the back.
+  The dwell is bounded by `HOME_CONFIRM_DWELL_MS`, and every
+  user-initiated transition through another button cancels it.
+  The button's `ARMED` and `CONFIRMED` states are distinguished
+  by a three-value `HomeConfirmState` enum rather than a
+  boolean, so a third tap on a `CONFIRMED` button is a no-op and
+  a tap on another button always resets the state to `IDLE`.
 
 ### Under the Hood
 
@@ -250,6 +272,62 @@ mechanical property rather than a hope.
   `startForeground` leaves the flag false and the next sync
   retries, so the notification is visible in the shade whether
   or not the promotion succeeded.
+
+- `MusicPlayer.HomeConfirmState` — the three-value enum
+  (`IDLE`, `ARMED`, `CONFIRMED`) that expresses which phase of
+  the return-home gesture the button is in. Replaces the
+  previous `mHomePending` boolean.
+
+- `MusicPlayer.mHomeConfirmState` — the single field that
+  carries the enum. Read by the click handler, both helpers,
+  the theme reapplication, and `cancelReturnHome`.
+
+- `MusicPlayer.mHomeReturnRunnable` — the single pending
+  timeout. Carries both phases; its body branches on
+  `mHomeConfirmState` to decide which phase it is ending.
+  Cancelled by `cancelReturnHome`.
+
+- `MusicPlayer.HOME_CONFIRM_DWELL_MS` — the dwell on the
+  themed CONFIRMED state before `moveTaskToBack(true)` runs,
+  in milliseconds.
+
+- `MusicPlayer.enterArmedState(long)` — enters the ARMED
+  phase: repaints the button in the pending colour, shows the
+  arming toast, and schedules the ARMED expiry.
+
+- `MusicPlayer.enterConfirmedState()` — enters the CONFIRMED
+  phase: repaints the button in the themed colour, dismisses
+  the arming toast, and schedules the return-home via
+  `moveTaskToBack(true)`.
+
+- `MusicPlayer.cancelReturnHome()` — replaced. Now cancels
+  the single pending runnable, resets the state to `IDLE`,
+  and repaints the button in the inactive control colour.
+  Every transport button, every navigation button, every
+  committed album-art gesture, `onStop`, and `onDestroy`
+  call it.
+
+- `MusicPlayer` click handlers — the five navigation buttons
+  (`managerButton`, `llamaButton`, `playlistButton`,
+  `equalizerButton`, `metadataButton`) each gain a
+  `cancelReturnHome()` call as the first statement of their
+  debounced branch, so a navigation tap during either phase
+  cancels the pending return-home.
+
+- `MusicPlayer.applyThemeToUI()` — the Home-button tint
+  branch is now three-way: `ARMED` uses
+  `updateButtonPendingState(button, true, red)`, `CONFIRMED`
+  uses `updateControlButton(button, true, true)`, `IDLE`
+  uses `updateControlButton(button, true, false)`.
+
+- `MusicPlayer.safeUpdateUI(Runnable)` → `MusicPlayer.updateUISafely(Runnable)` —
+  renamed. Call sites updated; behavior unchanged.
+
+- `MusicPlayer.safeCallService(Runnable)` → `MusicPlayer.callServiceSafely(Runnable)` —
+  renamed. Call sites updated; behavior unchanged.
+
+- `MusicPlayer.safeRecycleBitmap(Bitmap)` → `MusicPlayer.recycleBitmapSafely(Bitmap)` —
+  renamed. Call sites updated; behavior unchanged.
 
 ## [1.4.2] - Nov 07, 2026
 

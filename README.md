@@ -99,11 +99,14 @@ Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
   output volume for its duration instead of pausing. The system stream
   volume is not touched.
 - **Home button:** The main player screen's home button uses a Home
-  icon and returns the app to the Android home screen with a
-  deliberate two-tap gesture, leaving the music playing in the
-  background. The first tap changes the icon and border to a
-  contrasting confirmation color and displays a toast; the second
-  tap within one second sends the app to the background.
+  icon and returns the app to the Android home screen on a deliberate
+  two-tap gesture, leaving the music playing in the background. The
+  first tap turns the button the pending colour and shows a toast;
+  the second tap within one second turns it the theme colour and the
+  app moves to the background half a second later, so the
+  confirmation is a colour the user sees. A tap on any other button
+  during either window cancels the return and restores the Home
+  control to its inactive colour.
 - **Centre swipe:** Swipe up on the centre of the album art to resume
   a paused song, or down to pause a playing one. The gesture requires
   twice the touch slop of travel to distinguish it from digitizer
@@ -866,7 +869,54 @@ activities that own the affected layouts.
 - `MetadataEditor` and `PlaylistActivity` let their existing scroll
   containers absorb the overflow.
 
-### 16. Cross-cutting: localization
+### 16. The Home button gesture (`MusicPlayer`)
+
+The Home control on the main player screen is a two-tap
+confirmation, with three visible states carried by a three-value
+`HomeConfirmState` enum — `IDLE`, `ARMED`, `CONFIRMED`.
+
+`IDLE` is the steady state, painted in the inactive control
+colour every action button uses when it is enabled but not
+expressing an active mode. A first tap enters `ARMED`: the
+button is repainted in the pending colour, an arming toast is
+shown, and a timeout at `HOME_CONFIRM_WINDOW_MS` reverts the
+button to `IDLE` if no second tap arrives. A second tap inside
+that window enters `CONFIRMED`: the button is repainted in the
+themed active colour and the return-home is scheduled at
+`HOME_CONFIRM_DWELL_MS` later, so the user perceives the
+confirmation as a colour rather than as an intent that fires
+before the screen updates. The dwell's body calls
+`moveTaskToBack(true)`, which asks the ActivityManager to move
+the task behind the next one in the stack — the same mechanism
+the framework uses for back-at-root, and one that does not
+depend on resolving a home intent.
+
+Both phases are carried by a single `mHomeReturnRunnable`
+field; its body branches on `mHomeConfirmState` to decide
+whether it is ending the ARMED window or the CONFIRMED dwell.
+`cancelReturnHome()` cancels the pending runnable without
+needing to know which phase scheduled it, resets the state to
+`IDLE`, and repaints the button in its inactive colour. Every
+transport button, every navigation button, every committed
+album-art gesture, `onStop`, and `onDestroy` call
+`cancelReturnHome()`, so the user's most recent tap — whether
+on the Home button or on any other control — is always the
+one that decides what happens next.
+
+The activity's own helpers follow one shape: the verb, the
+object, and `Safely` trailing. `updateUISafely(Runnable)`
+coalesces UI updates that arrive while another is in flight
+and dispatches them on the main thread. `callServiceSafely(Runnable)`
+holds the service lock and dispatches only when the service is
+bound. `recycleBitmapSafely(Bitmap)` skips a bitmap that is
+already recycled and swallows the recycle exception. The two
+receiver helpers — `registerReceiverSafely` and
+`unregisterReceiverSafely` — have followed the same shape
+since the receiver set was consolidated. The consistency is
+the point: every helper that absorbs a failure the caller does
+not have to handle reads the same way in every call site.
+
+### 17. Cross-cutting: localization
 
 Every user-visible string the app shows resolves from
 `res/values/strings.xml` in the base locale and from a

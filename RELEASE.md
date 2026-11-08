@@ -4,9 +4,10 @@
 
 Version 1.4.3 makes playback resume reliably after a phone call, keeps
 the playback notification a foreground notification through the
-interruption, and scopes the Bluetooth-disconnect pause to the case
-it describes. For the full change history of this release, see the
-`[1.4.3]` entry in the [CHANGELOG](CHANGELOG.md). For technical
+interruption, scopes the Bluetooth-disconnect pause to the case it
+describes, and makes the Home button's return-home confirmation a
+colour the user sees. For the full change history of this release, see
+the `[1.4.3]` entry in the [CHANGELOG](CHANGELOG.md). For technical
 specifications, installation, and usage, see the
 [README](README.md).
 
@@ -61,3 +62,16 @@ during the window cancels the scheduled pause.
 The disconnect broadcast now carries the disconnecting profile and
 the state value. The service logs both on each gate the request
 passes through; neither value gates the pause.
+
+### Home button confirmation is visible
+
+The main player screen's Home control is a deliberate two-tap
+gesture: the first tap arms the return and the second confirms it.
+The button now carries three visible states through the sequence.
+The first tap turns it the arming colour; the second tap turns it
+the theme colour, and the return to the home screen fires after a
+half-second dwell, so the confirmation is a colour the user sees
+rather than an intent that fires before the screen updates. A tap
+on any other button during either window cancels the return and
+restores the Home control to its inactive colour, so the user's
+last tap is always the one that decides what happens.
