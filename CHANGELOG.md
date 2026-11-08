@@ -72,9 +72,9 @@ otherwise. This is what makes "no other user action intervened" a
 mechanical property rather than a hope.
 
 The Home button's two-tap gesture gains a third visible state. The
-first tap enters `ARMED` and paints the button in the pending
+first tap enters `ARMED` and paints the button in the themed active
 colour; the second tap enters `CONFIRMED`, paints the button in the
-themed active colour, and schedules the return-home at a half-second
+pending colour, and schedules the return-home at a half-second
 dwell, so the user perceives the confirmation as a colour rather
 than as an intent that fires before the screen updates. A tap on
 any other button in either phase cancels the gesture and restores
@@ -143,16 +143,17 @@ it.
 
 - **The Home button's confirmation is visible.** The two-tap
   return-home gesture previously fired the return-home on the
-  same turn as the second tap, so the button's themed colour was
-  never seen — the app left before the colour change was drawn.
-  The second tap now transitions the button to the themed colour
-  and dwells for half a second before the task moves to the back.
-  The dwell is bounded by `HOME_CONFIRM_DWELL_MS`, and every
-  user-initiated transition through another button cancels it.
-  The button's `ARMED` and `CONFIRMED` states are distinguished
-  by a three-value `HomeConfirmState` enum rather than a
-  boolean, so a third tap on a `CONFIRMED` button is a no-op and
-  a tap on another button always resets the state to `IDLE`.
+  same turn as the second tap, so the button's confirmation
+  colour was never seen — the app left before the colour change
+  was drawn. The second tap now transitions the button to the
+  pending colour and dwells for half a second before the task
+  moves to the back. The dwell is bounded by
+  `HOME_CONFIRM_DWELL_MS`, and every user-initiated transition
+  through another button cancels it. The button's `ARMED` and
+  `CONFIRMED` states are distinguished by a three-value
+  `HomeConfirmState` enum rather than a boolean, so a third tap
+  on a `CONFIRMED` button is a no-op and a tap on another
+  button always resets the state to `IDLE`.
 
 ### Under the Hood
 
@@ -288,16 +289,16 @@ it.
   Cancelled by `cancelReturnHome`.
 
 - `MusicPlayer.HOME_CONFIRM_DWELL_MS` — the dwell on the
-  themed CONFIRMED state before `moveTaskToBack(true)` runs,
+  pending CONFIRMED state before `moveTaskToBack(true)` runs,
   in milliseconds.
 
 - `MusicPlayer.enterArmedState(long)` — enters the ARMED
-  phase: repaints the button in the pending colour, shows the
+  phase: repaints the button in the themed colour, shows the
   arming toast, and schedules the ARMED expiry.
 
 - `MusicPlayer.enterConfirmedState()` — enters the CONFIRMED
-  phase: repaints the button in the themed colour, dismisses
-  the arming toast, and schedules the return-home via
+  phase: repaints the button in the pending colour, dismisses
+  any persistent overlay, and schedules the return-home via
   `moveTaskToBack(true)`.
 
 - `MusicPlayer.cancelReturnHome()` — replaced. Now cancels
@@ -316,9 +317,9 @@ it.
 
 - `MusicPlayer.applyThemeToUI()` — the Home-button tint
   branch is now three-way: `ARMED` uses
-  `updateButtonPendingState(button, true, red)`, `CONFIRMED`
-  uses `updateControlButton(button, true, true)`, `IDLE`
-  uses `updateControlButton(button, true, false)`.
+  `updateControlButton(button, true, true)`, `CONFIRMED` uses
+  `updateButtonPendingState(button, true, red)`, `IDLE` uses
+  `updateControlButton(button, true, false)`.
 
 - `MusicPlayer.safeUpdateUI(Runnable)` → `MusicPlayer.updateUISafely(Runnable)` —
   renamed. Call sites updated; behavior unchanged.

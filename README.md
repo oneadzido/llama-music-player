@@ -101,9 +101,9 @@ Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
 - **Home button:** The main player screen's home button uses a Home
   icon and returns the app to the Android home screen on a deliberate
   two-tap gesture, leaving the music playing in the background. The
-  first tap turns the button the pending colour and shows a toast;
-  the second tap within one second turns it the theme colour and the
-  app moves to the background half a second later, so the
+  first tap turns the button the theme colour and shows a toast;
+  the second tap within one second turns it the pending colour and
+  the app moves to the background half a second later, so the
   confirmation is a colour the user sees. A tap on any other button
   during either window cancels the return and restores the Home
   control to its inactive colour.
@@ -878,12 +878,12 @@ confirmation, with three visible states carried by a three-value
 `IDLE` is the steady state, painted in the inactive control
 colour every action button uses when it is enabled but not
 expressing an active mode. A first tap enters `ARMED`: the
-button is repainted in the pending colour, an arming toast is
-shown, and a timeout at `HOME_CONFIRM_WINDOW_MS` reverts the
-button to `IDLE` if no second tap arrives. A second tap inside
-that window enters `CONFIRMED`: the button is repainted in the
-themed active colour and the return-home is scheduled at
-`HOME_CONFIRM_DWELL_MS` later, so the user perceives the
+button is repainted in the themed active colour, an arming
+toast is shown, and a timeout at `HOME_CONFIRM_WINDOW_MS`
+reverts the button to `IDLE` if no second tap arrives. A second
+tap inside that window enters `CONFIRMED`: the button is
+repainted in the pending colour and the return-home is scheduled
+at `HOME_CONFIRM_DWELL_MS` later, so the user perceives the
 confirmation as a colour rather than as an intent that fires
 before the screen updates. The dwell's body calls
 `moveTaskToBack(true)`, which asks the ActivityManager to move

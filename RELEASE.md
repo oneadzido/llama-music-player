@@ -68,10 +68,10 @@ passes through; neither value gates the pause.
 The main player screen's Home control is a deliberate two-tap
 gesture: the first tap arms the return and the second confirms it.
 The button now carries three visible states through the sequence.
-The first tap turns it the arming colour; the second tap turns it
-the theme colour, and the return to the home screen fires after a
-half-second dwell, so the confirmation is a colour the user sees
-rather than an intent that fires before the screen updates. A tap
-on any other button during either window cancels the return and
-restores the Home control to its inactive colour, so the user's
-last tap is always the one that decides what happens.
+The first tap turns it the theme colour; the second tap turns it
+the pending colour, and the return to the home screen fires after
+a half-second dwell, so the confirmation is a colour the user
+sees rather than an intent that fires before the screen updates.
+A tap on any other button during either window cancels the return
+and restores the Home control to its inactive colour, so the
+user's last tap is always the one that decides what happens.
