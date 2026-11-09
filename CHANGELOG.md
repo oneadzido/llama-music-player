@@ -5,6 +5,48 @@ All notable changes to Llama Music Player are documented in this file.
 Current technical specifications, installation, and usage are
 documented in the [README](README.md).
 
+## [1.4.4] - Nov 09, 2026
+
+### Overview
+
+The centre-up album-art swipe now produces audible playback when the
+music stream volume is exactly zero. Previously the swipe resumed the
+service — the state machine reached `PLAYING`, the play icon flipped,
+the notification updated — but the stream was still at zero, so the
+user saw a playing indicator and heard silence. The gesture now raises
+the music stream to three steps above zero before it dispatches the
+resume, so the swipe delivers what it promises.
+
+The fix rests on the service's own volume rule: zero is silence,
+non-zero is play. The gesture is the surface that knows the user asked
+for playback, so it is the surface that closes the gap between a
+silent zero-volume resume and a swipe that means "play".
+
+### Fixed
+
+- **Centre-up swipe is audible at volume zero.** A swipe up on the
+  album art at music-stream volume zero now writes
+  `Math.min(3, maxVolume)` to the stream before calling
+  `MusicService.resume()`. The write is guarded by the stream being
+  exactly zero and the device reporting a non-zero maximum. On a
+  device whose music stream range is 1 or 2, the write clamps to the
+  device maximum rather than exceeding it. On a device whose stream
+  is non-zero, nothing is written and the resume proceeds exactly as
+  before. The write fires `VOLUME_CHANGED_ACTION`, which reaches
+  `MusicService.onMusicVolumeChanged`; the explicit `resume()` that
+  follows reaches `PLAYING` first on the same main-thread turn, and
+  the later broadcast finds the state already at `PLAYING` and falls
+  through without acting. No double-start, no race.
+
+### Under the Hood
+
+- `MusicPlayer.handlePlaybackGesture(float)` — the upward branch
+  gained a guarded volume write before its `mMusicService.resume()`
+  call. The block reads `mAudioManager` non-null, a positive
+  `getStreamMaxVolume(STREAM_MUSIC)`, and a current
+  `getStreamVolume(STREAM_MUSIC) == 0`, then writes
+  `Math.min(3, maxVolume)` through `setStreamVolume`.
+
 ## [1.4.3] - Nov 08, 2026
 
 ### Overview

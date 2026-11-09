@@ -8,7 +8,7 @@ scoping, and sixteen languages.
 [![Android](https://img.shields.io/badge/Android-6.0%2B-brightgreen.svg)](https://developer.android.com)
 [![Privacy](https://img.shields.io/badge/Privacy-Policy-blue.svg)](PRIVACY.md)
 
-[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.4.3.apk)
+[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.4.4.apk)
 
 [![Build](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml/badge.svg)](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml)
 
@@ -111,7 +111,9 @@ Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
   a paused song, or down to pause a playing one. The gesture requires
   twice the touch slop of travel to distinguish it from digitizer
   wobble, and commits on release rather than on each move, so a single
-  drag toggles at most once.
+  drag toggles at most once. A swipe up at music-stream volume zero
+  raises the volume to three steps before resuming, so the resume is
+  audible rather than silent.
 - **Album-art carousel:** Swipe left or right across the album art, or
   tap the transport buttons, to move between songs. Files opened from
   other apps transition through a cross-fade.
@@ -406,7 +408,10 @@ touch cannot fall into two modes at once.
 The `PLAYBACK` gesture requires twice the touch slop of travel to
 distinguish an intentional swipe from digitizer wobble on a resting
 finger, and it commits on release, not on the first significant move,
-so a single drag toggles at most once.
+so a single drag toggles at most once. A centre-up swipe at
+music-stream volume zero raises the stream to three steps before it
+dispatches the resume, so the resume is audible rather than silent;
+the downward branch does not touch the volume.
 
 The `TOUCHED` state is the resting state from which the double-tap
 favourite is detected: a touch that never left the touch-slop radius
