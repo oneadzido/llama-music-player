@@ -151,6 +151,15 @@ Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
   than the previous 320dp cap but shorter than the display's usable
   width renders in full; a message that genuinely exceeds that span
   ellipsizes at the edge.
+- **Growing progress messages:** A persistent overlay re-reads its
+  available width from the window on every render, so a progress
+  message that starts short and grows is only ellipsized when its
+  composed content actually exceeds the current window's usable
+  width.
+- **Library-notification titles and bodies as two strings:** The
+  library notification renders its verb phrase and its count into
+  two separate slots. The in-app overlay joins the two with a middle
+  dot; the notification mirror renders each into its own line.
 - **Metadata editor:** Edit ID3 tags, lyrics, and album art. A write
   lands on the file the user is editing, whatever the entry path, and
   the post-write re-read is verification only.
@@ -566,21 +575,17 @@ call, so both commits land on the same main-thread turn with the same
 snapshot.
 
 `broadcastUpdate()` is the only path that commits the notification's
-rendered content. During `PREPARING`, `snapshotForNotification()`
-returns the current-committed song — the song the player screen is
-still showing — not the target, so the poll that runs on the
-controller's cadence cannot advance the notification ahead of the
-player. Both surfaces keep showing the song the previous transition
-committed until the transition commits, and both advance on the same
-turn.
-
-A generation filter drops any read whose generation is strictly lower
-than `mLastCommittedGeneration`, so a poll that captured state before
-a broadcast cannot re-apply it after the broadcast lands. The poll
-remains in place as the safety-net cadence for position updates and
-for state changes that do not reach the notification through a
-broadcast — art resolving after the commit, the theme changing. The
-commit also writes the media-session playback state from
+rendered content. `snapshotForNotification()` reads
+`getDisplaySong()` — the same method `broadcastUpdate()` reads to
+populate the player screen — so a broadcast that fires during
+`PREPARING` and the commit it triggers render the same song for the
+same generation. Both surfaces advance on the same main-thread turn,
+and the awareness poll that runs on the controller's cadence reads
+the same value the broadcast carried. A generation filter drops any
+read whose generation is strictly lower than
+`mLastCommittedGeneration`, so a poll that captured state before a
+broadcast cannot re-apply it after the broadcast lands. The commit
+also writes the media-session playback state from
 `mStateSource.sessionPlaybackState()`, so the media session, the
 notification, and the player screen all agree about what is playing
 at every instant.
@@ -740,7 +745,18 @@ A toast's horizontal span is read from the content view's measured
 width through `resolveAvailableToastWidthPx(ViewGroup)`, floored at
 zero and reduced by the app's standard 16dp inset on each side. The
 toast is single-line and ellipsizes only when the message genuinely
-exceeds that span.
+exceeds that span. A persistent overlay's message is re-read from
+`resolveAvailableToastWidthPx(ViewGroup)` on every render, so a
+message that grows past the width the overlay was created with
+ellipsizes at the current window's usable width.
+
+The overlay's visible text is composed at the call site, from the
+action verb and the count, joined with a middle dot. The notification
+mirror receives the same two strings separately, through
+`ToastManager.showPersistentOverlay(Activity, String, String, String)`
+and `ToastManager.updatePersistentOverlay(String, String, String)`.
+Neither surface splits a joined message, and no resource carries a
+separator.
 
 ### 10. The album-art carousel (`AlbumArtCarousel`)
 

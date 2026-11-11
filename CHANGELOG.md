@@ -9,52 +9,90 @@ documented in the [README](README.md).
 
 ### Overview
 
-Every resume surface now delivers sound at music stream volume zero,
-and toasts use the full width of the display before they truncate.
+Five facts the interface shows now have one expression each, read
+from one source each. Every resume surface delivers sound at music
+stream volume zero. A toast is bounded by the window's usable width
+rather than by a fixed cap. A persistent overlay re-reads its
+available width on every render. The library notification carries
+its title and its body as two separate strings. And the playback
+notification and the player screen read their display song from the
+same method, so they agree on every transition.
 
-The audible-resume rule was introduced in v1.4.4 on a single surface:
-the player screen's centre-up album-art swipe raised the music stream
-to three steps above zero before dispatching the resume. Every other
-resume surface — the playback notification's play action, the
-lockscreen and media-session play callback, a headset media key, an
-external intent — reached `PLAYING` while the stream stayed at zero,
-so the user saw a playing indicator and heard nothing. The gesture
-promised playback and delivered sound; the other surfaces promised
-playback and delivered silence.
+The audible-resume rule was introduced in v1.4.4 on a single
+surface: the player screen's centre-up album-art swipe raised the
+music stream to three steps above zero before dispatching the
+resume. Every other resume surface — the playback notification's
+play action, the lockscreen and media-session play callback, a
+headset media key, an external intent — reached `PLAYING` while the
+stream stayed at zero, so the user saw a playing indicator and heard
+nothing. The rule now lives once, in `MusicService`, and every
+resume path goes through it. A future resume surface cannot miss the
+rule because there is only one implementation of it, and only one
+place to add a new resume path that honours it.
 
-The rule now lives once, in `MusicService`, and every resume path
-goes through it. The service reads the music stream's current volume
-on the same main-thread turn that starts the player. When the stream
-is exactly zero, it writes `Math.min(3, maxVolume)` before the first
-audible sample is emitted. The player screen's centre-up gesture
-delegates to the same rule; its inline volume write is removed. A
-future resume surface cannot miss the rule because there is only one
-implementation of it, and only one place to add a new resume path
-that honours it.
+A toast was capped at a fixed 320dp. Progress messages truncated
+well before the display was exhausted. The toast is now bounded by
+the window's usable width, floored at the content's own measured
+width, and ellipsized only when the content genuinely exceeds that
+span.
 
-A toast was capped at a fixed 320dp and ellipsized anything past that
-cap. Progress messages like `Searching folders... 123 songs found`
-truncated well before the display was exhausted, so the user saw an
-ellipsis in the middle of a message whose full text would have fit on
-screen. The cap was a fixed number, not the width the display
-actually offered. The toast is now bounded by the window width minus
-the app's standard 16dp inset on each side, and a message is only
-ellipsized when its content genuinely exceeds that span.
+The in-activity persistent overlay kept the width it was created
+with, so a progress message that grew past that width was truncated
+at the stale boundary. The overlay now re-reads its available width
+from the window on every render.
+
+The library notification was a single message that the notification
+builder split on a literal separator. The separator stayed in the
+title slot and the count landed on the body line, where a narrow
+shade ellipsized it before the display was exhausted. The controller
+now carries the title and the body as two strings and renders each
+into its own slot.
+
+The `UPDATE_PLAYER` broadcast carried the target song during a
+transition; the notification commit that fired on the same turn
+carried the outgoing one. Any broadcast that landed while a
+transition was in progress showed the incoming song on the player
+screen and the outgoing one in the notification, from the same
+method, on the same frame. Both writers now read the same song from
+the same method.
 
 ### Added
 
-- **The audible-resume rule is a single implementation.** The
-  service reads the music stream's volume on the same main-thread
-  turn that starts the player, and raises the stream to
-  `Math.min(3, maxVolume)` when it is exactly zero. Every resume
-  surface reaches the rule through the player's start.
+- **The audible-resume rule is a single implementation.**
+  `MusicService.raiseVolumeIfSilentForResume()` reads the music
+  stream's current volume on the same main-thread turn that starts
+  the player, and raises the stream to `Math.min(3, maxVolume)`
+  when it is exactly zero. Every resume surface reaches the rule
+  through the player's start.
 
 - **`ToastManager` reads the toast's available width from the
-  window.** The width is the content view's measured width when
-  it has been laid out, the display width otherwise, minus the
-  app's standard 16dp inset on each side. A short message renders
-  as a short toast; a long message uses the full span before it
+  window.** The width is the content view's measured width when it
+  has been laid out, the display width otherwise, minus the app's
+  standard 16dp inset on each side. A short message renders as a
+  short toast; a long message uses the full span before it
   ellipsizes.
+
+- **`ToastManager` re-reads a persistent overlay's available width
+  on every render.** The overlay holder carries a weak reference to
+  the root view it was attached to; every write of a persistent
+  overlay's message re-reads the width from that root view through
+  `resolveAvailableToastWidthPx` before setting the text.
+
+- **The library notification carries a title and a body as two
+  strings.** `NotificationController.showLibraryStatus` and
+  `updateLibraryStatus` take `(title, body, operationId)`;
+  `buildLibraryNotification(String, String)` renders each into its
+  own slot and wraps the body in a `BigTextStyle`.
+
+- **`ToastManager` exposes two-string overloads of
+  `showPersistentOverlay` and `updatePersistentOverlay`.** The
+  title is the overlay's text and the notification mirror's title;
+  the body is the notification mirror's body. The single-string
+  forms are preserved and forward with an empty body.
+
+- **`folder_manager_syncing`** — a new resource key, `Syncing
+  playlist`, so the syncing phase has a distinct action verb from
+  the scanning phase.
 
 ### Fixed
 
@@ -63,12 +101,11 @@ ellipsized when its content genuinely exceeds that span.
   service raises the stream to `Math.min(3, maxVolume)` on the
   same main-thread turn that starts the player. On devices whose
   music stream range is one or two steps, the write clamps to the
-  device maximum. The user can raise or lower from there with the
-  edge drag or a hardware key. The write fires
-  `VOLUME_CHANGED_ACTION`, which reaches
-  `MusicService.onMusicVolumeChanged` after the state machine has
-  already reached `PLAYING`, so the volume rule's raise branch
-  falls through and does not re-enter the resume path.
+  device maximum. The write fires `VOLUME_CHANGED_ACTION`, which
+  reaches `MusicService.onMusicVolumeChanged` after the state
+  machine has already reached `PLAYING`, so the volume rule's
+  raise branch falls through and does not re-enter the resume
+  path.
 
 - **The player screen's centre-up gesture delegates to the same
   rule.** Its inline volume write is removed. The gesture's
@@ -80,13 +117,48 @@ ellipsized when its content genuinely exceeds that span.
   width is the window width minus the app's standard 16dp inset
   on each side; a message that exceeds that span ellipsizes at the
   edge. A message longer than the previous 320dp cap but shorter
-  than the display's usable width now renders in full.
+  than the display's usable width renders in full.
 
 - **A toast in a split-screen window is bounded by the window,
   not by the display.** The available width is read from the
   content view's measured width when it has been laid out, so a
   long message in a narrow pane ellipsizes at the pane's edge
   rather than overhanging it.
+
+- **A persistent overlay's message ellipsizes at the current
+  window's usable width, not at the width the overlay was created
+  with.** The overlay re-reads its available width from the same
+  source the creation call used, immediately before each write of
+  its text. A progress message that grows past its creation-time
+  width renders in full up to the window's current usable width
+  and ellipsizes only when the composed text exceeds it.
+
+- **The library notification renders its verb and its count on
+  separate lines.** The title slot carries the action verb — for
+  example, `Searching folders`; the body slot carries the count —
+  for example, `123 songs found`. On a narrow shade the count
+  ellipsizes on the body line and the title stays legible; on an
+  expanded shade the `BigTextStyle` shows the body in full. No
+  resource carries a separator; no consumer splits a joined
+  message.
+
+- **The in-activity overlay reads as two columns of one status
+  line.** The overlay composes its visible text from the action
+  verb and the count with a middle dot:
+  `Searching folders · 123 songs found`. The middle dot is
+  composed in Java at the call site that writes the overlay's
+  text; it never reaches the notification mirror, whose two slots
+  continue to receive the two strings separately.
+
+- **The playback notification and the player screen show the same
+  song on every transition.** The `UPDATE_PLAYER` broadcast and the
+  notification commit both read `getDisplaySong()`, the same method
+  that decides which song the player screen draws. A favorite
+  commit, a repeat or shuffle change, a playlist update, a
+  metadata edit, a sync completion, or any other `broadcastUpdate`
+  that fires while a transition is in progress now shows the same
+  song on both surfaces, for the same generation, on the same
+  frame.
 
 ### Under the Hood
 
@@ -139,6 +211,109 @@ ellipsized when its content genuinely exceeds that span.
   passes it to `TextView.setMaxWidth`. The text view is
   single-line, ellipsized at the end, and horizontally
   non-scrolling. Every other line of the method is unchanged.
+
+- `ToastManager.OverlayHolder` — gained
+  `WeakReference<ViewGroup> rootViewRef` and a constructor
+  parameter that carries the root view. `createOverlayInView`
+  passes the root view it attaches to.
+
+- `ToastManager.updatePersistentOverlay(String, String, String)` —
+  the posted re-render calls
+  `setMaxWidth(resolveAvailableToastWidthPx(rootView))` on the
+  holder's current root view before writing the title. The
+  single-argument form forwards with an empty body and goes
+  through the same path.
+
+- `ToastManager.showPersistentOverlay(Activity, String, String, String)` —
+  new four-argument form. Forwards the title and body to
+  `NotificationController.showLibraryStatus`. The three-argument
+  form forwards with an empty body.
+
+- `ToastManager.popOperationInternal` — the re-render that runs
+  when a lower operation becomes the new top re-reads the width
+  from the holder's root view before writing the new top's
+  message.
+
+- `NotificationController.mLibraryTitle` / `mLibraryBody` —
+  replace `mLibraryMessage`. `mLibraryTitle` is the
+  notification's title slot; `mLibraryBody` is the body slot.
+
+- `NotificationController.LIBRARY_MESSAGE_SEPARATOR` — removed.
+  The library surface carries two strings end to end; no
+  consumer splits a joined message.
+
+- `NotificationController.buildLibraryNotification(String, String)` —
+  takes the title and body as two arguments. `setContentTitle(title)`,
+  `setContentText(body)`, and
+  `setStyle(new Notification.BigTextStyle().bigText(body))`
+  render each into its own slot. The chronometer, progress, and
+  `setOnlyAlertOnce` calls are unchanged.
+
+- `NotificationController.buildPlaybackNotification` — unchanged.
+  The playback surface already rendered a single snapshot per
+  commit and did not split any joined message.
+
+- `MusicService.mStateSource.snapshotForNotification()` — reads
+  `getDisplaySong()` on every call. The branch on `mState` that
+  returned `getCurrentSong()` during `PREPARING` and during a
+  pending `IDLE` transition is removed; `getDisplaySong` already
+  implements exactly the rule that branch was trying to
+  reproduce, and returns the target during `PREPARING` and the
+  current-index song in every other state. Both writers of the
+  notification's rendered content — `commitFromBroadcast` from
+  `broadcastUpdate`, and `syncOnce` from the awareness poll —
+  read the same value for the same generation.
+
+- `MusicService.broadcastUpdate()` — unchanged. It already passed
+  `getDisplaySong()`'s result to the broadcast and
+  `mStateSource.snapshotForNotification()`'s result to the
+  commit. The two now resolve to the same song.
+
+- `FolderManager.performPlaylistUpdate()` — the progress callback
+  resolves `action` from `folder_manager_searching` or
+  `folder_manager_syncing` and `detail` from
+  `folder_manager_searching_found` or
+  `folder_manager_syncing_found`, composes the overlay's visible
+  text as `action + " \u00B7 " + detail` (or `action` alone when
+  `detail` is empty), and passes `overlayText` as the title and
+  `detail` as the body to the persistent-overlay API. The
+  `SYNC_STARTED` broadcast carries `custom_text` (the action) and
+  `custom_detail` (the detail) as separate extras.
+
+- `MusicPlayer.mSyncStartedReceiver` — reads `custom_text` and
+  `custom_detail`, composes the overlay's visible text as
+  `action + " \u00B7 " + detail` (or `action` alone when
+  `detail` is empty), and passes the composed string as the
+  title and `detail` as the body to the `ToastManager` two-string
+  overload. `custom_detail` may be absent; the receiver forwards
+  an empty string when it is.
+
+- `MusicPlayer.loadFullPlaylistInBackground` and `onResume` —
+  pass the cold-start overlay's title and an empty body through
+  the two-string overload. `abandonLibraryLoadOverlay` is
+  unchanged.
+
+- `PlaylistManager.runGenreLoad()` — the progress-update block
+  composes the overlay's visible text from the title (the string
+  from `customMessage` or `library_loading_metadata`) and the
+  body (`currentUpdated + "/" + currentTotal`) with a middle dot,
+  and forwards the composed string as the title and `body` as
+  the body to `ToastManager.updatePersistentOverlay`. The
+  genre-load show and the reset show pass their title and an
+  empty body through the four-argument form.
+
+- `strings.xml` — `folder_manager_searching` reads
+  `Searching folders`; `folder_manager_searching_found` reads
+  `%1$d songs found`; `folder_manager_syncing` is added at
+  `Syncing playlist`; `folder_manager_syncing_found` reads
+  `%1$d songs synced`. No resource carries a `"..."` separator,
+  a middle dot, or a terminal period. The `player_library_loading`,
+  `library_loading_metadata`, `library_clearing`, and
+  `library_syncing_playlist` strings lose their trailing ellipses
+  for the same reason: the ellipsis was the separator, and the
+  status indicator that accompanies them supplies the progress
+  signal itself. The middle dot is composed in Java at the three
+  call sites that write the overlay's text.
 
 ## [1.4.4] - Nov 09, 2026
 
