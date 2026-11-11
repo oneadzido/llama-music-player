@@ -8,7 +8,7 @@ scoping, and sixteen languages.
 [![Android](https://img.shields.io/badge/Android-6.0%2B-brightgreen.svg)](https://developer.android.com)
 [![Privacy](https://img.shields.io/badge/Privacy-Policy-blue.svg)](PRIVACY.md)
 
-[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.4.4.apk)
+[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.4.5.apk)
 
 [![Build](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml/badge.svg)](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml)
 
@@ -90,6 +90,14 @@ Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
   telephony stack releases focus late. A user action during the
   interruption — a tap, a next, a stop, a volume change to zero —
   clears the record and the automatic resume does not fire.
+- **Audible resume from every surface:** A resume from the player
+  screen's centre-up swipe, the playback notification's play action,
+  the lockscreen and media-session play callback, a headset media
+  key, or an external intent delivers sound at music stream volume
+  zero. The service raises the stream to three steps above zero on
+  the same main-thread turn that starts the player. On devices whose
+  music stream range is one or two steps, the write clamps to the
+  device maximum.
 - **Notification continuity through an interruption:** The
   playback notification stays a foreground notification while an
   interruption is in progress and playback is resumable, so the
@@ -112,8 +120,9 @@ Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
   twice the touch slop of travel to distinguish it from digitizer
   wobble, and commits on release rather than on each move, so a single
   drag toggles at most once. A swipe up at music-stream volume zero
-  raises the volume to three steps before resuming, so the resume is
-  audible rather than silent.
+  resumes the song through `MusicService.resume()`; the service
+  raises the stream to three steps above zero on the same main-thread
+  turn, so the resume is audible rather than silent.
 - **Album-art carousel:** Swipe left or right across the album art, or
   tap the transport buttons, to move between songs. Files opened from
   other apps transition through a cross-fade.
@@ -137,6 +146,11 @@ Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
   settled and drawn.
 - **Library-load feedback:** A persistent overlay appears while the
   library loads on launch.
+- **Full-width toasts:** Toast messages span the full display width
+  minus the app's standard 16dp inset on each side. A message longer
+  than the previous 320dp cap but shorter than the display's usable
+  width renders in full; a message that genuinely exceeds that span
+  ellipsizes at the edge.
 - **Metadata editor:** Edit ID3 tags, lyrics, and album art. A write
   lands on the file the user is editing, whatever the entry path, and
   the post-write re-read is verification only.
@@ -235,7 +249,7 @@ the experience.
 | Metadata Editor | Tap METADATA button on main screen |
 | Themes | Tap LLAMA button on main screen, then THEMES |
 | Language | Tap LLAMA button on main screen, then the language button in the version header |
-| Home | Tap the Home control on the main screen twice within one second |
+| Home | Tap the Home button on the main screen twice within one second |
 
 ---
 
@@ -259,7 +273,7 @@ calls run on a dedicated `HandlerThread`. Only marshalled `Runnable`s
 cross between them. The `READY` state is the state a song sits in
 when it has been prepared and is waiting for the play button.
 
-Seven rules belong to this machine.
+Eight rules belong to this machine.
 
 First, the music-stream volume receiver is a facet of it: registered
 in `onBind(Intent)` and unregistered in `onDestroy()`, so once the
@@ -333,6 +347,21 @@ after a four-hundred-millisecond settling window, which
 distinguishes a disconnect from a link flap; a restored route
 within the window suppresses the pause, and a user-initiated
 transition during the window cancels it.
+
+Eighth, the audible-resume rule is a facet of the same machine. The
+service reads the music stream's current volume on the same
+main-thread turn that starts the player. When the stream is exactly
+zero, it writes `Math.min(3, maxVolume)` before the first audible
+sample is emitted. The rule is invoked at both and only both sites
+in `MusicService` where `MediaPlayer.start()` is dispatched — the
+auto-start branch of `onPrepared` and the start continuation of
+`doResumeInternal` — so every resume surface (the player screen's
+centre-up gesture, the notification's play action, the lockscreen
+and media-session play callback, a headset key, an external intent)
+goes through it. The write fires `VOLUME_CHANGED_ACTION`, which
+reaches `onMusicVolumeChanged` after the state machine has already
+reached `PLAYING`; the volume rule's raise branch falls through and
+does not re-enter the resume path.
 
 The same machine also owns the three-tier playlist and the incoming-
 file hand-off.
@@ -408,10 +437,13 @@ touch cannot fall into two modes at once.
 The `PLAYBACK` gesture requires twice the touch slop of travel to
 distinguish an intentional swipe from digitizer wobble on a resting
 finger, and it commits on release, not on the first significant move,
-so a single drag toggles at most once. A centre-up swipe at
-music-stream volume zero raises the stream to three steps before it
-dispatches the resume, so the resume is audible rather than silent;
-the downward branch does not touch the volume.
+so a single drag toggles at most once. A centre-up swipe resumes a
+paused or ready song through `MusicService.resume()`. Whether the
+resume is audible is the service's decision: the service raises the
+music stream to an audible level when it is at zero, on the same
+main-thread turn that starts the player. The gesture does not read or
+write the stream volume. The downward branch pauses a playing song
+and does not touch the volume.
 
 The `TOUCHED` state is the resting state from which the double-tap
 favourite is detected: a touch that never left the touch-slop radius
@@ -703,6 +735,12 @@ margins — `TOAST_BOTTOM_MARGIN_DP = 76` and
 below `COMPACT_LAYOUT_HEIGHT_DP = 400`. So a toast is centred in
 full-screen and in split-screen alike, in every activity, without
 any activity having to announce its own layout state.
+
+A toast's horizontal span is read from the content view's measured
+width through `resolveAvailableToastWidthPx(ViewGroup)`, floored at
+zero and reduced by the app's standard 16dp inset on each side. The
+toast is single-line and ellipsizes only when the message genuinely
+exceeds that span.
 
 ### 10. The album-art carousel (`AlbumArtCarousel`)
 

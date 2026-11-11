@@ -5,6 +5,141 @@ All notable changes to Llama Music Player are documented in this file.
 Current technical specifications, installation, and usage are
 documented in the [README](README.md).
 
+## [1.4.5] - Nov 11, 2026
+
+### Overview
+
+Every resume surface now delivers sound at music stream volume zero,
+and toasts use the full width of the display before they truncate.
+
+The audible-resume rule was introduced in v1.4.4 on a single surface:
+the player screen's centre-up album-art swipe raised the music stream
+to three steps above zero before dispatching the resume. Every other
+resume surface — the playback notification's play action, the
+lockscreen and media-session play callback, a headset media key, an
+external intent — reached `PLAYING` while the stream stayed at zero,
+so the user saw a playing indicator and heard nothing. The gesture
+promised playback and delivered sound; the other surfaces promised
+playback and delivered silence.
+
+The rule now lives once, in `MusicService`, and every resume path
+goes through it. The service reads the music stream's current volume
+on the same main-thread turn that starts the player. When the stream
+is exactly zero, it writes `Math.min(3, maxVolume)` before the first
+audible sample is emitted. The player screen's centre-up gesture
+delegates to the same rule; its inline volume write is removed. A
+future resume surface cannot miss the rule because there is only one
+implementation of it, and only one place to add a new resume path
+that honours it.
+
+A toast was capped at a fixed 320dp and ellipsized anything past that
+cap. Progress messages like `Searching folders... 123 songs found`
+truncated well before the display was exhausted, so the user saw an
+ellipsis in the middle of a message whose full text would have fit on
+screen. The cap was a fixed number, not the width the display
+actually offered. The toast is now bounded by the window width minus
+the app's standard 16dp inset on each side, and a message is only
+ellipsized when its content genuinely exceeds that span.
+
+### Added
+
+- **The audible-resume rule is a single implementation.** The
+  service reads the music stream's volume on the same main-thread
+  turn that starts the player, and raises the stream to
+  `Math.min(3, maxVolume)` when it is exactly zero. Every resume
+  surface reaches the rule through the player's start.
+
+- **`ToastManager` reads the toast's available width from the
+  window.** The width is the content view's measured width when
+  it has been laid out, the display width otherwise, minus the
+  app's standard 16dp inset on each side. A short message renders
+  as a short toast; a long message uses the full span before it
+  ellipsizes.
+
+### Fixed
+
+- **Resume from the notification, lockscreen, headset, or an
+  external intent is audible at music stream volume zero.** The
+  service raises the stream to `Math.min(3, maxVolume)` on the
+  same main-thread turn that starts the player. On devices whose
+  music stream range is one or two steps, the write clamps to the
+  device maximum. The user can raise or lower from there with the
+  edge drag or a hardware key. The write fires
+  `VOLUME_CHANGED_ACTION`, which reaches
+  `MusicService.onMusicVolumeChanged` after the state machine has
+  already reached `PLAYING`, so the volume rule's raise branch
+  falls through and does not re-enter the resume path.
+
+- **The player screen's centre-up gesture delegates to the same
+  rule.** Its inline volume write is removed. The gesture's
+  contract is "resume the song," and the audible outcome is the
+  service's. The gesture does not read or write the stream volume.
+
+- **Toast messages span the full display width before they
+  truncate.** The toast is single-line by design. Its available
+  width is the window width minus the app's standard 16dp inset
+  on each side; a message that exceeds that span ellipsizes at the
+  edge. A message longer than the previous 320dp cap but shorter
+  than the display's usable width now renders in full.
+
+- **A toast in a split-screen window is bounded by the window,
+  not by the display.** The available width is read from the
+  content view's measured width when it has been laid out, so a
+  long message in a narrow pane ellipsizes at the pane's edge
+  rather than overhanging it.
+
+### Under the Hood
+
+- `MusicService.raiseVolumeIfSilentForResume()` — new private
+  method. Reads `getStreamMaxVolume(STREAM_MUSIC)` and
+  `getStreamVolume(STREAM_MUSIC)`, returns when the maximum is
+  non-positive or the current volume is non-zero, writes
+  `Math.min(3, maxVolume)` through `setStreamVolume`. The method
+  is the single implementation of the rule and is invoked at
+  both and only both sites where `MediaPlayer.start()` is
+  dispatched.
+
+- `MusicService.onPrepared(long, int, int, Song, int)` — calls
+  `raiseVolumeIfSilentForResume()` immediately before the
+  `onPlayer` dispatch that performs `player.start()`, on the
+  same main-thread turn. The raise runs before the start is
+  dispatched, so the first sample the user hears is at the
+  raised volume.
+
+- `MusicService.doResumeInternal()` — calls
+  `raiseVolumeIfSilentForResume()` after
+  `onPlaybackResumed()` and before the `onPlayer` dispatch that
+  performs `player.start()`. The raise is placed after the
+  state has been committed to `PLAYING` on purpose: the
+  `VOLUME_CHANGED_ACTION` broadcast that the write fires
+  reaches `onMusicVolumeChanged` with the state already at
+  `PLAYING`, where the volume rule's raise branch falls through
+  and does not re-enter the resume path.
+
+- `MusicPlayer.handlePlaybackGesture(float)` — the upward branch
+  now calls `MusicService.resume()` only. The inline volume
+  write is removed; the activity no longer reads or writes the
+  music stream. The downward branch is unchanged and still does
+  not touch the volume. The method's javadoc is updated to state
+  the gesture's contract and to delegate the audible rule to the
+  service.
+
+- `ToastManager.TOAST_HORIZONTAL_INSET_DP` — new constant at
+  `16`. The app's standard screen inset. Replaces the deleted
+  `MAX_TOAST_WIDTH_DP`.
+
+- `ToastManager.resolveAvailableToastWidthPx(ViewGroup)` — new
+  private method. Returns
+  `Math.max(0, baseWidth - insetPx * 2)`, where `baseWidth` is
+  the content view's measured width when it is non-zero and the
+  display width otherwise.
+
+- `ToastManager.createOverlayInView(...)` — computes the
+  available width through `resolveAvailableToastWidthPx` and
+  passes it to `TextView.setMaxWidth`. The text view is
+  single-line, ellipsized at the end, and horizontally
+  non-scrolling. Every other line of the method is unchanged.
+
 ## [1.4.4] - Nov 09, 2026
 
 ### Overview
