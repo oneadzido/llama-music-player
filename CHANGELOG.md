@@ -56,6 +56,26 @@ screen and the outgoing one in the notification, from the same
 method, on the same frame. Both writers now read the same song from
 the same method.
 
+The persistent-overlay message is composed by `ToastManager` alone,
+inside `composeOverlayText(title, body)`, from the two strings the
+operation's owner supplies. Every caller that used to join the verb
+and the count before handing the result to `ToastManager` now passes
+the two strings separately, and `ToastManager` composes the middle
+dot exactly once per render.
+
+Toast durations are now `long` values in milliseconds throughout the
+public API. `LENGTH_SHORT`, `LENGTH_NORMAL`, and `LENGTH_LONG` are
+`long` constants; `showToast` and `showToastInView` take a `long`
+`duration`. A caller that passes an integer literal widens
+implicitly, so the change is source-compatible with every existing
+call site.
+
+The horizontal padding inside a toast is reduced from 16dp to 8dp.
+The toast's outer margin is unchanged at 16dp, matching every other
+floating overlay in the app. The result is a compact floating label:
+the toast's edge lines up with the overlay gutter, and the text sits
+close to the toast's own frame rather than being doubly padded.
+
 ### Added
 
 - **The audible-resume rule is a single implementation.**
@@ -68,9 +88,9 @@ the same method.
 - **`ToastManager` reads the toast's available width from the
   window.** The width is the content view's measured width when it
   has been laid out, the display width otherwise, minus the app's
-  standard 16dp inset on each side. A short message renders as a
-  short toast; a long message uses the full span before it
-  ellipsizes.
+  standard overlay gutter of 16dp on each side. A short message
+  renders as a short toast; a long message uses the full span
+  before it ellipsizes.
 
 - **`ToastManager` re-reads a persistent overlay's available width
   on every render.** The overlay holder carries a weak reference to
@@ -86,9 +106,31 @@ the same method.
 
 - **`ToastManager` exposes two-string overloads of
   `showPersistentOverlay` and `updatePersistentOverlay`.** The
-  title is the overlay's text and the notification mirror's title;
-  the body is the notification mirror's body. The single-string
-  forms are preserved and forward with an empty body.
+  title is the operation's action verb; the body is its count. The
+  single-string forms are preserved and forward with an empty
+  body.
+
+- **`ToastManager.composeOverlayText(String, String)`** — new
+  private static helper. Returns the title alone when the body is
+  empty, `title + " \u00B7 " + body` otherwise. Every write of a
+  persistent overlay's text — `showPersistentOverlay`,
+  `updatePersistentOverlay`, the re-render inside
+  `popOperationInternal`, and `reattachToActivity` — goes through
+  this single helper, so the composition has one site in the
+  codebase and the middle dot is produced exactly once per render.
+
+- **Toast durations are `long`.** `LENGTH_SHORT = 500L`,
+  `LENGTH_NORMAL = 1000L`, and `LENGTH_LONG = 2000L` are `long`
+  constants on `ToastManager`. `showToast(Activity, String, long)`
+  and `showToastInView(ViewGroup, String, long)` take a `long`
+  `duration` and pass it directly to
+  `Handler.postDelayed(Runnable, long)`, with no implicit
+  conversion.
+
+- **The toast's horizontal padding is 8dp.**
+  `TOAST_PADDING_HORIZONTAL_DP = 8`. The text sits inside its own
+  frame with a compact inset, and the toast's outer edge stays at
+  the 16dp overlay gutter.
 
 - **`folder_manager_syncing`** — a new resource key, `Syncing
   playlist`, so the syncing phase has a distinct action verb from
@@ -114,10 +156,10 @@ the same method.
 
 - **Toast messages span the full display width before they
   truncate.** The toast is single-line by design. Its available
-  width is the window width minus the app's standard 16dp inset
-  on each side; a message that exceeds that span ellipsizes at the
-  edge. A message longer than the previous 320dp cap but shorter
-  than the display's usable width renders in full.
+  width is the window width minus the app's standard 16dp overlay
+  gutter on each side; a message that exceeds that span ellipsizes
+  at the edge. A message longer than the previous 320dp cap but
+  shorter than the display's usable width renders in full.
 
 - **A toast in a split-screen window is bounded by the window,
   not by the display.** The available width is read from the
@@ -146,9 +188,14 @@ the same method.
   line.** The overlay composes its visible text from the action
   verb and the count with a middle dot:
   `Searching folders · 123 songs found`. The middle dot is
-  composed in Java at the call site that writes the overlay's
-  text; it never reaches the notification mirror, whose two slots
-  continue to receive the two strings separately.
+  produced by `ToastManager.composeOverlayText`; no caller
+  composes the joined form.
+
+- **The toast's text sits 8dp inside its own frame.** The text
+  hugs the toast's rounded background rather than sitting inside
+  a second 16dp inset. The toast's outer edge stays at the 16dp
+  overlay gutter, so the surface aligns with every other floating
+  overlay in the app.
 
 - **The playback notification and the player screen show the same
   song on every transition.** The `UPDATE_PLAYER` broadcast and the
@@ -196,9 +243,22 @@ the same method.
   the gesture's contract and to delegate the audible rule to the
   service.
 
-- `ToastManager.TOAST_HORIZONTAL_INSET_DP` — new constant at
-  `16`. The app's standard screen inset. Replaces the deleted
-  `MAX_TOAST_WIDTH_DP`.
+- `ToastManager.TOAST_HORIZONTAL_INSET_DP` — `16`. The app's
+  standard overlay gutter. The toast's background sits this far
+  from the window edge on each side.
+
+- `ToastManager.TOAST_PADDING_HORIZONTAL_DP` — `8`. The toast's
+  text sits this far inside its own frame. The padding was
+  reduced from `16` so the toast reads as a compact floating
+  label rather than as a padded content card.
+
+- `ToastManager.TOAST_PADDING_VERTICAL_DP` — `8`. Unchanged from
+  the prior release. The vertical analogue of the horizontal
+  padding.
+
+- `ToastManager.LENGTH_SHORT` / `LENGTH_NORMAL` / `LENGTH_LONG` —
+  now `long` constants at `500L`, `1000L`, and `2000L`. The three
+  values are the toast durations used across the app.
 
 - `ToastManager.resolveAvailableToastWidthPx(ViewGroup)` — new
   private method. Returns
@@ -210,24 +270,43 @@ the same method.
   available width through `resolveAvailableToastWidthPx` and
   passes it to `TextView.setMaxWidth`. The text view is
   single-line, ellipsized at the end, and horizontally
-  non-scrolling. Every other line of the method is unchanged.
+  non-scrolling. The text view's padding is
+  `TOAST_PADDING_HORIZONTAL_DP` on each horizontal side and
+  `TOAST_PADDING_VERTICAL_DP` on each vertical side.
 
 - `ToastManager.OverlayHolder` — gained
   `WeakReference<ViewGroup> rootViewRef` and a constructor
   parameter that carries the root view. `createOverlayInView`
   passes the root view it attaches to.
 
+- `ToastManager.composeOverlayText(String, String)` — new private
+  static helper. Returns the title alone when the body is empty,
+  `title + " \u00B7 " + body` otherwise. Every write of a
+  persistent overlay's text — `showPersistentOverlay`,
+  `updatePersistentOverlay`, the re-render inside
+  `popOperationInternal`, and `reattachToActivity` — goes through
+  this single helper.
+
 - `ToastManager.updatePersistentOverlay(String, String, String)` —
   the posted re-render calls
   `setMaxWidth(resolveAvailableToastWidthPx(rootView))` on the
-  holder's current root view before writing the title. The
-  single-argument form forwards with an empty body and goes
+  holder's current root view before writing the composed text. The
+  composed text is produced by `composeOverlayText(title, body)`.
+  The single-argument form forwards with an empty body and goes
   through the same path.
 
 - `ToastManager.showPersistentOverlay(Activity, String, String, String)` —
   new four-argument form. Forwards the title and body to
   `NotificationController.showLibraryStatus`. The three-argument
   form forwards with an empty body.
+
+- `ToastManager.showToast(Activity, String, long)` — the
+  `duration` parameter is now `long`. The value is passed
+  directly to `Handler.postDelayed(Runnable, long)`, so no
+  implicit conversion is required at the scheduling call.
+
+- `ToastManager.showToastInView(ViewGroup, String, long)` — the
+  `duration` parameter is now `long`. Same shape as `showToast`.
 
 - `ToastManager.popOperationInternal` — the re-render that runs
   when a lower operation becomes the new top re-reads the width
@@ -273,20 +352,18 @@ the same method.
   resolves `action` from `folder_manager_searching` or
   `folder_manager_syncing` and `detail` from
   `folder_manager_searching_found` or
-  `folder_manager_syncing_found`, composes the overlay's visible
-  text as `action + " \u00B7 " + detail` (or `action` alone when
-  `detail` is empty), and passes `overlayText` as the title and
-  `detail` as the body to the persistent-overlay API. The
-  `SYNC_STARTED` broadcast carries `custom_text` (the action) and
-  `custom_detail` (the detail) as separate extras.
+  `folder_manager_syncing_found`, and passes `action` and
+  `detail` to `ToastManager.showPersistentOverlay` and
+  `ToastManager.updatePersistentOverlay` as two separate strings.
+  The `SYNC_STARTED` broadcast carries `custom_text` (the action)
+  and `custom_detail` (the detail) as separate extras.
 
 - `MusicPlayer.mSyncStartedReceiver` — reads `custom_text` and
-  `custom_detail`, composes the overlay's visible text as
-  `action + " \u00B7 " + detail` (or `action` alone when
-  `detail` is empty), and passes the composed string as the
-  title and `detail` as the body to the `ToastManager` two-string
-  overload. `custom_detail` may be absent; the receiver forwards
-  an empty string when it is.
+  `custom_detail` from the broadcast but does not compose them.
+  It calls `ToastManager.ensureOverlayAttached(MusicPlayer.this)`
+  so that an overlay whose owning activity is gone is re-anchored
+  to the player's window. It does not call
+  `updatePersistentOverlay`.
 
 - `MusicPlayer.loadFullPlaylistInBackground` and `onResume` —
   pass the cold-start overlay's title and an empty body through
@@ -294,13 +371,14 @@ the same method.
   unchanged.
 
 - `PlaylistManager.runGenreLoad()` — the progress-update block
-  composes the overlay's visible text from the title (the string
-  from `customMessage` or `library_loading_metadata`) and the
-  body (`currentUpdated + "/" + currentTotal`) with a middle dot,
-  and forwards the composed string as the title and `body` as
-  the body to `ToastManager.updatePersistentOverlay`. The
-  genre-load show and the reset show pass their title and an
-  empty body through the four-argument form.
+  resolves `title` from `customMessage` or
+  `library_loading_metadata` and `body` as
+  `currentUpdated + "/" + currentTotal`, and passes both to
+  `ToastManager.updatePersistentOverlay` as two separate strings.
+  The genre-load show and the reset show pass their title and an
+  empty body through the four-argument form. `runGenreLoad` does
+  not compose the middle dot; that composition lives in
+  `ToastManager`.
 
 - `strings.xml` — `folder_manager_searching` reads
   `Searching folders`; `folder_manager_searching_found` reads
@@ -312,8 +390,8 @@ the same method.
   `library_syncing_playlist` strings lose their trailing ellipses
   for the same reason: the ellipsis was the separator, and the
   status indicator that accompanies them supplies the progress
-  signal itself. The middle dot is composed in Java at the three
-  call sites that write the overlay's text.
+  signal itself. The middle dot is produced by
+  `ToastManager.composeOverlayText` and nowhere else.
 
 ## [1.4.4] - Nov 09, 2026
 

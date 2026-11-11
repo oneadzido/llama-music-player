@@ -147,19 +147,31 @@ Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
 - **Library-load feedback:** A persistent overlay appears while the
   library loads on launch.
 - **Full-width toasts:** Toast messages span the full display width
-  minus the app's standard 16dp inset on each side. A message longer
-  than the previous 320dp cap but shorter than the display's usable
-  width renders in full; a message that genuinely exceeds that span
-  ellipsizes at the edge.
+  minus the app's overlay gutter — the standard 16dp inset every
+  floating surface uses — on each side. A message longer than the
+  previous 320dp cap but shorter than the display's usable width
+  renders in full; a message that genuinely exceeds that span
+  ellipsizes at the edge. The text inside the toast sits with an 8dp
+  horizontal padding, so a compact floating label reads as a label
+  rather than as a padded content card.
 - **Growing progress messages:** A persistent overlay re-reads its
   available width from the window on every render, so a progress
   message that starts short and grows is only ellipsized when its
   composed content actually exceeds the current window's usable
-  width.
+  width. The overlay composes its visible text once, inside
+  `ToastManager.composeOverlayText(title, body)`, from the two
+  strings the operation's owner supplies. The middle dot between the
+  verb and the count is the composition site's separator, not the
+  caller's.
 - **Library-notification titles and bodies as two strings:** The
   library notification renders its verb phrase and its count into
-  two separate slots. The in-app overlay joins the two with a middle
-  dot; the notification mirror renders each into its own line.
+  two separate slots. `ToastManager` composes the in-app overlay's
+  visible text once from those two strings, joined with a middle
+  dot; the notification mirror receives the two strings separately
+  and renders each into its own line. The composition site is
+  `ToastManager.composeOverlayText`; the notification's two slots
+  are written by
+  `NotificationController.buildLibraryNotification(title, body)`.
 - **Metadata editor:** Edit ID3 tags, lyrics, and album art. A write
   lands on the file the user is editing, whatever the entry path, and
   the post-write re-read is verification only.
@@ -743,20 +755,32 @@ any activity having to announce its own layout state.
 
 A toast's horizontal span is read from the content view's measured
 width through `resolveAvailableToastWidthPx(ViewGroup)`, floored at
-zero and reduced by the app's standard 16dp inset on each side. The
-toast is single-line and ellipsizes only when the message genuinely
-exceeds that span. A persistent overlay's message is re-read from
+zero and reduced by `TOAST_HORIZONTAL_INSET_DP = 16` on each side.
+The toast's own text sits with `TOAST_PADDING_HORIZONTAL_DP = 8`
+inside that frame, so a compact floating label reads as a label
+rather than as a padded content card. The toast is single-line and
+ellipsizes only when the message genuinely exceeds the available
+span. A persistent overlay's message is re-read from
 `resolveAvailableToastWidthPx(ViewGroup)` on every render, so a
 message that grows past the width the overlay was created with
 ellipsizes at the current window's usable width.
 
-The overlay's visible text is composed at the call site, from the
-action verb and the count, joined with a middle dot. The notification
-mirror receives the same two strings separately, through
+The overlay's visible text is composed by `ToastManager` alone,
+inside `composeOverlayText(title, body)`, from the action verb and
+the count that the operation's owner passes as two separate strings,
+joined with a middle dot. The notification mirror receives the same
+two strings separately, through
 `ToastManager.showPersistentOverlay(Activity, String, String, String)`
 and `ToastManager.updatePersistentOverlay(String, String, String)`.
 Neither surface splits a joined message, and no resource carries a
-separator.
+separator. No caller composes the joined form; the composition lives
+at the single site in `ToastManager` that writes the overlay's text.
+
+Toast durations are `long` values in milliseconds. `LENGTH_SHORT`,
+`LENGTH_NORMAL`, and `LENGTH_LONG` are `long` constants on
+`ToastManager`, and `showToast` and `showToastInView` take a `long`
+`duration`. Every caller that passes an integer literal widens
+implicitly.
 
 ### 10. The album-art carousel (`AlbumArtCarousel`)
 

@@ -50,6 +50,11 @@ width from the moment it was created. The overlay now re-reads the
 window's usable width before each update, so a growing message has
 the room the window offers now.
 
+The overlay composes its visible text once, inside
+`ToastManager.composeOverlayText(title, body)`, from the two strings
+the operation's owner supplies. The middle dot between the verb and
+the count is the composition site's separator, not the caller's.
+
 ### The library notification carries a title and a count
 
 The library notification used to be one message, split by the
@@ -61,8 +66,11 @@ was exhausted.
 The notification now shows its verb phrase on the title line and its
 count on the body line. The title reads `Searching folders`; the
 body reads `123 songs found`, and the shade's expanded form shows
-it in full. The in-app overlay joins the two with a middle dot, so
-the verb and the count read as two columns of one status line.
+it in full. The in-app overlay shows the two joined once with a
+middle dot, so the verb and the count read as two columns of one
+status line. The composition site is `ToastManager.composeOverlayText`;
+the notification's two slots are written by
+`NotificationController.buildLibraryNotification(title, body)`.
 
 ### The playback notification and the player screen advance together
 
