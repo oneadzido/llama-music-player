@@ -29,7 +29,9 @@ set of methods that could disagree. The media session has one writer,
 `LanguageManager.setLanguage`. The decoded bitmaps have one owner,
 `AlbumArtCache`. The favorite column has one writer on an existing
 row, `SongDatabase.setFavorite(String, boolean)`. The active playback
-scope has one writer, `MusicService.setPlaybackScope`.
+scope has one writer, `MusicService.setPlaybackScope`. The audio focus
+flags (`mHasAudioFocus`, `mIsDucked`) have one writer,
+`MusicService.handleAudioFocusChange(int)`.
 
 **One shape per role.** A class that plays a role — singleton, state
 machine, ticker, safely-suffixed helper, state listener — has the
@@ -103,20 +105,17 @@ private Song getDisplaySong() {
 ```
 
 During a transition, the display song is the target. Otherwise it is
-the current song. The carousel, the player UI, and the art prefetch
-read this method directly, so they begin sliding toward the target
-the instant a transition begins. The notification and the media
-session do not read this method during a prepare.
-`snapshotForNotification()` reads `getCurrentSong()` instead, which
-is still the outgoing song, and the notification and the media
-session both write their content from that snapshot. Both therefore
-keep describing the song the player screen is showing until
-`broadcastUpdate` fires and the transition commits. The display-song
-rule is expressed once per consumer, because the two consumers ask
-two different questions: *which song is the carousel sliding
-toward?* (this method) and *which song are the notification and the
-media session describing?* (the current song during PREPARING, this
-method otherwise).
+the current song. The carousel, the player UI, the art prefetch, the
+notification, and the media session all read this method directly.
+During a transition the display song is the target, so all five
+surfaces begin advancing toward the incoming song on the same
+main-thread turn a transition begins, and all five land on the
+incoming song on the same frame the transition commits.
+`snapshotForNotification()` calls `getDisplaySong()` unconditionally,
+with no branch on state, so the notification renders exactly the
+song the player screen renders for the same generation. There is one
+expression of the display-song rule and one answer to "which song is
+the app showing" for every consumer.
 
 The guards are the method's contract. The playlist can be empty
 during a library reset. `mTargetIndex` can point past the end of
@@ -130,11 +129,11 @@ than as an error. The notification stays on its last rendered
 snapshot. The carousel stays on its last window. The media
 session's metadata is cleared.
 
-The consequence of the rule is visible in the app. Tap Next, and
-the carousel begins sliding toward the incoming song's art while
-the notification continues describing the outgoing song. When the
-prepare completes and the transition commits, both surfaces advance
-to the incoming song on the same frame.
+The consequence of the rule is visible in the app. Tap Next, and the
+carousel begins sliding toward the incoming song's art and the
+notification begins describing the incoming song on the same frame.
+When the prepare completes and the transition commits, every surface
+advances to the incoming song together, on the same frame.
 
 The blood the heart pumps is `PlaybackWindow`: an immutable value
 holding three paths — the previous neighbour, the current song, the
@@ -187,6 +186,38 @@ become candidates for the next completed-song selection. Repeat off
 advances within the scope and pauses when the scope is empty or the
 current song is its final entry. Repeat all wraps within the scope,
 shuffle selects from it, and repeat one continues the current song.
+
+The heart also owns the audio-focus record. A loss that interrupts a
+live transition is written once, as an `Interruption`, and a
+subsequent loss of a different kind does not overwrite it, so the
+dialer's `LOSS`-then-`TRANSIENT` sequence produces one record and the
+gain that follows resumes from it. A successful resume clears the
+record, and a later `AUDIOFOCUS_LOSS` replaces a stale
+`TRANSIENT_LOSS` record with a `PERMANENT_LOSS` one. The record is
+cleared by every user-initiated transition and by a transition to
+idle. It drives three decisions: whether a gain resumes playback,
+whether the notification stays foreground through the interruption,
+and whether a subsequent loss of a different kind is ignored.
+
+The volume-key rule is part of the same record's contract. A hardware
+volume press while the player is backgrounded does not take audio
+focus from an app that is playing. The volume-raise path in
+`onMusicVolumeChanged`, the Bluetooth volume remap in
+`handleMediaButton`, and the media-session `onPlay` callback all
+require the service to already hold focus; an interruption record
+without focus names an interruption the user has not overridden,
+and the app does not act on it. The eventual `AUDIOFOCUS_GAIN`
+resumes through `resumeAfterInterruption()` — the same entry point
+the gain callback uses — so a volume press and a focus return take
+the same path once the interrupting app has released the stream.
+
+The audio-focus request the service issues for a resume is
+`AUDIOFOCUS_GAIN_TRANSIENT`. A resume of a paused track is a bounded
+interruption of whatever was playing; the permanent request the
+service uses to acquire focus on first playback is unchanged. The
+transient request is less likely to be honoured against a competing
+permanent holder, which closes the remaining device-dependent path
+to a steal.
 
 The design pays off in a fact that is easy to miss. When a song
 restarts under repeat-one, the three paths the window carries are
@@ -351,6 +382,12 @@ persisted playback state. While the service is reconciling a prepare
 failure or player error, its pending-transition state prevents the
 notification's cancel path from removing the visible playback surface.
 
+The controller reads its rendered content from the service through
+`ServiceStateSource.snapshotForNotification()`, which calls
+`getDisplaySong()` unconditionally. The notification therefore shows
+the target during a transition, the same song the carousel and the
+player screen are showing, and advances with them on the same frame.
+
 The notification's own transport buttons dispatch directly to
 `MusicService.onStartCommand` through `PendingIntent.getService`
 with the private action `ACTION_PLAY_PAUSE`, `ACTION_NEXT`, or
@@ -378,6 +415,16 @@ every cursor, every tinted placeholder, and the notification's own
 large icon. The theme's *name* is a resource, so a German theme list
 says "Königliches Lama" and an Arabic one says "لاما ملكي", and both
 refer to the same color value in the same array.
+
+A theme change is a rebuild, not a repaint.
+`ThemeManager.setThemeColor(int)` persists the value and broadcasts
+`THEME_COLOR_CHANGED`; every activity recreates, every open dialog
+dismisses itself, and every surface is re-constructed against the
+persisted color. `ThemeHelper` still paints each newly-constructed
+view; it no longer has a live view tree to repaint on a broadcast,
+and the theme's color is read at construction rather than patched
+in. The same shape is used for `LANGUAGE_CHANGED`: the broadcast is
+a signal to rebuild, not an instruction to patch.
 
 ### The organs the user touches
 
@@ -422,6 +469,14 @@ with its natural width, the title in the middle with a weight of 1,
 and a trailing placeholder that reserves no width. The title is the
 only element that can yield, so a long translation truncates with an
 ellipsis rather than running under a button beside it.
+
+A theme change made from `CreditsDialog`'s picker closes every dialog
+on the screen — the picker, the `ThemeDialog` it opened, and the
+`CreditsDialog` underneath — on the same broadcast the hosting
+activity recreates on. There is no window in which one dialog has
+been rebuilt and another has not, because no dialog is rebuilt in
+place; all of them are dismissed, and the next open constructs a new
+dialog against the persisted theme from the first frame.
 
 ### The fingers
 
@@ -576,6 +631,13 @@ The volume handler reads the current stream volume at the moment it
 runs, not the value the broadcast carried, because some devices
 deliver the volume-change broadcast late.
 
+A hardware volume press while the player is backgrounded does not
+take audio focus from an app that is playing. The raise path, the
+Bluetooth volume remap, and the media-session play callback all
+require the service to already hold focus; an interruption record
+without focus names an interruption the user has not overridden, and
+the volume key does not act on it.
+
 When another app asks to share the output, the music ducks rather than
 pauses. The duck is applied to the `MediaPlayer`'s own output, not the
 system stream. The volume slider does not move.
@@ -583,6 +645,11 @@ system stream. The volume slider does not move.
 When another app takes the output away entirely, the service pauses
 and remembers that it paused itself for a reason that will end. When
 focus returns, the music resumes.
+
+When the user chooses a theme, every activity recreates on the turn
+the dialog dismisses. Not on the next launch. A theme change made
+from a dialog closes every dialog on the screen on the same
+broadcast, so no surface survives the change un-rebuilt.
 
 When the user chooses a language, every activity rebuilds around it on
 the turn the dialog dismisses. Not on the next launch.
@@ -613,8 +680,9 @@ is for in one sentence, the class is not large; it is several.
 Every field in it — the two monotonic counters, the two-index model,
 the shuffle history, the shuffle peek memos, the cached position, the
 recovery counter, the skip loop budget, the start token, the deferred
-reconcile flag — exists because that sentence needed it. Not one is
-idle.
+reconcile flag, the audio-focus flags, the interruption record, the
+two focus requests — exists because that sentence needed it. Not one
+is idle.
 
 **Two — it has more than one writer.** Every resource in this app has
 exactly one owner. If `MusicService` were split, the playback state
@@ -631,8 +699,9 @@ seams are clear, extracting them is cheap. If the seams are not clear,
 extracting them *creates* the loss. In `MusicService` the coupling is
 the function. The volume receiver is bound to the session. The session
 is bound to the service lifecycle. The service lifecycle is bound to
-the state machine. There is no clean cut that does not pass through
-tissue.
+the state machine. The state machine is bound to the audio-focus
+record, which is bound to the media-session's foreground projection.
+There is no clean cut that does not pass through tissue.
 
 `MusicService` fails none of these four. It is large because it is one
 thing.

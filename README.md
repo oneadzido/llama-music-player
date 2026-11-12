@@ -90,6 +90,14 @@ Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
   telephony stack releases focus late. A user action during the
   interruption — a tap, a next, a stop, a volume change to zero —
   clears the record and the automatic resume does not fire.
+- **A backgrounded volume key does not steal focus:** A hardware
+  volume press while the player is backgrounded and another app is
+  playing does not take audio focus back. The volume-raise path
+  requires the service to already hold focus; an interruption record
+  without focus is a record of an app that still owns the stream, and
+  the volume key does not act on it. The same rule covers the
+  Bluetooth headset's volume remap and the media-session play
+  callback.
 - **Audible resume from every surface:** A resume from the player
   screen's centre-up swipe, the playback notification's play action,
   the lockscreen and media-session play callback, a headset media
@@ -181,7 +189,9 @@ Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
 - **10 sort modes:** Title A-Z, Title Z-A, Artist A-Z, Artist Z-A,
   Album A-Z, Album Z-A, Genre A-Z, Genre Z-A, Date (Newest First),
   Date (Oldest First).
-- **32 theme colours.**
+- **32 theme colours.** Selecting one rebuilds every surface — every
+  activity, every open dialog, and the toast overlay — against the
+  persisted color, on every device. No view is repainted in place.
 - **Split-screen layout:** The album art resizes, shrinks, or hides
   with the window height; every screen adjusts its own content so the
   controls always fit.
@@ -294,7 +304,7 @@ calls run on a dedicated `HandlerThread`. Only marshalled `Runnable`s
 cross between them. The `READY` state is the state a song sits in
 when it has been prepared and is waiting for the play button.
 
-Eight rules belong to this machine.
+Nine rules belong to this machine.
 
 First, the music-stream volume receiver is a facet of it: registered
 in `onBind(Intent)` and unregistered in `onDestroy()`, so once the
@@ -304,20 +314,29 @@ restart, a Bluetooth connect, a media-button press — never registers
 the receiver, so a hardware volume press on those paths is not
 treated as a transport control.
 
-Second, an audio-focus interruption is recorded once, as an
+Second, the volume-raise path requires the service to already hold
+audio focus. An interruption record without focus is a record of an
+app that still owns the stream; the volume key does not act on it.
+The same rule covers the Bluetooth headset's volume remap in
+`handleMediaButton` and the media-session `onPlay` callback, so no
+volume-key path can take focus back from an app that is playing.
+
+Third, an audio-focus interruption is recorded once, as an
 `Interruption`, on the first loss that interrupts a live transition.
 A subsequent loss of a different kind during the same interruption
 does not overwrite the record, so a dialer that sends
 `AUDIOFOCUS_LOSS` for the ringtone and `AUDIOFOCUS_LOSS_TRANSIENT`
 for the call produces one record, and the gain that follows resumes
-from it. The record is cleared by any user-initiated transition, by
+from it. A later `AUDIOFOCUS_LOSS` does replace a stale
+`TRANSIENT_LOSS` record, so a genuinely new permanent takeover is
+recorded. The record is cleared by any user-initiated transition, by
 a successful resume, and by a transition to idle. The record drives
 three decisions: whether a gain resumes playback, whether the
 playback notification stays a foreground notification through the
 interruption, and whether a subsequent loss of a different kind is
 ignored.
 
-Third, the gain that ends an interruption goes through
+Fourth, the gain that ends an interruption goes through
 `resumeAfterInterruption()`, which retries focus acquisition on a
 bounded cadence — twelve attempts at five hundred milliseconds —
 because the telephony stack holds focus through its own teardown
@@ -328,9 +347,11 @@ attempt and enters the retry path directly. When the retry budget
 is exhausted, the interruption record is left in place: the
 notification stays foreground, the shade entry and lockscreen
 controls survive, and the play button resumes through the ordinary
-transport path.
+transport path. `doResume()` and `resumeAfterInterruption()` request
+`AUDIOFOCUS_GAIN_TRANSIENT`; the permanent request is used only to
+acquire focus on first playback.
 
-Fourth, a duck request —
+Fifth, a duck request —
 `AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK`, what a navigation prompt or a
 notification tone sends — does not pause. The machine lowers the
 `MediaPlayer`'s own output volume to `DUCK_VOLUME_FRACTION` for the
@@ -338,7 +359,7 @@ duration of the interruption and restores it to full on
 `AUDIOFOCUS_GAIN`. The system stream volume is not touched, so the
 volume slider does not move and the receiver is not involved.
 
-Fifth, volume-up at the device maximum does not emit
+Sixth, volume-up at the device maximum does not emit
 `VOLUME_CHANGED_ACTION` — no value changed — so `MusicPlayer`
 overrides `dispatchKeyEvent` to resume a paused song from the
 foreground when the volume is already at max. When the player is
@@ -346,7 +367,7 @@ backgrounded and the song is deliberately paused, resuming goes
 through the notification's play action, which reaches the service
 through the media session in every screen state.
 
-Sixth, every transition the machine begins names its direction and
+Seventh, every transition the machine begins names its direction and
 its restart as properties of the generation that produces it. A next
 or previous request notes `+1` or `−1`; an automatic advance notes
 `+1`; a reprepare of the same song notes `0`; a wrap that restarts
@@ -355,7 +376,7 @@ the generation when the transition starts and published alongside
 the window on the same broadcast, so the carousel's animation and the
 audio's transition are the same value by construction.
 
-Seventh, a Bluetooth disconnect is a facet of the same machine. The
+Eighth, a Bluetooth disconnect is a facet of the same machine. The
 service registers a receiver for the pause request in `onCreate` and
 unregisters it in `onDestroy`, so the pause fires whether or not
 the player activity is alive. The pause is gated on three
@@ -369,7 +390,7 @@ distinguishes a disconnect from a link flap; a restored route
 within the window suppresses the pause, and a user-initiated
 transition during the window cancels it.
 
-Eighth, the audible-resume rule is a facet of the same machine. The
+Ninth, the audible-resume rule is a facet of the same machine. The
 service reads the music stream's current volume on the same
 main-thread turn that starts the player. When the stream is exactly
 zero, it writes `Math.min(3, maxVolume)` before the first audible
@@ -386,6 +407,15 @@ does not re-enter the resume path.
 
 The same machine also owns the three-tier playlist and the incoming-
 file hand-off.
+
+The display-song rule lives on the same machine, in one method:
+`getDisplaySong()` returns the target during `PREPARING` and the
+current-index song in every other state. The carousel, the player
+UI, the art prefetch, the notification, and the media session all
+read that one method, so every surface begins advancing toward the
+target on the same main-thread turn a transition begins and every
+surface lands on the incoming song on the same frame the transition
+commits.
 
 ### 2. The three-tier playlist (`MusicService`)
 
@@ -602,7 +632,7 @@ also writes the media-session playback state from
 notification, and the player screen all agree about what is playing
 at every instant.
 
-The controller's resilience has six parts:
+The controller's resilience has seven parts:
 
 1. The cancel branch — the `isIdle()` check — is refused while the
    service reports a transition pending through
@@ -633,6 +663,13 @@ The controller's resilience has six parts:
    projection is a pure function of the interruption record, so
    the notification and the audio-focus handling cannot disagree
    about whether the interruption is still in effect.
+7. A `THEME_COLOR_CHANGED` broadcast reaches the controller's theme
+   receiver, which does not repaint the notification in place. The
+   activity that hosts the notification recreates on the same
+   broadcast, and the notification's chrome is rebuilt from the
+   persisted theme on the next commit. The themed placeholder and
+   the themed action icons are keyed by the color they were built
+   against, so a stale entry is never reused.
 
 ### 8. The Metadata Editor (`MetadataEditor`, `MetadataReader`, `MetadataWriter`)
 
@@ -775,6 +812,15 @@ and `ToastManager.updatePersistentOverlay(String, String, String)`.
 Neither surface splits a joined message, and no resource carries a
 separator. No caller composes the joined form; the composition lives
 at the single site in `ToastManager` that writes the overlay's text.
+
+A `THEME_COLOR_CHANGED` broadcast reaches `ToastManager`'s theme
+receiver, which tears down every persistent overlay's view and
+re-creates it through the same `createOverlayInView` path the
+initial show uses, so the current theme color is read at
+construction rather than patched in place. Temporary toasts are not
+rebuilt; their lifetime is shorter than a rebuild would require, and
+the next temporary toast is constructed against the new color
+anyway.
 
 Toast durations are `long` values in milliseconds. `LENGTH_SHORT`,
 `LENGTH_NORMAL`, and `LENGTH_LONG` are `long` constants on
@@ -999,7 +1045,43 @@ since the receiver set was consolidated. The consistency is
 the point: every helper that absorbs a failure the caller does
 not have to handle reads the same way in every call site.
 
-### 17. Cross-cutting: localization
+### 17. Cross-cutting: theme and language rebuild
+
+Two broadcasts — `THEME_COLOR_CHANGED` and `LANGUAGE_CHANGED` —
+share a single contract across every surface of the app.
+
+`ThemeManager.setThemeColor(int)` and
+`LanguageManager.setLanguage(String)` each persist the new value and
+broadcast the change. Neither touches a view. Every activity
+registers a receiver for both broadcasts and answers each with
+`recreateWithConfiguration()`. Every dialog that registers a theme
+receiver (`CreditsDialog`) dismisses itself; the three dialogs that
+do not register one (`LanguageDialog`, `PresetDialog`,
+`PlaybackScopeDialog`) are dismissed transitively by their hosts'
+recreation. `ThemeDialog` persists the selection through
+`ThemeManager.setThemeColor(int)` and dismisses itself; the
+broadcast it triggers is the same broadcast every other surface
+responds to. `ToastManager` tears down and re-creates its persistent
+overlay's text view through the same `createOverlayInView` path its
+first show uses. `NotificationController` does not repaint in place;
+its themed placeholder and action icon caches are keyed by the
+color they were built against, so the recreated activity's next
+commit reads the persisted theme and either reuses a matching entry
+or rebuilds.
+
+The invariant is the same for both broadcasts: **the broadcast is a
+signal to rebuild, not an instruction to patch.** There is no view
+in the app whose theme or locale is written after the frame it was
+first drawn on. Every color and every string visible to the user is
+the result of a freshly constructed view or a freshly built
+notification reading a persisted value. The two paths cannot drift
+apart on any device because they run the same code shape.
+
+The same reasoning extended to the language picker in 1.3.0 and to
+the theme picker in 1.4.6. The `LanguageManager` and `ThemeManager`
+classes carry the full contract in their class Javadocs.
+
+### 18. Cross-cutting: localization
 
 Every user-visible string the app shows resolves from
 `res/values/strings.xml` in the base locale and from a
@@ -1040,12 +1122,12 @@ and the decimal separator follows the app's language.
 singleton that outlives every activity, and both `MusicPlayer` and
 `NotificationController` hold a reference to its underlying
 `LruCache` rather than owning a cache of their own. A configuration
-change does not evict the bitmaps, and the carousel's first read after
-the recreate finds the entry the previous instance decoded. Under
-sustained memory pressure — `MusicPlayer.onTrimMemory` at
-`TRIM_MEMORY_BACKGROUND` or higher — the cache is evicted wholesale,
-and `MusicService.onTrimMemory` at the same level evicts the
-notification art cache.
+change or a theme change does not evict the bitmaps, and the
+carousel's first read after the recreate finds the entry the previous
+instance decoded. Under sustained memory pressure —
+`MusicPlayer.onTrimMemory` at `TRIM_MEMORY_BACKGROUND` or higher —
+the cache is evicted wholesale, and `MusicService.onTrimMemory` at
+the same level evicts the notification art cache.
 
 The top bar in every activity and every dialog lays its title out in a
 horizontal linear layout with a weight of 1, so the title is the only

@@ -9,44 +9,239 @@ documented in the [README](README.md).
 
 ### Overview
 
-This release addresses two independent playback and interface defects.
-Theme changes, configuration changes, and transport-control updates now
-explicitly request a layout and draw pass so controls refresh immediately
-on OEM firmware that defers view invalidation. Language-change receivers
-refresh the resource configuration before recreating their activities.
-Volume-key resume is now gated by the service's audio-focus state in
-both the volume-broadcast and maximum-volume key-event paths, preventing
-Llama from starting over audio owned by another app.
+Theme changes now rebuild every surface instead of repainting any
+of them. The theme manager persists the selection and broadcasts it;
+every activity answers with `recreateWithConfiguration()`, every
+open dialog answers by dismissing itself, and the toast overlay
+tears down and re-creates its text view through the same
+`createOverlayInView` path its first show uses. No view anywhere is
+repainted in place.
 
-### OEM theme, language, and repaint reliability
+The change fixes a device-specific failure that could not be
+reproduced on AOSP firmware. On some OEM firmware, a theme change
+reached most of the visible views but left one or more surfaces
+carrying a stale drawable, a stale text color, or a cached asset
+keyed by the previous color. The pattern that produced the failure
+was the same in every case: a broadcast receiver iterating a live
+view tree and calling `setTextColor`, `setBackgroundColor`, or
+`updateButton` on each view. That pattern assumed the framework
+would repaint every affected view on the next frame. On most
+devices it did. On some it did not.
 
-- Added a `forceRedraw()` helper to the affected activities and dialogs.
-- Applied full content-view invalidation after theme application and
-  configuration changes.
-- Applied transport-row invalidation after transport-control refresh,
-  including an explicit animation-frame invalidation for the play button.
-- Invalidated the persistent and temporary toast overlay surfaces after
-  their theme text color is updated.
-- Added `recreateWithConfiguration()` to the language-change activities.
-  The helper refreshes the current resource configuration before
-  recreating the activity and suppresses the transition animation.
-- Kept RecyclerView row refreshes on their existing update path.
+The theme path now uses the language picker's mechanism, which has
+been reliable since 1.3.0: the manager persists the value and
+broadcasts it, and every surface is torn down and rebuilt against
+the persisted value. The language path has always behaved this way;
+the theme path now does too. Both broadcasts share one receiver
+body per activity and one cancel-or-dismiss rule per dialog, so the
+two paths cannot diverge on any device.
 
-### Volume-key resume respects audio focus
+This release also closes a volume-key path that could take audio
+focus back from an app that was playing, and brings the service's
+audio-focus handling and field nullability into line with one rule
+each. The focus fix is described under Fixed; the nullability and
+request-shape changes are under Under the Hood.
 
-- Added the service-owned `mHasAudioFocus` state, updated by the audio
-  focus-change handler and exposed through `hasAudioFocus()`.
-- Gated volume-broadcast resume on audio focus or an active interruption
-  record, while preserving the volume-zero pause behaviour.
-- Gated the volume-up-at-maximum key-event resume on audio focus.
-- Kept the focus state in one source of truth; volume handlers do not
-  query `AudioManager` for focus.
+### Fixed
 
-### Compatibility and verification
+- **Theme application reaches every surface on every device.**
+  `ThemeManager.setThemeColor(int)` now persists the value, updates
+  the in-memory fields, and broadcasts
+  `ThemeManager.ACTION_THEME_COLOR_CHANGED`. It does not touch any
+  view. The activity receivers no longer iterate a live view tree;
+  each one answers the broadcast with
+  `recreateWithConfiguration()`. The dialogs no longer rebuild
+  their content view; `ThemeDialog` persists the selection and
+  dismisses itself, `CreditsDialog` dismisses itself on the
+  broadcast, and the three dialogs that do not register a theme
+  receiver (`LanguageDialog`, `PresetDialog`,
+  `PlaybackScopeDialog`) are dismissed transitively by their
+  hosts' recreation. The toast overlay is torn down and re-created
+  through `createOverlayInView`. The notification is rebuilt by
+  the recreated activity's next commit.
 
-The changes are unconditional and do not branch on manufacturer or
-model. They are intended to preserve existing AOSP behaviour while
-forcing deferred OEM layout/draw and configuration paths to complete.
+- **The album-art cache no longer carries stale bitmaps across a
+  theme change.** `AlbumArtCache` is a process-scoped singleton and
+  is unaffected by the change. The theme rebuild does not evict it;
+  it is rebuilt from the persisted color on the next
+  `updatePlaceholderBitmap` run inside the recreated activity.
+
+- **The notification mirror no longer carries a stale themed
+  placeholder or a stale action icon.** `NotificationController`'s
+  placeholder bitmap and themed action icon cache are keyed by the
+  color they were built against, so the recreated activity's next
+  `commitNow()` reads the persisted theme and either reuses a
+  matching entry or rebuilds.
+
+- **The dialog that opened the picker is dismissed on the same
+  broadcast the activity recreates on.** A theme change made from
+  `CreditsDialog` now closes `CreditsDialog` and, if one is open,
+  `ThemeDialog`, on the same broadcast the hosting activity's
+  receiver sees. The next time either dialog is opened, it is
+  constructed against the new theme from the first frame.
+
+- **A backgrounded volume-key press no longer takes audio focus
+  from an app that is playing.** The volume-raise path in
+  `onMusicVolumeChanged` previously resumed whenever the service
+  held focus **or** an interruption record existed. The record
+  exists precisely while the interrupting app still holds focus, so
+  the press could reach `doResume()`, request focus, and on some
+  devices succeed, pausing the interrupting app. The raise path now
+  requires `mHasAudioFocus`; an interruption record without focus
+  is not enough. The interrupting app keeps playing, and the
+  `AUDIOFOCUS_GAIN` that ends the interruption resumes the service
+  through `resumeAfterInterruption()`.
+
+- **A headset volume press during an interruption no longer
+  starts playback.** The Bluetooth volume remap in
+  `handleMediaButton` calls `playNextSong()` /
+  `playPreviousSong()`, neither of which checked focus. The remap
+  now returns before `clearInterruption()` and before either
+  transport call when `mHasAudioFocus` is false.
+
+- **A media-session play callback during an interruption no
+  longer starts playback.** Some devices deliver a volume key as
+  `MediaSessionCompat.Callback.onPlay()`. That callback now refuses
+  when focus is not held and the state is not `IDLE` or
+  `PREPARING`.
+
+- **A successful resume clears the interruption record.**
+  `doResume()` left the record in place on success, so a later
+  permanent loss from a different app could be ignored by the
+  first-loss-wins rule. `onPlaybackResumed()` now clears the record
+  on the same turn it commits `PLAYING`.
+
+- **A permanent loss replaces a stale transient record.** The
+  first-loss-wins rule is retained for the dialer's
+  `LOSS`-then-`TRANSIENT` sequence, but a new `AUDIOFOCUS_LOSS` now
+  replaces a record whose kind is `TRANSIENT_LOSS`, so a genuinely
+  new permanent takeover is recorded.
+
+### Changed
+
+- **`ThemeManager` owns the theme broadcast.** The
+  `ACTION_THEME_COLOR_CHANGED` constant now lives only on
+  `ThemeManager`. The five activities and two dialogs that carried
+  a private copy of the constant reference
+  `ThemeManager.ACTION_THEME_COLOR_CHANGED`. The broadcast is sent
+  from inside `ThemeManager.setThemeColor(int)`, with
+  `Intent.setPackage(...)` scoping it to the app, so no other
+  process can observe it and no caller has to know the action name.
+
+- **The class Javadoc's "Thread Safety" section states the new
+  contract.** The section now reads: "Setting the theme color
+  persists the value and broadcasts
+  `THEME_COLOR_CHANGED`. Every activity answers with
+  `recreate()`; every open dialog dismisses itself. No view is
+  repainted in place. The theme takes effect when the surfaces are
+  rebuilt against the persisted value."
+
+- **`MusicService`'s field nullability follows one rule.**
+  `@Nullable` marks designed runtime nulls. `mAudioManager`,
+  `mAudioFocusRequest`, and `mMediaSession` carry the annotation;
+  the receivers registered unconditionally in `onCreate` do not.
+
+### Under the Hood
+
+- `ThemeManager.ACTION_THEME_COLOR_CHANGED` — new public constant,
+  `"THEME_COLOR_CHANGED"`. The `Intent` import is added.
+
+- `ThemeManager.setThemeColor(int)` — persists the new value to
+  `SharedPreferences` through `apply()` (which commits the
+  in-memory map synchronously, so a consumer reading the index on
+  the broadcast turn sees the new value), updates the in-memory
+  fields, and broadcasts `ACTION_THEME_COLOR_CHANGED` scoped with
+  `Intent.setPackage(mContext.getPackageName())`.
+
+- `ThemeManager`'s "Thread Safety" Javadoc — rewritten to describe
+  the persist-broadcast-rebuild contract above.
+
+- `ThemeDialog` — `onCreate` no longer calls
+  `applyThemeToButtons()`. `animateThemeSelection` calls
+  `mThemeManager.setThemeColor(colorIndex)` directly and no longer
+  calls `updateSelectedTheme`. The in-place repaint methods
+  `applyThemeToButtons`, `findAndThemeButtons`,
+  `applyThemeToTextViews`, `updateSelectedTheme`, and `forceRedraw`
+  are deleted, along with the unused `mThemeHelper` field and its
+  constructor initialization.
+
+- `CreditsDialog.showThemeDialog()` — no longer sends a duplicate
+  broadcast. `setThemeColor` sends it.
+  `CreditsDialog.registerThemeReceiver()` now dismisses the dialog
+  on the broadcast. `applyThemeToContent`,
+  `applyThemeToTextViews`, and `applyThemeToButtons` are deleted;
+  the in-place repaint path is gone. The private
+  `THEME_COLOR_CHANGED_ACTION` constant is removed.
+
+- `MusicPlayer`, `FolderManager`, `PlaylistActivity`,
+  `EqualizerActivity` — each `registerThemeReceiver()` now answers
+  the broadcast with `recreateWithConfiguration()`. Each private
+  `ACTION_THEME_COLOR_CHANGED` constant is deleted.
+
+- `MetadataEditor` — gains an `mThemeChangedReceiver` field, a
+  `registerThemeReceiver()` method that answers with
+  `recreateWithConfiguration()`, a `registerThemeReceiver()` call
+  in `onCreate`, and a `unregisterReceiverSafely(mThemeChangedReceiver)`
+  call in `onDestroy`. The activity did not previously register a
+  theme receiver. `applyThemeToUI()` is unchanged; it is the
+  seeding path called from `onCreate` and `onResume`.
+
+- `ToastManager.registerThemeReceiver()` now registers against
+  `ThemeManager.ACTION_THEME_COLOR_CHANGED`. `refreshThemeColor()`
+  now posts a `rebuildPersistentOverlaysForTheme()` call.
+  `rebuildPersistentOverlaysForTheme()` removes every persistent
+  overlay's view from the map and, when an activity is resumed,
+  re-creates the overlay through `createOverlayInView`, reading the
+  current theme color at construction. Temporary toasts are not
+  rebuilt.
+
+- `NotificationController.registerThemeReceiver()` now registers
+  against `ThemeManager.ACTION_THEME_COLOR_CHANGED` and its
+  `onReceive` body is empty. The `onThemeChanged()` method is
+  deleted. The themed placeholder and themed action icon caches are
+  keyed by the color they were built against, so the next commit
+  after the recreated activity's recreation reads the persisted
+  theme and reuses a matching entry or rebuilds.
+
+- The six activities and two dialogs that answered the theme
+  broadcast in place now honor the same contract the language
+  picker has carried since 1.3.0: the broadcast is a signal to
+  rebuild, not an instruction to patch.
+
+- `MusicService.onMusicVolumeChanged(int)` — the raise branch's
+  precondition is now `if (!mHasAudioFocus) { … return; }`. The
+  `mInterruption == null` clause is removed.
+
+- `MusicService.onPlaybackResumed()` — calls `clearInterruption()`
+  on the same turn it sets `mState = PLAYING`, before saving state
+  and broadcasting.
+
+- `MusicService.handleAudioFocusChange(int)` — the loss case
+  computes the incoming kind before deciding whether to write the
+  record, and replaces an existing `TRANSIENT_LOSS` record with a
+  new `PERMANENT_LOSS` record on `AUDIOFOCUS_LOSS`.
+
+- `MusicService.handleMediaButton(int)` — returns before
+  `clearInterruption()` when the key is a Bluetooth volume key and
+  `mHasAudioFocus` is false.
+
+- `MusicService.setupMediaSession()` — `onPlay` refuses when
+  `!mHasAudioFocus` and the state is not `IDLE` or `PREPARING`.
+
+- `MusicService.setupAudioFocus()` — builds
+  `mAudioFocusRequestTransient` alongside `mAudioFocusRequest`.
+
+- `MusicService.requestAudioFocus(boolean)` — selects the
+  transient or permanent request (or the corresponding legacy
+  call). The no-argument overload requests permanent focus.
+  `doResume()` and `resumeAfterInterruption()` request transient
+  focus; `onPlaybackStarted()` requests permanent focus.
+
+- `MusicService` fields — `mAudioManager`, `mAudioFocusRequest`,
+  `mMediaSession`, and `mAudioFocusRequestTransient` are annotated
+  `@Nullable`; `mMetadataUpdatedReceiver`, `mBluetoothPauseReceiver`,
+  and `mApplyScopeReceiver` are not annotated, matching the other
+  receivers registered unconditionally in `onCreate`.
 
 ## [1.4.5] - Nov 11, 2026
 
