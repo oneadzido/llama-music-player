@@ -5,6 +5,49 @@ All notable changes to Llama Music Player are documented in this file.
 Current technical specifications, installation, and usage are
 documented in the [README](README.md).
 
+## [1.4.6] - Nov 12, 2026
+
+### Overview
+
+This release addresses two independent playback and interface defects.
+Theme changes, configuration changes, and transport-control updates now
+explicitly request a layout and draw pass so controls refresh immediately
+on OEM firmware that defers view invalidation. Language-change receivers
+refresh the resource configuration before recreating their activities.
+Volume-key resume is now gated by the service's audio-focus state in
+both the volume-broadcast and maximum-volume key-event paths, preventing
+Llama from starting over audio owned by another app.
+
+### OEM theme, language, and repaint reliability
+
+- Added a `forceRedraw()` helper to the affected activities and dialogs.
+- Applied full content-view invalidation after theme application and
+  configuration changes.
+- Applied transport-row invalidation after transport-control refresh,
+  including an explicit animation-frame invalidation for the play button.
+- Invalidated the persistent and temporary toast overlay surfaces after
+  their theme text color is updated.
+- Added `recreateWithConfiguration()` to the language-change activities.
+  The helper refreshes the current resource configuration before
+  recreating the activity and suppresses the transition animation.
+- Kept RecyclerView row refreshes on their existing update path.
+
+### Volume-key resume respects audio focus
+
+- Added the service-owned `mHasAudioFocus` state, updated by the audio
+  focus-change handler and exposed through `hasAudioFocus()`.
+- Gated volume-broadcast resume on audio focus or an active interruption
+  record, while preserving the volume-zero pause behaviour.
+- Gated the volume-up-at-maximum key-event resume on audio focus.
+- Kept the focus state in one source of truth; volume handlers do not
+  query `AudioManager` for focus.
+
+### Compatibility and verification
+
+The changes are unconditional and do not branch on manufacturer or
+model. They are intended to preserve existing AOSP behaviour while
+forcing deferred OEM layout/draw and configuration paths to complete.
+
 ## [1.4.5] - Nov 11, 2026
 
 ### Overview
