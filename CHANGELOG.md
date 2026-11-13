@@ -98,7 +98,11 @@ request-shape changes are under Under the Hood.
   top of `animateThemeSelection()`, painting the tapped row's
   background, name text, and `CURRENT` indicator in
   `ThemeManager#getCurrentColorInt()` and clearing those from
-  every other row. The commit path is unchanged.
+  every other row. The method also hides the tapped row's color
+  preview circle, matching the resting state `createThemeItem`
+  produces for the currently applied theme, so the user sees the
+  `CURRENT` indicator alone on the selected row. The commit path
+  is unchanged.
 
 - **A backgrounded volume-key press no longer takes audio focus
   from an app that is playing.** The volume-raise path in
@@ -188,12 +192,16 @@ request-shape changes are under Under the Hood.
   row in the active theme color through `updateSelectedTheme`
   before dispatching the delayed commit, then persists the
   selection with `mThemeManager.setThemeColor(colorIndex)` as
-  before. The in-place repaint methods `applyThemeToTextViews`
-  remain deleted; `applyThemeToButtons`, `findAndThemeButtons`,
-  `updateSelectedTheme`, and `forceRedraw` are present because
-  they theme the dialog at construction and highlight the tapped
-  row in the active theme color, not because they repaint it after
-  a broadcast.
+  before. `updateSelectedTheme` toggles the tapped row's
+  background, name text, color preview circle, and `CURRENT`
+  indicator to the same state `createThemeItem` produces for the
+  currently applied theme: circle hidden, indicator shown in the
+  active theme color. The in-place repaint methods
+  `applyThemeToTextViews` remain deleted; `applyThemeToButtons`,
+  `findAndThemeButtons`, `updateSelectedTheme`, and `forceRedraw`
+  are present because they theme the dialog at construction and
+  highlight the tapped row in the active theme color, not because
+  they repaint it after a broadcast.
 
 - `CreditsDialog` — `onCreate` calls `applyThemeToButtons()` after
   its receivers are registered. The method refreshes the helper's
