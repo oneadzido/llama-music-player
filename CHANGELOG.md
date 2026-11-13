@@ -25,7 +25,7 @@ and the reselection guard, exactly as the `LanguageDialog`
 listener owns the language persist and the `PresetDialog` listener
 owns the preset apply.
 
-The equalizer's status line again names the applied preset. A
+The equalizer's status header again names the applied preset. A
 rewrite of `EqualizerActivity` replaced the preset-aware resting
 state with a transient confirmation that was never meant to be the
 resting state, so the line read `Equalizer: Enabled` after any
@@ -33,7 +33,7 @@ preset was applied. It now reads `Equalizer: <presetName>` —
 `Equalizer: Headphones`, `Equalizer: Custom`, and so on — the
 state the line carried before the rewrite. Every writer of the
 line now resolves through one helper, `buildPresetStatusText()`,
-so the button and the status line cannot disagree again.
+so the button and the status header cannot disagree again.
 
 The Custom preset's restore path in `EqualizerManager` is narrowed
 to the value the design says it owns. Selecting Custom from the
@@ -100,9 +100,9 @@ word `Custom`.
 
 ### Fixed
 
-- **The equalizer's status line again names the applied preset.**
+- **The equalizer's status header again names the applied preset.**
   A rewrite of `EqualizerActivity` replaced the preset-aware
-  status line with a transient confirmation that was never meant
+  status header with a transient confirmation that was never meant
   to be the resting state; the line read `Equalizer: Enabled`
   after any preset was applied. Every resting-state writer now
   resolves through `buildPresetStatusText()`, which reads
@@ -143,7 +143,7 @@ word `Custom`.
   `refreshAllUIControls`, `applyThemeToUI`,
   `handleEqualizerReady`, and `showTemporaryMessage`'s revert
   runnable all route through it. `onPresetChanged` no longer
-  routes the status line through `showTemporaryMessage`; the
+  routes the status header through `showTemporaryMessage`; the
   preset name is the resting state, not a transient message. The
   `revertToWavesRunnable` field is renamed to
   `revertToRestingRunnable` to match what it now reverts to.

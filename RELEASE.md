@@ -4,7 +4,7 @@
 
 Version 1.4.8 ships four changes. The Credits dialog's theme
 picker no longer rebuilds the app when the user re-selects the
-theme that is already applied. The equalizer's status line again
+theme that is already applied. The equalizer's status header again
 names the applied preset, correcting a regression introduced by a
 rewrite of the equalizer activity. The Custom preset's restore
 path in the equalizer is narrowed to the band levels it owns, and
@@ -41,7 +41,7 @@ tapped row still highlights and bounces — the tap is acknowledged
 — but the persist, the broadcast, the listener's downstream work,
 and the recreation are skipped.
 
-### The equalizer's status line again names the applied preset
+### The equalizer's status header again names the applied preset
 
 A rewrite of `EqualizerActivity` replaced the preset-aware status
 line with a transient confirmation that was never meant to be the
