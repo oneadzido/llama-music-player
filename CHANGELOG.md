@@ -5,6 +5,43 @@ All notable changes to Llama Music Player are documented in this file.
 Current technical specifications, installation, and usage are
 documented in the [README](README.md).
 
+## [1.4.7] - Nov 13, 2026
+
+### Overview
+
+This release corrects a visual regression introduced in the 1.4.6
+theme rebuild. The `ABOUT LLAMA` title in the Credits dialog was
+rendered in the active theme color, while the title of every other
+dialog (`PresetDialog`, `ThemeDialog`, `LanguageDialog`, and
+`PlaybackScopeDialog`) is rendered in the static light grey
+(`#C0C0C0`).
+
+The title now reads from `TEXT_COLOR_LIGHT`, matching the other
+dialogs exactly. The theme color continues to be applied to the
+buttons, the app name, the library links, and the header accents,
+where it belongs.
+
+### Fixed
+
+- **The Credits dialog's title matches the other dialogs.**
+  During the 1.4.6 theme rebuild, `CreditsDialog.createTitleText()`
+  was rewritten to set the title's text color from
+  `mThemeManager.getCurrentColorInt()`. This made the
+  `ABOUT LLAMA` header change color with the theme, breaking the
+  consistency with every other dialog's top bar. The method now
+  reads from `TEXT_COLOR_LIGHT`, so the Credits dialog's top bar
+  matches `PresetDialog`, `ThemeDialog`, `LanguageDialog`, and
+  `PlaybackScopeDialog` in every theme. The font size, letter
+  spacing, padding, gravity, and layout parameters are unchanged.
+
+### Under the Hood
+
+- `CreditsDialog.createTitleText()` — `textView.setTextColor(...)`
+  now parses `TEXT_COLOR_LIGHT` (`#C0C0C0`) instead of calling
+  `mThemeManager.getCurrentColorInt()`. This restores the behavior
+  that was present before the 1.4.6 theme rebuild and matches the
+  other dialogs' top-bar titles.
+
 ## [1.4.6] - Nov 13, 2026
 
 ### Overview
