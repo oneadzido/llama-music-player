@@ -123,11 +123,16 @@ the playlist during the window between a `setPlaylist` replacement
 and the next reconcile. The song at the index can be null during
 a database read that has not yet completed. The display song's
 path can be empty during a loose-track insert that has not yet
-written the row. Every one of those cases returns null, and every
-consumer of the method treats null as "nothing to render" rather
-than as an error. The notification stays on its last rendered
-snapshot. The carousel stays on its last window. The media
-session's metadata is cleared.
+written the row. Every one of those cases returns null.
+
+The consumers of the method treat null as an instruction to hold
+their current surface, rather than to clear it. `snapshotForNotification()`
+returns null, and both `commitFromBroadcast` and `syncOnce` refuse
+to render that null, leaving the notification on its last rendered
+snapshot. The carousel holds its last window. The player UI holds
+its last drawn title and artist. The surface clears only when the
+state machine itself transitions to `IDLE`, which the controller
+checks through `ServiceStateSource.isIdle()`.
 
 The consequence of the rule is visible in the app. Tap Next, and the
 carousel begins sliding toward the incoming song's art and the
