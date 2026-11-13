@@ -8,7 +8,7 @@ scoping, and sixteen languages.
 [![Android](https://img.shields.io/badge/Android-6.0%2B-brightgreen.svg)](https://developer.android.com)
 [![Privacy](https://img.shields.io/badge/Privacy-Policy-blue.svg)](PRIVACY.md)
 
-[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.4.7.apk)
+[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.4.8.apk)
 
 [![Build](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml/badge.svg)](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml)
 
@@ -1058,16 +1058,16 @@ registers a receiver for both broadcasts and answers each with
 receiver (`CreditsDialog`) dismisses itself; the three dialogs that
 do not register one (`LanguageDialog`, `PresetDialog`,
 `PlaybackScopeDialog`) are dismissed transitively by their hosts'
-recreation. `ThemeDialog` persists the selection through
-`ThemeManager.setThemeColor(int)` and dismisses itself; the
-broadcast it triggers is the same broadcast every other surface
-responds to. `ToastManager` tears down and re-creates its persistent
-overlay's text view through the same `createOverlayInView` path its
-first show uses. `NotificationController` does not repaint in place;
-its themed placeholder and action icon caches are keyed by the
-color they were built against, so the recreated activity's next
-commit reads the persisted theme and either reuses a matching entry
-or rebuilds.
+recreation. `ThemeDialog` reports the selection through its
+listener, and the caller's listener persists it; the dialog does
+not call `setThemeColor()` itself. `ToastManager` tears down and
+re-creates its persistent overlay's text view through the same
+`createOverlayInView` path its first show uses.
+`NotificationController` does not repaint in place; its themed
+placeholder and action icon caches are keyed by the color they
+were built against, so the recreated activity's next commit reads
+the persisted theme and either reuses a matching entry or
+rebuilds.
 
 The invariant is the same for both broadcasts: **the broadcast is a
 signal to rebuild, not an instruction to patch.** There is no view

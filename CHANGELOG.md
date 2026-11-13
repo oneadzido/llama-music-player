@@ -5,6 +5,175 @@ All notable changes to Llama Music Player are documented in this file.
 Current technical specifications, installation, and usage are
 documented in the [README](README.md).
 
+## [1.4.8] - Nov 13, 2026
+
+### Overview
+
+Four changes ship in this release.
+
+Selecting the theme that is already applied no longer rebuilds the
+app. `ThemeDialog` was the only picker that called its manager
+from inside its own dismiss-delay runnable. Tapping any row —
+including the row of the theme that was already applied — called
+`ThemeManager.setThemeColor()`, which persists the value and
+broadcasts `THEME_COLOR_CHANGED`. Every activity answered by
+recreating, and every open dialog answered by dismissing.
+Re-picking the theme you were already on closed the picker and
+rebuilt the app behind it. The dialog now reports the tap and does
+not persist it; the `CreditsDialog` listener owns the persist call
+and the reselection guard, exactly as the `LanguageDialog`
+listener owns the language persist and the `PresetDialog` listener
+owns the preset apply.
+
+The equalizer's status line again names the applied preset. A
+rewrite of `EqualizerActivity` replaced the preset-aware resting
+state with a transient confirmation that was never meant to be the
+resting state, so the line read `Equalizer: Enabled` after any
+preset was applied. It now reads `Equalizer: <presetName>` —
+`Equalizer: Headphones`, `Equalizer: Custom`, and so on — the
+state the line carried before the rewrite. Every writer of the
+line now resolves through one helper, `buildPresetStatusText()`,
+so the button and the status line cannot disagree again.
+
+The Custom preset's restore path in `EqualizerManager` is narrowed
+to the value the design says it owns. Selecting Custom from the
+picker restores the ten band levels; it does not touch bass
+boost, surround, pitch, or speed, all of which are independent of
+preset selection. The manager had been restoring boosters on top
+of the bands on the picker path, so selecting Custom after
+adjusting bass boost on a named preset silently reset bass boost
+to the snapshot value. That restore is removed from
+`applyCustomPreset`, and `setBassBoost`, `setSurround`,
+`setPitch`, and `setSpeed` no longer write into the custom
+snapshot when the Custom preset is active. The reload path is
+unchanged in spirit and completed in fact: `attachToAudioSession`
+now restores the custom pitch and speed values as well as the
+custom bands and boosters, so the user's full tuning survives a
+restart.
+
+The preset-name fallback and the resource that backed it are
+removed. `getPresetName(int)` was branching to
+`R.string.equalizer_preset_custom` when the preset index was out
+of range or the preset-name array could not be read. Neither
+condition is reachable from a valid state — `getCurrentPreset()`
+always returns an in-range index, and the array is declared in
+every locale — so the fallback was masking broken state with a
+hardcoded `Custom`. The method now reads the array directly, and
+`loadPresetNames` no longer swallows a resource-read exception.
+The `equalizer_preset_custom` string is removed from the master
+and every locale; `preset_names[0]` is the sole carrier of the
+word `Custom`.
+
+### Changed
+
+- **Re-selecting the current theme no longer triggers a full
+  rebuild.** `ThemeDialog.animateThemeSelection()` no longer calls
+  `ThemeManager.setThemeColor()`. The persist-and-broadcast side
+  effect moved to `CreditsDialog.showThemeDialog`'s
+  `OnThemeSelectedListener`, whose existing guard against
+  re-applying the current theme is now the only gate on the
+  reselection path. On reselection the picker still closes and the
+  tapped row still highlights and bounces; the persist, the
+  broadcast, the listener's downstream work, and the recreation
+  are skipped. This matches `LanguageDialog`, which has always
+  dismissed itself on reselection without rebuilding.
+
+- **The Custom preset restores band levels only.**
+  `EqualizerManager.applyCustomPreset()` no longer restores bass
+  boost or surround. Selecting Custom from the picker leaves the
+  four effect values untouched. `setBassBoost`, `setSurround`,
+  `setPitch`, and `setSpeed` no longer write into the custom
+  snapshot when the Custom preset is active. The snapshot is
+  written only by `release()` and `applyStandardPreset()` and by
+  the band-level-change path in `setBandLevel`, and is restored on
+  the reload path by `attachToAudioSession`.
+
+- **The reload path restores the full custom snapshot.**
+  `EqualizerManager.attachToAudioSession()` now calls
+  `restoreCustomPitch()` and `restoreCustomSpeed()` in addition to
+  `restoreCustomBandLevels()` and `restoreCustomBoosters()`, and
+  pushes the restored pitch and speed values into `KEY_PITCH` and
+  `KEY_SPEED` through `setPitch(mCustomPitch)` and
+  `setSpeed(mCustomSpeed)` after `applyPreset`, so the pitch and
+  speed sliders show the values the user tuned before the
+  restart.
+
+### Fixed
+
+- **The equalizer's status line again names the applied preset.**
+  A rewrite of `EqualizerActivity` replaced the preset-aware
+  status line with a transient confirmation that was never meant
+  to be the resting state; the line read `Equalizer: Enabled`
+  after any preset was applied. Every resting-state writer now
+  resolves through `buildPresetStatusText()`, which reads
+  `EqualizerManager.getCurrentPreset()` and
+  `getPresetName(int)` and composes them with
+  `getString(R.string.equalizer_status_preset, presetName)`.
+
+- **The preset-name fallback and its resource are removed.**
+  `getPresetName(int)` no longer substitutes a hardcoded `Custom`
+  for an out-of-range index, and `loadPresetNames` no longer
+  swallows a resource-read failure. The
+  `equalizer_preset_custom` string is removed from the master and
+  every locale; `preset_names[0]` is the sole carrier of the word.
+
+### Under the Hood
+
+- `ThemeDialog.animateThemeSelection()` — the
+  `mThemeManager.setThemeColor(colorIndex)` call inside the
+  delayed runnable is removed. The runnable now notifies the
+  listener and dismisses; nothing else. The dialog retains its
+  `ThemeManager` reference for `getCurrentColorInt()` in the row
+  styling and its `ThemeHelper` for the top bar, but it no longer
+  writes through either manager.
+
+- `CreditsDialog.showThemeDialog` — the
+  `OnThemeSelectedListener` body is unchanged from the version
+  already in the file; what changes is that it is now the sole
+  writer of `setThemeColor()`, so its existing
+  `if (colorIndex == mThemeManager.getCurrentColorIndex())
+  return;` guard takes effect. `CreditsDialog`'s `@version` and
+  the fallback string in `getAppVersion()` move to `1.4.8`.
+
+- `EqualizerActivity` — new `buildPresetStatusText()` helper,
+  which resolves
+  `getString(R.string.equalizer_status_preset, presetName)` from
+  `EqualizerManager.getCurrentPreset()` and
+  `getPresetName(int)`. `onPresetChanged`, `updateUI(boolean)`,
+  `refreshAllUIControls`, `applyThemeToUI`,
+  `handleEqualizerReady`, and `showTemporaryMessage`'s revert
+  runnable all route through it. `onPresetChanged` no longer
+  routes the status line through `showTemporaryMessage`; the
+  preset name is the resting state, not a transient message. The
+  `revertToWavesRunnable` field is renamed to
+  `revertToRestingRunnable` to match what it now reverts to.
+
+- `EqualizerManager` — the booster restore is removed from
+  `applyCustomPreset`. The four `if (mCurrentPreset ==
+  PRESET_INDEX_CUSTOM)` blocks in `setBassBoost`, `setSurround`,
+  `setPitch`, and `setSpeed` are removed.
+  `attachToAudioSession` gains `restoreCustomPitch()`,
+  `restoreCustomSpeed()`, `setPitch(mCustomPitch)`, and
+  `setSpeed(mCustomSpeed)`, placed after `applyPreset(mCurrentPreset)`
+  so the pushes do not back up the custom snapshot they just read.
+  `getPresetName(int)` returns `loadPresetNames()[preset]`
+  directly; `loadPresetNames()` no longer catches the
+  resource-read exception. The class `@version` becomes `1.4.8`.
+
+- `strings.xml` (master and all fifteen translated locales) —
+  the `equalizer_preset_custom` string is removed.
+  `equalizer_status_preset` (`Equalizer: %1$s` in English and the
+  localized equivalent in each locale) is added between
+  `equalizer_status_disabled` and `equalizer_preset_disabled`, so
+  the three status strings read `enabled`, `disabled`, `preset` in
+  that order and are followed by the preset-related label. Each
+  file's `@version` becomes `1.4.8`.
+
+- `LanguageDialog` and `PresetDialog` are unchanged. Their side
+  effects already live in the caller's listener, so they never
+  had the reselection behaviour. `ThemeDialog` now matches them
+  rather than carrying a dialog-side write.
+
 ## [1.4.7] - Nov 13, 2026
 
 ### Overview
