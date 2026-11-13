@@ -1,6 +1,6 @@
 # Llama Music Player v1.4.6
 
-**Release date:** November 12, 2026
+**Release date:** November 13, 2026
 
 Version 1.4.6 replaces in-place theme repaints with activity
 recreation, so a theme change reaches every surface on every device.

@@ -5,7 +5,7 @@ All notable changes to Llama Music Player are documented in this file.
 Current technical specifications, installation, and usage are
 documented in the [README](README.md).
 
-## [1.4.6] - Nov 12, 2026
+## [1.4.6] - Nov 13, 2026
 
 ### Overview
 
@@ -79,6 +79,26 @@ request-shape changes are under Under the Hood.
   `ThemeDialog`, on the same broadcast the hosting activity's
   receiver sees. The next time either dialog is opened, it is
   constructed against the new theme from the first frame.
+
+- **The Theme dialog's top-bar buttons carry the current theme
+  color.** The Cancel button previously rendered the static gold
+  from `button_border_selector` on every theme other than Royal
+  Llama, because `onCreate()` did not call any theme-application
+  method and the dialog carried no `ThemeHelper` reference.
+  `ThemeDialog` now holds a `ThemeHelper`, initializes it in the
+  constructor, and calls `applyThemeToButtons()` from `onCreate()`,
+  the same walk `PresetDialog` and `CreditsDialog` use. The
+  invisible trailing placeholder is themed by the same walk.
+
+- **The Theme dialog's tapped row is painted in the active theme
+  color before the commit fires.** Tapping a row previously showed
+  only the neutral touch highlight (`#2A2A2A`) during the
+  `DISMISS_DELAY_MS` window; the active theme color never appeared
+  on the row. A restored `updateSelectedTheme(int)` now runs at the
+  top of `animateThemeSelection()`, painting the tapped row's
+  background, name text, and `CURRENT` indicator in
+  `ThemeManager#getCurrentColorInt()` and clearing those from
+  every other row. The commit path is unchanged.
 
 - **A backgrounded volume-key press no longer takes audio focus
   from an app that is playing.** The volume-raise path in
@@ -156,22 +176,35 @@ request-shape changes are under Under the Hood.
 - `ThemeManager`'s "Thread Safety" Javadoc — rewritten to describe
   the persist-broadcast-rebuild contract above.
 
-- `ThemeDialog` — `onCreate` no longer calls
-  `applyThemeToButtons()`. `animateThemeSelection` calls
-  `mThemeManager.setThemeColor(colorIndex)` directly and no longer
-  calls `updateSelectedTheme`. The in-place repaint methods
-  `applyThemeToButtons`, `findAndThemeButtons`,
-  `applyThemeToTextViews`, `updateSelectedTheme`, and `forceRedraw`
-  are deleted, along with the unused `mThemeHelper` field and its
-  constructor initialization.
+- `ThemeDialog` — `onCreate` calls `applyThemeToButtons()` after
+  `scrollToCurrentTheme()`, so the top-bar buttons carry the
+  current theme's stroke and text color from their first frame.
+  The dialog holds a `ThemeHelper` initialized in the constructor.
+  `applyThemeToButtons()` refreshes the helper's color from
+  `ThemeManager#getCurrentColor()` and walks the view tree from
+  `android.R.id.content`, calling
+  `mThemeHelper.updateButton((Button) child, true)` on every
+  `Button` it reaches. `animateThemeSelection` paints the tapped
+  row in the active theme color through `updateSelectedTheme`
+  before dispatching the delayed commit, then persists the
+  selection with `mThemeManager.setThemeColor(colorIndex)` as
+  before. The in-place repaint methods `applyThemeToTextViews`
+  remain deleted; `applyThemeToButtons`, `findAndThemeButtons`,
+  `updateSelectedTheme`, and `forceRedraw` are present because
+  they theme the dialog at construction and highlight the tapped
+  row in the active theme color, not because they repaint it after
+  a broadcast.
 
-- `CreditsDialog.showThemeDialog()` — no longer sends a duplicate
-  broadcast. `setThemeColor` sends it.
+- `CreditsDialog` — `onCreate` calls `applyThemeToButtons()` after
+  its receivers are registered. The method refreshes the helper's
+  color from `ThemeManager#getCurrentColor()` and recursively
+  themes every `Button` in the view tree, so the CANCEL, THEMES,
+  and language buttons carry the current theme's stroke and text
+  color from their first frame. `showThemeDialog()` no longer
+  sends a duplicate broadcast. `setThemeColor` sends it.
   `CreditsDialog.registerThemeReceiver()` now dismisses the dialog
-  on the broadcast. `applyThemeToContent`,
-  `applyThemeToTextViews`, and `applyThemeToButtons` are deleted;
-  the in-place repaint path is gone. The private
-  `THEME_COLOR_CHANGED_ACTION` constant is removed.
+  on the broadcast. The private `THEME_COLOR_CHANGED_ACTION`
+  constant is removed.
 
 - `MusicPlayer`, `FolderManager`, `PlaylistActivity`,
   `EqualizerActivity` — each `registerThemeReceiver()` now answers
