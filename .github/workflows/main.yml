@@ -27,6 +27,11 @@
 #     gradlew, gradlew.bat
 #     gradle/wrapper/...
 #
+# The Gradle cache key is keyed on the SHA-256 of the source zip,
+# so a new zip invalidates the cache automatically. The build also
+# runs with --no-build-cache, so stale compiled outputs cannot
+# survive a run even if the cache is somehow reused.
+#
 # Uses official action versions:
 # - actions/checkout@v6
 # - actions/setup-java@v6
@@ -46,7 +51,7 @@
 # Debug builds are signed with the Android debug keystore.
 #
 # @author Richard Korbla Adzido
-# @version 1.6.0
+# @version 1.7.0
 # @since 1.0.0
 # ============================================================================
 
@@ -63,6 +68,11 @@ on:
         options:
           - release
           - debug
+      invalidate_cache:
+        description: 'Ignore the Gradle cache and rebuild from scratch'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   build:
@@ -78,6 +88,7 @@ jobs:
     # Record source archive identity
     # ========================================================================
     - name: Record source archive identity
+      id: archive
       run: |
         echo "=========================================="
         echo "SOURCE ARCHIVE IDENTIFICATION"
@@ -90,9 +101,11 @@ jobs:
         echo "Zip last touched by:      $(git log -1 --format=%H -- llama_music_player.zip)"
         echo "Zip last touched on:      $(git log -1 --format=%cI -- llama_music_player.zip)"
         echo "Zip last touched subj:    $(git log -1 --format=%s -- llama_music_player.zip)"
-        echo "Zip SHA256:               $(sha256sum llama_music_player.zip | awk '{print $1}')"
+        ZIP_SHA256="$(sha256sum llama_music_player.zip | awk '{print $1}')"
+        echo "Zip SHA256:               $ZIP_SHA256"
         echo "Zip size:                 $(stat -c%s llama_music_player.zip) bytes"
         echo "Zip mtime in runner:      $(stat -c%y llama_music_player.zip)"
+        echo "zip_sha256=$ZIP_SHA256" >> "$GITHUB_OUTPUT"
         echo "=========================================="
 
     # ========================================================================
@@ -117,32 +130,29 @@ jobs:
         ls -la
 
     # ========================================================================
-    # Print exactly what the compiler will read for the two problem files
+    # Prove what the compiler will read
     # ========================================================================
-    # This step reads the extracted source and prints the specific
-    # declarations that the compile step is complaining about. It does
-    # not modify anything. Its output tells you, definitively, whether
-    # the source the compiler will compile contains the intended
-    # declarations or the ones that produce the compile errors.
     - name: Prove what the compiler will read
       run: |
         echo "=========================================="
         echo "SOURCE PREVIEW: MusicPlayer.kt / NotificationController.kt"
         echo "=========================================="
         echo ""
-        echo "===== MusicPlayer.kt — around line 285 ====="
-        sed -n '283,300p' app/src/main/kotlin/com/ark/llama/MusicPlayer.kt
-        echo ""
         echo "===== MusicPlayer.kt — commitRunnable / outerUpdate ====="
         grep -nE 'val (commitRunnable|outerUpdate)' \
           app/src/main/kotlin/com/ark/llama/MusicPlayer.kt || echo "(no matches)"
         echo ""
-        echo "===== NotificationController.kt — around line 875 ====="
-        sed -n '873,882p' app/src/main/kotlin/com/ark/llama/NotificationController.kt
+        echo "===== MusicPlayer.kt — first 5 lines of commitRunnable body ====="
+        sed -n '/val commitRunnable/,+5p' \
+          app/src/main/kotlin/com/ark/llama/MusicPlayer.kt
         echo ""
         echo "===== NotificationController.kt — NEUTRAL_COLOR / RED_COLOR ====="
         grep -nE '(const )?val (NEUTRAL_COLOR|RED_COLOR)' \
           app/src/main/kotlin/com/ark/llama/NotificationController.kt || echo "(no matches)"
+        echo ""
+        echo "===== Every .kt file with a self-referencing val pattern ====="
+        grep -rnE 'val [A-Za-z_][A-Za-z0-9_]* = Runnable \{' \
+          app/src/main/kotlin/ || echo "(none)"
         echo ""
         echo "=========================================="
 
@@ -413,15 +423,26 @@ jobs:
     # ========================================================================
     # Cache Gradle dependencies
     # ========================================================================
+    # Key is derived from the source zip's SHA-256, so a new zip
+    # automatically misses the cache. Restore-keys still allow the
+    # dependency layer to be reused across zips — only the compiled
+    # outputs are invalidated. Setting invalidate_cache=true forces
+    # a miss even when the zip is unchanged.
     - name: Cache Gradle
+      if: github.event.inputs.invalidate_cache != 'true'
       uses: actions/cache@v6
       with:
         path: |
           ~/.gradle/caches
           ~/.gradle/wrapper
-        key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        key: gradle-${{ runner.os }}-${{ steps.archive.outputs.zip_sha256 }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
         restore-keys: |
+          gradle-${{ runner.os }}-${{ steps.archive.outputs.zip_sha256 }}-
           gradle-${{ runner.os }}-
+
+    - name: Skip cache (invalidate_cache requested)
+      if: github.event.inputs.invalidate_cache == 'true'
+      run: echo "Cache step skipped; full rebuild will occur."
 
     # ========================================================================
     # Set up Android SDK
@@ -493,17 +514,53 @@ jobs:
         fi
 
     # ========================================================================
+    # Purge any stale Gradle artifacts
+    # ========================================================================
+    # Deletes the incremental transform cache (which survives
+    # `clean`), the project's own .gradle and build directories, and
+    # the Kotlin incremental compilation caches. This runs regardless
+    # of the cache step outcome, so even a restored cache cannot feed
+    # stale artifacts to the compiler.
+    - name: Purge any stale Gradle artifacts
+      run: |
+        set -euo pipefail
+        echo "Purging stale Gradle artifacts..."
+        rm -rf ~/.gradle/caches/transforms-* 2>/dev/null || true
+        rm -rf ~/.gradle/caches/build-cache-* 2>/dev/null || true
+        rm -rf .gradle 2>/dev/null || true
+        rm -rf build 2>/dev/null || true
+        rm -rf app/.gradle 2>/dev/null || true
+        rm -rf app/build 2>/dev/null || true
+        rm -rf app/kotlin 2>/dev/null || true
+        rm -rf app/tmp 2>/dev/null || true
+        echo "Purge complete."
+        echo "Remaining ~/.gradle/caches directories:"
+        ls -la ~/.gradle/caches 2>/dev/null || echo "(no caches dir)"
+
+    # ========================================================================
     # Build APK
     # ========================================================================
+    # --no-build-cache on both clean and assemble forces the Kotlin
+    # compiler to recompile from source every run, independent of
+    # Gradle's build-cache state.
     - name: Build APK
       run: |
-        ./gradlew clean
+        set -euo pipefail
+        echo "=========================================="
+        echo "BUILD CONFIGURATION"
+        echo "=========================================="
+        echo "Build type:        ${{ github.event.inputs.build_type }}"
+        echo "Invalidate cache:  ${{ github.event.inputs.invalidate_cache }}"
+        echo "Zip SHA256:        ${{ steps.archive.outputs.zip_sha256 }}"
+        echo "=========================================="
+
+        ./gradlew clean --no-build-cache
         if [ "${{ github.event.inputs.build_type }}" = "release" ]; then
           echo "Building RELEASE APK..."
-          ./gradlew assembleRelease --stacktrace
+          ./gradlew assembleRelease --no-build-cache --stacktrace
         else
           echo "Building DEBUG APK..."
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleDebug --no-build-cache --stacktrace
         fi
 
     # ========================================================================
