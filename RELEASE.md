@@ -1,83 +1,106 @@
-# Llama Music Player v1.4.8
+# Llama Music Player v1.5.0
 
-**Release date:** November 13, 2026
+**Release date:** November 14, 2026
 
-Version 1.4.8 ships four changes. The Credits dialog's theme
-picker no longer rebuilds the app when the user re-selects the
-theme that is already applied. The equalizer's status header again
-names the applied preset, correcting a regression introduced by a
-rewrite of the equalizer activity. The Custom preset's restore
-path in the equalizer is narrowed to the band levels it owns, and
-the reload path is completed so a restart brings back the user's
-full tuning. The preset-name fallback and its backing string are
-removed. For the full change history, see the `[1.4.8]` entry in
-the [CHANGELOG](CHANGELOG.md). For technical specifications,
-installation, and usage, see the [README](README.md).
+Version 1.5.0 is an architecture release. The app's cross-component
+signalling moves from Android broadcast intents to the EventBus, the
+source tree is now fully Kotlin, and the build moves to a new
+toolchain. No user-visible behaviour changes. Playback, metadata
+editing, folder management, theme and language switching, the
+equalizer, the notification, the album-art carousel, and the home
+gesture all behave exactly as they did in v1.4.8. For the full
+change history, see the `[1.5.0]` entry in the
+[CHANGELOG](CHANGELOG.md). For the current README — the technical
+profile, the installation steps, the permission list, and the
+"Inside the codebase" tour — see [README.md](README.md).
 
 ---
 
 ## What's in this release
 
-### Re-selecting the current theme no longer rebuilds the app
+### The app signals through the EventBus
 
-`ThemeDialog` was the only picker that called its manager from
-inside its own dismiss-delay runnable. Tapping any row — including
-the row of the theme that was already applied — called
-`ThemeManager.setThemeColor()`, which persists the value and
-broadcasts `THEME_COLOR_CHANGED`. Every activity answered by
-recreating, and every open dialog answered by dismissing.
-Re-picking the theme you were already on closed the picker and
-rebuilt the app behind it.
+Every internal signal the app produces — a transport command, a
+playlist lifecycle event, a metadata update, a theme or language
+change, an audio-session notification, a playback snapshot — used to
+travel between components by one of two mechanisms: a direct method
+call inside the app's own objects, or an Android broadcast for the
+deliveries a method call could not make. The broadcast half of that
+pair is gone. Every internal signal now travels on the process
+EventBus, and every consumer subscribes to the event it needs.
 
-`ThemeDialog` now reports the tap and does not persist it. The
-`CreditsDialog` listener owns the persist call, exactly as the
-`LanguageDialog` listener has always owned
-`LanguageManager.setLanguage()` and the `PresetDialog` listener
-has always owned `EqualizerManager.applyPreset()`. The listener
-already carried a guard against re-applying the current theme;
-that guard is now the only gate on the reselection path, so it
-takes effect. On reselection the picker still closes and the
-tapped row still highlights and bounces — the tap is acknowledged
-— but the persist, the broadcast, the listener's downstream work,
-and the recreation are skipped.
+Twenty-nine internal `sendBroadcast` calls are removed, five
+`BroadcastReceiver`s that existed only to consume them are removed,
+and thirteen action constants whose only readers were the removed
+broadcasts are removed. `VOLUME_CHANGED_ACTION` is retained: it is
+the system broadcast the framework emits when the user presses a
+hardware volume key, and `MusicService` is a consumer of the system,
+not a producer of an internal signal. The five notification
+transport actions the notification's buttons dispatch to
+`MusicService.onStartCommand` are also retained — they are the
+`PendingIntent` actions on the notification, not app-internal
+broadcasts.
 
-### The equalizer's status header again names the applied preset
+The new `Bus` façade (`com.ark.llama.event.Bus`) is the single entry
+point. No consumer touches `EventBus.getDefault()` directly.
+`Bus.init()` is called once, at the top of `LlamaMusicPlayer.onCreate`,
+before any manager whose constructor registers a subscriber. The
+KSP-generated `EventBusIndex` is installed on the default bus so
+subscriber registration is a direct lookup instead of a reflection
+walk; when the class is absent, `Bus.init` falls back to the
+reflective subscriber lookup, which is the correct safety net for a
+first clean build before KSP has run.
 
-A rewrite of `EqualizerActivity` replaced the preset-aware status
-line with a transient confirmation that was never meant to be the
-resting state. The line read `Equalizer: Enabled` after any preset
-was applied, disagreeing with the preset button beside it. It now
-reads `Equalizer: <presetName>` — `Equalizer: Headphones`,
-`Equalizer: Custom`, and so on — the state the line carried before
-the rewrite. Every writer of the line now resolves through one
-helper, `buildPresetStatusText()`, so the button and the status
-line cannot disagree again.
+### The source tree is fully Kotlin
 
-### The Custom preset restores bands, and a restart restores everything
+Every source file under `app/src/main/kotlin/com/ark/llama` and
+`app/src/main/kotlin/com/ark/llama/event` is Kotlin. The
+`app/src/main/java/` directory is absent — the migration moved every
+file and left the directory empty. The CI workflow's "Verify
+Kotlin-only source layout" step is a gate: it fails the build when a
+`.java` file appears outside the build output, or when `.kt` files
+have drifted out of `app/src/main/kotlin`.
 
-Selecting Custom from the preset picker restores the ten band
-levels to the values the user last tuned by hand. Bass boost,
-surround, pitch, and speed are independent of preset selection and
-are not touched by the picker. The manager had been restoring bass
-boost and surround on the picker path as well, so selecting Custom
-after adjusting bass boost on a named preset silently reset bass
-boost to the snapshot value. That restore is removed.
+The build is now compiled with Kotlin 2.0.21 under AGP 8.7.2 and
+Gradle 8.9, with KSP 2.0.21-1.0.25 running the EventBus annotation
+processor. The Kotlin DSL for the two Gradle build files and the
+Kotlin source tree were already in place in v1.4.8; v1.5.0 completes
+the move by removing the last Java-adjacent paths from the source
+layout and by gating future drift in the CI workflow.
 
-A restart still brings back the user's full tuning. The
-equalizer's reload path now restores the custom pitch and speed
-values as well as the custom bands and boosters, so the pitch and
-speed sliders show the values the user tuned before the app was
-closed. The snapshot is written when the user leaves Custom or the
-session detaches, and read when the session attaches.
+### The toolchain is upgraded
 
-### The preset-name fallback is removed
+`AGP 8.2.2 → AGP 8.7.2`, `Gradle 8.x → Gradle 8.9`,
+`Java 17 → Java 17 (source, target, and JVM target)`, and
+`compileSdk 35 → compileSdk 36`, `targetSdk 35 → targetSdk 36`. The
+`buildToolsVersion` is pinned to `36.0.0`. The AGP-to-Gradle pair is
+compatible as a pair — AGP 8.7.2 requires Gradle 8.9 or newer — and a
+future bump must move them together.
 
-`EqualizerManager.getPresetName(int)` was branching to a hardcoded
-`Custom` name when the preset index was out of range or the
-preset-name array could not be read. Neither condition is
-reachable from a valid state, so the fallback was hiding broken
-state rather than serving a legitimate one. The method now reads
-the array directly and lets an out-of-range index fail loudly.
-`loadPresetNames` no longer swallows a resource-read failure. The
-`equalizer_preset_custom` string is removed from every locale;
-`preset_names[0]` is the sole carrier of the word `Custom`.
+`compileSdk = 36` uses AGP 8.7.2, which was tested up to
+`compileSdk = 35`. The mismatch is suppressed by
+`android.suppressUnsupportedCompileSdk=36` in `gradle.properties`.
+API 36 is backward compatible with the API 35 surface the app uses,
+and the app uses no API 36-only features. The bump to AGP 8.9 is
+deferred to a future release when the AGP and Gradle versions can be
+moved together.
+
+The Kotlin `jvmTarget` and the Java `sourceCompatibility` and
+`targetCompatibility` are all 17, so the Kotlin and Java outputs are
+byte-compatible at the 17 level. Core library desugaring is enabled
+for the `java.time` API surface that jaudiotagger relies on.
+
+### A new Application class installs the process-wide singletons
+
+`LlamaMusicPlayer` (the Application, not the player screen) installs
+the process-wide singletons in dependency order before any activity
+or service runs: the EventBus first, then the language manager (whose
+localised context every later manager reads), then the character
+mapper (which builds the recognised-placeholder set from every
+supported locale), then the theme manager, the icon font, the album
+art cache, the SAF helper, the equalizer, the notification
+controller, the toast and overlay stacks, the playlist manager, and
+finally the navigation controller. A cold start that reaches
+`MusicPlayer`, or a headset connect that starts `MusicService` from
+a cold process, both find the bus installed and the managers
+constructed before their first interaction with either.

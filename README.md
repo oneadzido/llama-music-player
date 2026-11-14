@@ -8,7 +8,7 @@ scoping, and sixteen languages.
 [![Android](https://img.shields.io/badge/Android-6.0%2B-brightgreen.svg)](https://developer.android.com)
 [![Privacy](https://img.shields.io/badge/Privacy-Policy-blue.svg)](PRIVACY.md)
 
-[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.4.8.apk)
+[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.5.0.apk)
 
 [![Build](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml/badge.svg)](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml)
 
@@ -208,10 +208,15 @@ Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
 ## Technical Profile
 
 - **Minimum Android version:** Android 6.0 (API 23)
-- **Target Android version:** Android 15 (API 35)
-- **Language:** Java 17
-- **Build system:** Gradle with Android Gradle Plugin 8.2.2
+- **Target Android version:** Android 16 (API 36)
+- **Language:** Kotlin (JVM target 17)
+- **Build system:** Gradle 8.9 with Android Gradle Plugin 8.7.2
+- **Kotlin toolchain:** Kotlin 2.0.21, KSP 2.0.21-1.0.25, Parcelize 2.0.21
+- **Compile / target SDK:** 36 / 36 · **Build-tools:** 36.0.0
+- **Core library desugaring:** enabled (for `java.time` on API < 26)
 - **Metadata parsing:** jaudiotagger 3.0.1
+- **Cross-component signalling:** EventBus 3.3.1 with a
+  KSP-generated subscriber index
 - **Readable audio formats:** MP3, FLAC, OGG, M4A, AAC, WAV
 - **Writable audio formats:** MP3, FLAC, OGG, M4A, MP4
 - **Icons:** FontAwesome 6 (Free Solid)
@@ -294,6 +299,38 @@ The subsystems below are worth knowing about when reading the source,
 and one cross-cutting concern touches every activity. The subsystems
 match the list in `proguard-rules.pro`'s header, in the same order.
 
+### The signalling contract
+
+Every signal that used to travel between components as an Android
+broadcast now travels on the process EventBus
+(`com.ark.llama.event.Bus`). The set of events is grouped by
+producer surface:
+
+- `MetadataEvent` — `Updated`, `GenreUpdated`.
+- `PlayerEvent` — `Snapshot` (sticky), `ApplyScope`.
+- `PlaylistEvent` — `LibraryReset` (sticky), `Refresh`, `Display`,
+  `SyncStarted`, `SyncComplete`, `TriggerGenreLoading`, `SongAdded`.
+- `SessionEvent` — `AudioSessionChanged`, `PlaybackParamsRefresh`.
+- `SettingsEvent` — `LanguageChanged` (sticky), `ThemeColorChanged`
+  (sticky).
+- `TransportEvent` — 17 events covering action-shaped commands and
+  data-shaped payloads.
+
+`Bus.init()` is called once from `LlamaMusicPlayer.onCreate` before
+any manager whose constructor registers a subscriber. The KSP-
+generated `EventBusIndex` is installed on the default bus so
+subscriber registration is a direct lookup; when the class is
+absent (a first clean build before KSP has run), the reflective
+subscriber lookup is installed instead. Both branches yield a
+working bus; the indexed branch avoids the per-register reflection
+walk.
+
+The system `VOLUME_CHANGED_ACTION` broadcast is the one exception.
+It is the framework's signal for a hardware volume-key press;
+`MusicService` is a consumer of the system, not a producer of an
+internal event. The volume receiver stays registered in
+`MusicService.onBind` and unregistered in `onDestroy`.
+
 ### 1. The playback state machine (`MusicService`)
 
 A single `ServiceState` enum, two monotonic counters
@@ -373,22 +410,23 @@ or previous request notes `+1` or `−1`; an automatic advance notes
 `+1`; a reprepare of the same song notes `0`; a wrap that restarts
 the current song sets the restart flag. The values are consumed into
 the generation when the transition starts and published alongside
-the window on the same broadcast, so the carousel's animation and the
-audio's transition are the same value by construction.
+the window on the same `PlayerEvent.Snapshot` event, so the
+carousel's animation and the audio's transition are the same value
+by construction.
 
-Eighth, a Bluetooth disconnect is a facet of the same machine. The
-service registers a receiver for the pause request in `onCreate` and
-unregisters it in `onDestroy`, so the pause fires whether or not
-the player activity is alive. The pause is gated on three
-conditions, all required: the Bluetooth device is the current audio
-route, no interruption is already handling the pause, and the state
-is playing. A disconnect during a call, a link loss on a
-paired-but-inactive device, and a disconnect while already paused
-are ignored and logged. When all three pass, the pause is confirmed
-after a four-hundred-millisecond settling window, which
-distinguishes a disconnect from a link flap; a restored route
-within the window suppresses the pause, and a user-initiated
-transition during the window cancels it.
+Eighth, a Bluetooth disconnect is a facet of the same machine.
+`BluetoothReceiver` posts `TransportEvent.Pause` on the bus when the
+headset profile reports a disconnect; `MusicService.onTransportPause`
+is the sole consumer. The pause is gated on three conditions, all
+required: the Bluetooth device is the current audio route, no
+interruption is already handling the pause, and the state is playing.
+A disconnect during a call, a link loss on a paired-but-inactive
+device, and a disconnect while already paused are ignored and logged.
+When all three pass, the pause is confirmed after a
+four-hundred-millisecond settling window, which distinguishes a
+disconnect from a link flap; a restored route within the window
+suppresses the pause, and a user-initiated transition during the
+window cancels it.
 
 Ninth, the audible-resume rule is a facet of the same machine. The
 service reads the music stream's current volume on the same
@@ -415,7 +453,11 @@ UI, the art prefetch, the notification, and the media session all
 read that one method, so every surface begins advancing toward the
 target on the same main-thread turn a transition begins and every
 surface lands on the incoming song on the same frame the transition
-commits.
+commits. The commit path is `MusicService.broadcastUpdate`, which
+posts a sticky `PlayerEvent.Snapshot` and calls
+`NotificationController.commitFromBroadcast` inline with the same
+snapshot. The notification, the media session, the player UI, and
+the carousel advance together.
 
 ### 2. The three-tier playlist (`MusicService`)
 
@@ -454,8 +496,10 @@ the question.
 A user who opens an audio file from another app hands the path to the
 activity, and the activity hands it to the bound service through a
 direct method call —
-`MusicService.requestIncomingFile(String)`. No broadcast, no delivery
-window.
+`MusicService.requestIncomingFile(String)`. No broadcast, no
+EventBus delivery window between the activity and the service for
+the hand-off itself; the play result afterwards travels on the bus
+through the ordinary `PlayerEvent.Snapshot`.
 
 The service stores the path in `mPendingSongPath` and re-enters
 reconciliation. A path that names a song already in the playlist
@@ -502,11 +546,11 @@ is a tap, and two taps within
 `ViewConfiguration.getDoubleTapTimeout()` toggle the current song's
 favourite through `handleGestureDoubleTap()`.
 
-The transport buttons do not drive the carousel directly. They call
-`MusicService.playNextSong()` or `playPreviousSong()`, which note the
-direction and restart, set the target, and return. The carousel
-animates from the service's committing broadcast, in the same turn
-the window is committed.
+The transport buttons do not drive the carousel directly. They post
+`TransportEvent.Next` or `TransportEvent.Previous` on the bus; the
+service notes the direction and restart, sets the target, and
+publishes a fresh `PlayerEvent.Snapshot`. The carousel animates from
+that snapshot, in the same turn the window is committed.
 
 ### 5. The playback window (`PlaybackWindow`)
 
@@ -533,11 +577,11 @@ what an index means.
 
 `AlbumArtCarousel` is the sole consumer; it holds no playlist, no
 index, and no bitmap, and it adopts every window through
-`setWindow(PlaybackWindow, int, boolean)`. Alongside the window, the
-broadcast carries the transition's direction (`+1`, `−1`, or `0`)
-and its restart flag. The direction and the restart are properties
-of the generation the window carries, so a receiver that has the
-window has the transition that produced it.
+`setWindow(PlaybackWindow, int, boolean)`. Alongside the window,
+the `PlayerEvent.Snapshot` event carries the transition's direction
+(`+1`, `−1`, or `0`) and its restart flag. The direction and the
+restart are properties of the generation the window carries, so a
+receiver that has the window has the transition that produced it.
 
 ### 6. The playback scope (`PlaybackScope` and `PlaybackScopeDialog`)
 
@@ -583,13 +627,14 @@ during that window cancels the queued commit and restores the button
 to the state the current selection warrants.
 
 The dialog does not know about the service. It returns a scope
-through `OnScopeAppliedListener`, and the caller broadcasts the
-serialized scope to the service through `APPLY_PLAYBACK_SCOPE`. The
-service is the single writer of the active scope, and its
-`rebuildPlaylists()` method is the single mutator of the three-tier
-playlist. An empty filter scope reaches the service like any other
-scope: `rebuildPlaylists()` produces an empty `mScopedPlaylist`, and
-the playlist view shows its empty state until the user changes the
+through `OnScopeAppliedListener`, and the caller posts the
+serialized scope to the service as a
+`PlayerEvent.ApplyScope` on the process bus. The service is the
+single writer of the active scope, and its `rebuildPlaylists()`
+method is the single mutator of the three-tier playlist. An empty
+filter scope reaches the service like any other scope:
+`rebuildPlaylists()` produces an empty `mScopedPlaylist`, and the
+playlist view shows its empty state until the user changes the
 scope. The scope is not rewritten into `ALL_SONGS` at the service
 boundary, and a persisted empty filter scope round-trips through
 `serialize()` and `deserialize()` unchanged.
@@ -609,11 +654,11 @@ media-session playback state.
 
 The controller commits through
 `commitFromBroadcast(generation, snapshot)`, which
-`MusicService.broadcastUpdate()` calls immediately after
-`sendBroadcast` returns, with the exact snapshot the broadcast
-described. The player screen commits inside its `UPDATE_PLAYER`
-receiver, which runs synchronously inside that same `sendBroadcast`
-call, so both commits land on the same main-thread turn with the same
+`MusicService.broadcastUpdate()` calls immediately after posting the
+sticky `PlayerEvent.Snapshot` on the bus, with the exact snapshot
+the event described. The player screen and the playlist activity
+commit inside their sticky `PlayerEvent.Snapshot` subscribers, on
+the same main-thread turn the sticky post fired, with the same
 snapshot.
 
 `broadcastUpdate()` is the only path that commits the notification's
@@ -623,10 +668,10 @@ populate the player screen — so a broadcast that fires during
 `PREPARING` and the commit it triggers render the same song for the
 same generation. Both surfaces advance on the same main-thread turn,
 and the awareness poll that runs on the controller's cadence reads
-the same value the broadcast carried. A generation filter drops any
+the same value the snapshot carried. A generation filter drops any
 read whose generation is strictly lower than
 `mLastCommittedGeneration`, so a poll that captured state before a
-broadcast cannot re-apply it after the broadcast lands. The commit
+snapshot cannot re-apply it after the snapshot lands. The commit
 also writes the media-session playback state from
 `mStateSource.sessionPlaybackState()`, so the media session, the
 notification, and the player screen all agree about what is playing
@@ -663,13 +708,24 @@ The controller's resilience has seven parts:
    projection is a pure function of the interruption record, so
    the notification and the audio-focus handling cannot disagree
    about whether the interruption is still in effect.
-7. A `THEME_COLOR_CHANGED` broadcast reaches the controller's theme
-   receiver, which does not repaint the notification in place. The
-   activity that hosts the notification recreates on the same
-   broadcast, and the notification's chrome is rebuilt from the
-   persisted theme on the next commit. The themed placeholder and
-   the themed action icons are keyed by the color they were built
-   against, so a stale entry is never reused.
+7. A sticky `SettingsEvent.ThemeColorChanged` reaches the
+   controller's `@Subscribe onThemeColorChanged` handler. The
+   handler does not repaint the notification in place. The activity
+   that hosts the notification recreates on the same event, and the
+   notification's chrome is rebuilt from the persisted theme on the
+   next commit. The themed placeholder and the themed action icons
+   are keyed by the color they were built against, so a stale entry
+   is never reused.
+
+The notification's own transport buttons dispatch directly to
+`MusicService.onStartCommand` through `PendingIntent.getService`
+with private actions (`ACTION_PLAY_PAUSE`, `ACTION_NEXT`,
+`ACTION_PREV`). `MusicService.onStartCommand` handles each
+synchronously on the main thread. This is one hop — the same path
+the close button uses. The media session still receives lockscreen,
+Bluetooth, and headset media buttons through the unchanged
+`ACTION_MEDIA_BUTTON` path; only the notification's own buttons
+take the direct path.
 
 ### 8. The Metadata Editor (`MetadataEditor`, `MetadataReader`, `MetadataWriter`)
 
@@ -700,8 +756,8 @@ try/catch, so a malformed cached URI or a file whose embedded tags
 cannot be read resolves to a null field rather than to an exception.
 The editor always opens on the song `MusicService.getCurrentSong()`
 names, whose playlist entry is refreshed by
-`MusicService.refreshMetadataForSong` when the `METADATA_UPDATED`
-broadcast lands.
+`MusicService.refreshMetadataForSong` when the
+`MetadataEvent.Updated` event lands.
 
 **URI and path.** The editor treats the URI the current session
 selected as its write target, and the absolute path the song database
@@ -733,32 +789,32 @@ overlaid on the pre-edit bundle through
 verification only: a re-read that returns `FILE_UNREADABLE` or
 `PARSE_FAILED` logs a warning, and the submitted values are announced
 anyway, because the write itself succeeded. A re-read failure cannot
-suppress the broadcast, the database row, or playback resumption. The
+suppress the event, the database row, or playback resumption. The
 re-read, when it succeeds, becomes `mOriginalData` — the baseline the
 next edit's change detection compares against — but it does not
 become the announced values. The shared album-art cache is evicted
-under both the path key and the URI key before the broadcast. The
-broadcast always carries the saved URI; the path is included when the
-editor knows one.
+under both the path key and the URI key before the event is posted.
+The event always carries the saved URI; the path is included when
+the editor knows one.
 
 `onSaveFailure()` takes the captured target path as a parameter and,
 on `PERMISSION_DENIED`, writes the fallback database row against that
 path instead of `mFilePath`.
 
-**Receivers.** The `METADATA_UPDATED` broadcast has three receivers.
-`MusicPlayer` resolves the edited song's path through
-`resolveBroadcastSongPath`, calls
+**Consumers.** The `MetadataEvent.Updated` event has three
+subscribers. `MusicPlayer.onMetadataUpdated` resolves the edited
+song's path through `resolveSongPathFromMetadata`, calls
 `MusicService.refreshMetadataForSong`, and invalidates the carousel's
 per-path cache through `AlbumArtCarousel.invalidatePath`.
-`PlaylistActivity` resolves the same path and updates the display
-row, refreshing the playing indicator when the edited song is
-current. `MusicService` owns its own receiver, registered in
-`onCreate` and unregistered in `onDestroy`, so an edit lands on the
-in-memory playlist even when the player activity has been reclaimed
-but playback continues. On a SAF-only write, the editor knows the URI
-but not the path; each receiver's `resolveBroadcastSongPath` helper
-resolves the URI against `SongDatabase` so path-keyed consumers still
-find the edited song.
+`PlaylistActivity.onMetadataUpdated` resolves the same path and
+updates the display row, refreshing the playing indicator when the
+edited song is current. `MusicService.onMetadataUpdated` is a bus
+subscriber registered in `onCreate` and unregistered in `onDestroy`,
+so an edit lands on the in-memory playlist even when the player
+activity has been reclaimed but playback continues. On a SAF-only
+write, the editor knows the URI but not the path; each consumer's
+`resolveSongPathFromMetadata` helper resolves the URI against
+`SongDatabase` so path-keyed consumers still find the edited song.
 
 ### 9. The overlay stack (`OverlayManager` and `ToastManager`)
 
@@ -813,14 +869,14 @@ Neither surface splits a joined message, and no resource carries a
 separator. No caller composes the joined form; the composition lives
 at the single site in `ToastManager` that writes the overlay's text.
 
-A `THEME_COLOR_CHANGED` broadcast reaches `ToastManager`'s theme
-receiver, which tears down every persistent overlay's view and
-re-creates it through the same `createOverlayInView` path the
-initial show uses, so the current theme color is read at
-construction rather than patched in place. Temporary toasts are not
-rebuilt; their lifetime is shorter than a rebuild would require, and
-the next temporary toast is constructed against the new color
-anyway.
+A sticky `SettingsEvent.ThemeColorChanged` reaches `ToastManager`'s
+`@Subscribe onThemeColorChanged` handler, which tears down every
+persistent overlay's view and re-creates it through the same
+`createOverlayInView` path the initial show uses, so the current
+theme color is read at construction rather than patched in place.
+Temporary toasts are not rebuilt; their lifetime is shorter than a
+rebuild would require, and the next temporary toast is constructed
+against the new color anyway.
 
 Toast durations are `long` values in milliseconds. `LENGTH_SHORT`,
 `LENGTH_NORMAL`, and `LENGTH_LONG` are `long` constants on
@@ -838,9 +894,10 @@ either commits to a neighbour or settles back to rest.
 
 Every other transition — a transport button, a headset key, an
 automatic advance, an incoming file — is animated from the service's
-broadcast alone. The activity forwards the window, the direction, and
-the restart the service named to `setWindow`, and the carousel
-renders exactly the animation they describe.
+`PlayerEvent.Snapshot` event alone. The activity forwards the
+window, the direction, and the restart the service named to
+`setWindow`, and the carousel renders exactly the animation they
+describe.
 
 - **Commit.** A commit presets the confirmed window before the slide
   starts, so the animation's end action adopts the window
@@ -898,7 +955,9 @@ both surfaces.
 `MediaStore.Audio.Media.EXTERNAL_CONTENT_URI`. A change notification
 starts a quiet period of `QUIET_PERIOD_MS = 5000`; if no further
 change arrives inside the period, the observer asks `PlaylistManager`
-to run a scan through `updatePlaylistSilent()`.
+to run a scan through `updatePlaylistSilent()`, then posts
+`PlaylistEvent.Refresh` and (after a short delay)
+`PlaylistEvent.TriggerGenreLoading` on the bus.
 
 `handleChange` filters the notification's URI for the `/audio/` path
 segment, so a notification that arrives with an unexpected URI is not
@@ -919,8 +978,8 @@ a `ReentrantReadWriteLock`.
 Multiple `MusicLibrary` instances may coexist, one per component that
 reads song data. Each instance holds its own in-memory state, so each
 must refresh independently when notified. The database keeps them in
-agreement: a broadcast that reaches every instance, such as
-`UPDATE_PLAYLIST`, causes all instances to converge on the same
+agreement: a `PlaylistEvent.Refresh` on the bus reaches every
+subscribed instance, and every instance converges on the same
 database state.
 
 `invalidate()` is the reset-path counterpart to `refreshCache()`. Where
@@ -930,6 +989,12 @@ lists, drops the loaded flag, and re-reads the folder URI set from
 `SharedPreferences`. Every `MusicLibrary` instance in the process
 converges on the cleared selection, so a subsequent scan of the
 removed folders cannot repopulate the database.
+
+`MusicLibrary.postSongAdded(song, currentCount)` posts
+`PlaylistEvent.SongAdded` once per song during a progress-reporting
+scan. The event carries the seven fields the playlist row needs; the
+playlist activity appends each event to its display list
+incrementally.
 
 ### 14. The playlist search surface (`PlaylistActivity` and `PlaylistAdapter`)
 
@@ -1047,29 +1112,30 @@ not have to handle reads the same way in every call site.
 
 ### 17. Cross-cutting: theme and language rebuild
 
-Two broadcasts — `THEME_COLOR_CHANGED` and `LANGUAGE_CHANGED` —
-share a single contract across every surface of the app.
+Two sticky settings events — `SettingsEvent.ThemeColorChanged`
+and `SettingsEvent.LanguageChanged` — share a single contract
+across every surface of the app.
 
 `ThemeManager.setThemeColor(int)` and
 `LanguageManager.setLanguage(String)` each persist the new value and
-broadcast the change. Neither touches a view. Every activity
-registers a receiver for both broadcasts and answers each with
-`recreateWithConfiguration()`. Every dialog that registers a theme
-receiver (`CreditsDialog`) dismisses itself; the three dialogs that
-do not register one (`LanguageDialog`, `PresetDialog`,
-`PlaybackScopeDialog`) are dismissed transitively by their hosts'
-recreation. `ThemeDialog` reports the selection through its
-listener, and the caller's listener persists it; the dialog does
-not call `setThemeColor()` itself. `ToastManager` tears down and
-re-creates its persistent overlay's text view through the same
-`createOverlayInView` path its first show uses.
-`NotificationController` does not repaint in place; its themed
-placeholder and action icon caches are keyed by the color they
-were built against, so the recreated activity's next commit reads
-the persisted theme and either reuses a matching entry or
-rebuilds.
+post a sticky event on the process bus. Neither touches a view.
+Every activity subscribes in STICKY mode and answers each with
+`recreateWithConfiguration()`. Every dialog that subscribes to
+`SettingsEvent.ThemeColorChanged` (`CreditsDialog`) dismisses
+itself; the three dialogs that do not subscribe to it
+(`LanguageDialog`, `PresetDialog`, `PlaybackScopeDialog`) are
+dismissed transitively by their hosts' recreation. `ThemeDialog`
+reports the selection through its listener, and the caller's
+listener persists it; the dialog does not call `setThemeColor()`
+itself. `ToastManager` tears down and re-creates its persistent
+overlay's text view through the same `createOverlayInView` path its
+first show uses. `NotificationController` does not repaint in
+place; its themed placeholder and action icon caches are keyed by
+the color they were built against, so the recreated activity's
+next commit reads the persisted theme and either reuses a matching
+entry or rebuilds.
 
-The invariant is the same for both broadcasts: **the broadcast is a
+The invariant is the same for both events: **the event is a
 signal to rebuild, not an instruction to patch.** There is no view
 in the app whose theme or locale is written after the frame it was
 first drawn on. Every color and every string visible to the user is
@@ -1079,7 +1145,7 @@ apart on any device because they run the same code shape.
 
 The same reasoning extended to the language picker in 1.3.0 and to
 the theme picker in 1.4.6. The `LanguageManager` and `ThemeManager`
-classes carry the full contract in their class Javadocs.
+classes carry the full contract in their class KDoc.
 
 ### 18. Cross-cutting: localization
 
@@ -1091,15 +1157,16 @@ language set, and the `wrap(Context)` helper that produces a context
 whose configuration carries the selected locale. Every activity
 overrides `attachBaseContext(Context)` and calls `wrap` before any
 state exists, so the framework reads from the matching resource
-folder for the whole of the activity's lifetime. A language change is
-a persisted tag, a `LANGUAGE_CHANGED` broadcast, and a `recreate()` on
-each activity that receives it; no restart of the process is needed.
+folder for the whole of the activity's lifetime. A language change
+is a persisted tag, a sticky `SettingsEvent.LanguageChanged` on the
+bus, and a `recreate()` on each activity that subscribes; no restart
+of the process is needed.
 
 The supported set is declared three times —
 `LanguageManager.LANGUAGE_TAGS`, `res/xml/locales_config.xml`, and the
-`resourceConfigurations` block in `app/build.gradle` — and the three
-lists describe the same set. Sixteen languages total: English plus
-fifteen additional locales.
+`resourceConfigurations` block in `app/build.gradle.kts` — and the
+three lists describe the same set. Sixteen languages total: English
+plus fifteen additional locales.
 
 Every one of those strings is a resource, including the unit symbol
 that appears on the equalizer's per-band frequency labels. Those
