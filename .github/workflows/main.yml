@@ -75,7 +75,7 @@ jobs:
     - uses: actions/checkout@v6
 
     # ========================================================================
-    # Record which archive this build will use
+    # Record source archive identity
     # ========================================================================
     - name: Record source archive identity
       run: |
@@ -115,6 +115,36 @@ jobs:
         echo "Extraction complete."
         echo "Files after extraction:"
         ls -la
+
+    # ========================================================================
+    # Print exactly what the compiler will read for the two problem files
+    # ========================================================================
+    # This step reads the extracted source and prints the specific
+    # declarations that the compile step is complaining about. It does
+    # not modify anything. Its output tells you, definitively, whether
+    # the source the compiler will compile contains the intended
+    # declarations or the ones that produce the compile errors.
+    - name: Prove what the compiler will read
+      run: |
+        echo "=========================================="
+        echo "SOURCE PREVIEW: MusicPlayer.kt / NotificationController.kt"
+        echo "=========================================="
+        echo ""
+        echo "===== MusicPlayer.kt — around line 285 ====="
+        sed -n '283,300p' app/src/main/kotlin/com/ark/llama/MusicPlayer.kt
+        echo ""
+        echo "===== MusicPlayer.kt — commitRunnable / outerUpdate ====="
+        grep -nE 'val (commitRunnable|outerUpdate)' \
+          app/src/main/kotlin/com/ark/llama/MusicPlayer.kt || echo "(no matches)"
+        echo ""
+        echo "===== NotificationController.kt — around line 875 ====="
+        sed -n '873,882p' app/src/main/kotlin/com/ark/llama/NotificationController.kt
+        echo ""
+        echo "===== NotificationController.kt — NEUTRAL_COLOR / RED_COLOR ====="
+        grep -nE '(const )?val (NEUTRAL_COLOR|RED_COLOR)' \
+          app/src/main/kotlin/com/ark/llama/NotificationController.kt || echo "(no matches)"
+        echo ""
+        echo "=========================================="
 
     # ========================================================================
     # Extract and setup signing keys
