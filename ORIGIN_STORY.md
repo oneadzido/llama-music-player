@@ -153,7 +153,8 @@ the body, and every part has a job it does and no other.
 - **The heart** — `MusicService` pumps the audio. `PlaybackWindow` is
   the blood, carrying the current transition to every surface.
   `AlbumArtCarousel` is the pulse, showing the transition on the album
-  art.
+  art. `PlaybackScope` and `PlaybackScopeDialog` describe and choose
+  the subset of the library the heart plays from.
 - **The lungs** — `PlaylistManager` breathes life into the playlist.
 - **The nervous system** — `NavigationController` coordinates actions
   across the app. `MusicPlayer` is the brain, the main surface the
@@ -187,6 +188,8 @@ the body, and every part has a job it does and no other.
   `LanguageManager` is the tongue.
 - **The eyelid** — `OverlayManager` dims the view while work is
   happening.
+- **The edge** — `EdgeScrollHelper` is the second sense in the
+  fingers, the proportional fast-scroll on a long list.
 
 Every class has a purpose. I asked the AI to document the codebase so
 I could better understand it and have context for my requests during
@@ -243,7 +246,7 @@ development properly, where I can build Llama Music Player even
 better, and where I can help others who, like me, have dreams but not
 resources.
 
-It all begins with a thought.
+It all begins with a thought...
 
 ***Richard Korbla Adzido, 2026***
 

@@ -1,6 +1,6 @@
 # Privacy Policy for Llama Music Player
 
-**Last Updated:** November 7, 2026
+**Last Updated:** November 14, 2026
 
 ---
 
@@ -47,7 +47,7 @@ The app stores the following information locally:
 - **Playback state** (current track, position, repeat and shuffle
   settings) — stored in SharedPreferences
 - **Playback scope** — the selected mode and filter values are stored
-  in SharedPreferences
+  in SharedPreferences under the key `playback_scope_json`
 - **Selected music folders** — stored in SharedPreferences
 - **Theme and language preferences** — stored in SharedPreferences
 
@@ -55,6 +55,9 @@ The sixteen languages the app ships are resource folders bundled in
 the APK. No translation service, API key, or network call is
 involved. Selecting a language changes the display strings on your
 device; it does not tell anyone anything about you.
+
+The theme colors are local resource values bundled in the APK. There
+is no theme service, no remote palette, and no network call involved.
 
 ---
 
@@ -101,6 +104,25 @@ The app uses two open-source libraries:
 
 Both libraries operate entirely on your device and do not transmit
 any data.
+
+---
+
+## The EventBus
+
+The app's internal event delivery runs on a process-local instance of
+EventBus. No event crosses the process boundary. Every event that
+travels on the bus — a transport command, a playlist lifecycle event,
+a metadata update, a theme or language change, an audio-session
+notification, a playback snapshot — is delivered to subscribers in
+the same process, in memory, and is discarded when the process ends.
+Nothing on the bus is written to disk, transmitted over a network,
+or observed by any other application.
+
+The system `VOLUME_CHANGED_ACTION` broadcast is the one exception to
+"nothing leaves the process." It is a broadcast the Android framework
+itself emits when the user presses a hardware volume key, and the
+app consumes it locally; the app does not produce any broadcast that
+another application can observe.
 
 ---
 
