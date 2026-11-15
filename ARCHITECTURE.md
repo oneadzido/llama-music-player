@@ -31,7 +31,8 @@ set of methods that could disagree. The media session has one writer,
 row, `SongDatabase.setFavorite(String, boolean)`. The active playback
 scope has one writer, `MusicService.setPlaybackScope`. The audio focus
 flags (`mHasAudioFocus`, `mIsDucked`) have one writer,
-`MusicService.handleAudioFocusChange(int)`.
+`MusicService.handleAudioFocusChange(int)`. The process-wide broadcast
+registration has one writer, `BroadcastTranslator.start()`.
 
 **One shape per role.** A class that plays a role — singleton, state
 machine, ticker, safely-suffixed helper, state listener — has the
@@ -39,70 +40,21 @@ same shape it has in every other class. The role determines the shape,
 not the class. Every singleton with no construction-time side effects
 uses the same double-checked locking pattern. Every safely-suffixed
 helper takes a nullable parameter, returns early on null, catches
-`Exception`, and writes the reason in a comment.
+`Exception`, and writes the reason in a comment. Every EventBus
+subscriber uses the default `ThreadMode.POSTING` and expects to run
+on the main thread.
 
 **One name per concept.** The same concept carries the same name in
 every file. `mMainHandler` is the handler bound to the main looper.
 `getInstance` is the singleton accessor. `*Safely` is the "swallow
-the exception, the failure is not interesting" suffix. There is no
-second name for any of these.
+the exception, the failure is not interesting" suffix. `*Event` is
+the suffix for a typed event posted through `BroadcastTranslator`.
+There is no second name for any of these.
 
-**Document the why, not the what.** KDoc explains the reason a
+**Document the why, not the what.** Javadoc explains the reason a
 method exists, the invariants it holds, and the failure modes it
-guards against. The method body shows the what; the KDoc shows
+guards against. The method body shows the what; the javadoc shows
 the why.
-
----
-
-## The signalling contract
-
-Every signal that used to travel between components as an Android
-broadcast now travels on the process EventBus. The façade is
-`com.ark.llama.event.LlamaEventBus`, installed once at the top of
-`LlamaMusicPlayer.onCreate`, and the set of events is grouped by
-producer surface in the `com.ark.llama.event` package:
-
-- `MetadataEvent` — `Updated`, `GenreUpdated`.
-- `PlayerEvent` — `Snapshot` (sticky), `ApplyScope`.
-- `PlaylistEvent` — `LibraryReset` (sticky), `Refresh`, `Display`,
-  `SyncStarted`, `SyncComplete`, `TriggerGenreLoading`, `SongAdded`.
-- `SessionEvent` — `AudioSessionChanged`, `PlaybackParamsRefresh`.
-- `SettingsEvent` — `LanguageChanged` (sticky), `ThemeColorChanged`
-  (sticky).
-- `TransportEvent` — nine action-shaped carriers
-  (`TogglePlayPause`, `Next`, `Previous`, `Resume`, `Pause`, `Stop`,
-  `ToggleFavorite`, `RequestResumeFromGesture`, `SavePlayerState`)
-  and eight data-shaped carriers (`PlaySong`, `PlaySongByIndex`,
-  `PlaySongAtPosition`, `SeekTo`, `SetPendingSong`, `SetRepeatMode`,
-  `SetShuffle`, `SetBluetoothConnected`, `SetPlaybackSortMode`).
-
-`LlamaEventBus.init()` is `@Synchronized` and idempotent, and
-installs the default bus with the library's reflective subscriber
-lookup. It is called once, at the top of `LlamaMusicPlayer.onCreate`,
-before any manager whose constructor registers a subscriber. The one
-`@PublishedApi internal` constant is `TAG`, referenced by the two
-public inline functions `latest<T>()` and `removeLatest<T>()`; the
-Kotlin compiler rejects a public inline function that reads a
-non-public member, and `@PublishedApi` opens exactly that one
-reference without widening the constant's visibility.
-
-The one exception to "no broadcasts" is the system
-`VOLUME_CHANGED_ACTION` broadcast that `MusicService.mMusicVolumeReceiver`
-consumes. It is emitted by the framework when the user presses a
-hardware volume key; the app is a consumer of the system, not a
-producer of an internal event. Its receiver stays registered in
-`onBind` and unregistered in `onDestroy`, and no other
-`BroadcastReceiver` in the app consumes a `sendBroadcast` from
-another app component.
-
-The notification transport actions the `NotificationController`
-attaches to the notification buttons (`ACTION_PLAY_PAUSE`,
-`ACTION_NEXT`, `ACTION_PREV`, `ACTION_STOP`) are `PendingIntent`
-actions the system delivers to `MusicService.onStartCommand`. They
-are not app-internal broadcasts and they are retained. The
-`BluetoothReceiver`'s `startForegroundService(ACTION_BLUETOOTH_RESUME)`
-path is the cold-process entry into `MusicService`; it is not an
-internal signal either.
 
 ---
 
@@ -125,22 +77,34 @@ is not a two-line accessor; it is a guarded evaluation of "which song
 should the carousel be sliding toward" that returns null when the
 answer is not yet available.
 
-```kotlin
-private fun getDisplaySong(): Song? {
-    val list = mCurrentPlaylist ?: return null
-    if (list.isEmpty()) return null
+```java
+@Nullable
+private Song getDisplaySong() {
+    if (mCurrentPlaylist == null || mCurrentPlaylist.isEmpty()) {
+        return null;
+    }
     if (mState == ServiceState.PREPARING) {
-        if (mTargetIndex < 0 || mTargetIndex >= list.size) return null
-        val target = list[mTargetIndex]
-        if (target == null || target.path.isEmpty()) return null
-        return target
+        if (mTargetIndex < 0
+                || mTargetIndex >= mCurrentPlaylist.size()) {
+            return null;
+        }
+        Song targetSong = mCurrentPlaylist.get(mTargetIndex);
+        if (targetSong == null
+                || TextUtils.isEmpty(targetSong.getPath())) {
+            return null;
+        }
+        return targetSong;
     }
-    if (mCurrentIndex >= 0 && mCurrentIndex < list.size) {
-        val current = list[mCurrentIndex]
-        if (current == null || current.path.isEmpty()) return null
-        return current
+    if (mCurrentIndex >= 0
+            && mCurrentIndex < mCurrentPlaylist.size()) {
+        Song currentSong = mCurrentPlaylist.get(mCurrentIndex);
+        if (currentSong == null
+                || TextUtils.isEmpty(currentSong.getPath())) {
+            return null;
+        }
+        return currentSong;
     }
-    return null
+    return null;
 }
 ```
 
@@ -166,14 +130,13 @@ path can be empty during a loose-track insert that has not yet
 written the row. Every one of those cases returns null.
 
 The consumers of the method treat null as an instruction to hold
-their current surface, rather than to clear it.
-`snapshotForNotification()` returns null, and both
-`commitFromBroadcast` and `syncOnce` refuse to render that null,
-leaving the notification on its last rendered snapshot. The carousel
-holds its last window. The player UI holds its last drawn title and
-artist. The surface clears only when the state machine itself
-transitions to `IDLE`, which the controller checks through
-`ServiceStateSource.isIdle()`.
+their current surface, rather than to clear it. `snapshotForNotification()`
+returns null, and both `commitFromBroadcast` and `syncOnce` refuse
+to render that null, leaving the notification on its last rendered
+snapshot. The carousel holds its last window. The player UI holds
+its last drawn title and artist. The surface clears only when the
+state machine itself transitions to `IDLE`, which the controller
+checks through `ServiceStateSource.isIdle()`.
 
 The consequence of the rule is visible in the app. Tap Next, and the
 carousel begins sliding toward the incoming song's art and the
@@ -210,11 +173,7 @@ value. A malformed serialized scope deserializes to
 the player with a scope that matches nothing. `MusicService` persists
 the active scope under `playback_scope_json` and exposes it through
 `getPlaybackScope()` and `setPlaybackScope(PlaybackScope)`; the latter
-is the single writer of the fact. `PlaybackScope` is a Kotlin class
-whose `paths`, `genres`, `artists`, and `albums` fields are Kotlin
-`Set<String>` built with `.toSet()`, so the field type and the
-serialized JSON agree on which interface is being carried across
-the serialization boundary.
+is the single writer of the fact.
 
 `PlaybackScopeDialog` is the UI through which the scope is chosen.
 It presents the seven modes as a single flat list and expands the
@@ -226,9 +185,8 @@ build the playlist. Because the dialog and the service share one
 matcher, the number the dialog shows and the queue the service plays
 cannot disagree. The dialog does not bind `MusicService`; it returns
 the selected scope through `OnScopeAppliedListener`, and
-`FolderManager` posts a `PlayerEvent.ApplyScope` with the serialized
-scope on the bus. The service is the single writer of the active
-scope.
+`FolderManager` broadcasts it under `APPLY_PLAYBACK_SCOPE`. The
+service is the single writer of the active scope.
 
 Song completion is evaluated against `mScopedPlaylist`, not the
 grace-period-extended `mCurrentPlaylist`. The grace-period entries keep
@@ -294,22 +252,6 @@ notification commits. Foreground promotion follows playback state, not
 the visibility of `MusicPlayer`, so an activity recreation does not
 interrupt a session that is still playing.
 
-The service's collection declarations use Kotlin's `Set` and `Map`,
-not `java.util.Set` and `java.util.Map`. `mLooseTrackPaths` is a
-Kotlin `Set<String>`; `commitFavorites(changes: Map<String, Boolean>?)`
-accepts a Kotlin `Map` and iterates it with
-`for ((path, favorite) in changes)`. This is what allows
-`PlaylistActivity`'s `HashMap<String, Boolean>` to be passed without
-a cast and what allows the destructuring `for` loop over `changes` to
-compile. The `LruCache` for the notification art is built with an
-`object : LruCache<String, Bitmap>(size)` expression rather than a
-trailing lambda; the trailing-lambda form is not valid for the
-constructor overload the library exposes, and `object :` is the
-Kotlin spelling that wires `sizeOf` correctly. The session-token
-provider is installed with `{ getSessionToken() }`, a call to the
-public accessor, not with `{ sessionToken }`, which would be a
-property reference the class does not expose.
-
 ### The lungs
 
 `PlaylistManager`.
@@ -318,34 +260,55 @@ The lungs breathe life into the playlist. Folder scans, genre loads,
 and library resets are all `PlaylistManager`'s job, and each of the
 three is an operation on the `NavigationController` stack that
 declares its own liveness window. The reset operation has a write
-barrier, an invalidation event, and a completion signal, and its
+barrier, an invalidation broadcast, and a completion signal, and its
 structure follows four rules: one owner, one write barrier, one
-invalidation signal, one completion signal. Every signal it produces
-travels on the bus: `PlaylistEvent.LibraryReset`,
-`PlaylistEvent.SyncStarted`, `PlaylistEvent.SyncComplete`,
-`PlaylistEvent.Refresh`, `PlaylistEvent.Display`,
-`PlaylistEvent.TriggerGenreLoading`, and
-`MetadataEvent.GenreUpdated`.
+invalidation broadcast, one completion signal.
+
+In 1.5.0 the lungs subscribe to their own event. The
+`TRIGGER_GENRE_LOADING` stem, which the lungs used to receive
+through a receiver, is now a `TriggerGenreLoadingEvent` posted by
+`BroadcastTranslator` and consumed by a single `@Subscribe` method
+on the manager. The subscribe/unsubscribe pair is wired to the
+singleton's lifecycle — the private constructor and `shutdown()` —
+rather than to an activity lifecycle, because the manager is not
+an `Activity`.
 
 ### The nervous system
 
-`NavigationController`, `MusicPlayer`.
+`MusicPlayer`, `BroadcastTranslator`, `NavigationController`.
 
-`NavigationController` is the nerves that coordinate actions across
-the app. It enforces *declared liveness*. Each operation announces how
-often it will heartbeat and how many missed heartbeats it tolerates.
-The controller does not guess. It reads the declaration and enforces
-it. An operation that heartbeats every 500 milliseconds and tolerates
-three misses has a fifteen-hundred-millisecond window, and the
-controller does not need to know why the window is that size. Its
-`State` enum is public — not `internal` — because the public
-`StateListener.onStateChanged(oldState, newState)` method exposes it
-in its signature, and Kotlin rejects a public member that references
-a type narrower than the member itself.
+The nervous system has three parts.
 
-`MusicPlayer` is the brain — the main surface, coordinating everything
-the user sees. It is the largest class in the codebase, and the next
-section explains why that is a decision rather than an accident.
+`MusicPlayer` is the brain — the main surface, coordinating
+everything the user sees. It is the largest class in the codebase,
+and the next section explains why that is a decision rather than an
+accident.
+
+`BroadcastTranslator` is the spinal cord. The spinal cord is not
+the brain's assistant; it is the trunk that every nerve in the body
+runs through. A signal that begins in the brain, a signal that
+begins in the skin, a reflex from the fingertip — all of them
+travel through the spinal cord to reach where they need to go. No
+part of the body reaches another part without passing through it.
+`BroadcastTranslator` plays that role for the app. It is not the
+signal itself, and it is not the coordination logic — that lives in
+the senders and the subscribers. It is the trunk those signals
+travel along: registered once at process start, one receiver per
+stem, one typed event on the way out, one subscriber per event on
+the way back. Every in-process broadcast the app uses goes through
+it, so no class needs to know where the other classes are.
+
+`NavigationController` is the peripheral nerves. Where the spinal
+cord carries every signal along a shared trunk, a peripheral nerve
+carries a specific action out to the specific classes that listen
+for it. `NavigationController` enforces *declared liveness*. Each
+operation announces how often it will heartbeat and how many missed
+heartbeats it tolerates. The controller does not guess. It reads
+the declaration and enforces it. An operation that heartbeats
+every 500 milliseconds and tolerates three misses has a
+fifteen-hundred-millisecond window, and the controller does not
+need to know why the window is that size. It is a nerve, not a
+trunk: a specific signal for a specific target.
 
 The brain also owns the album-art gesture classifier. A single touch
 on the album-art container is classified on its first significant
@@ -357,18 +320,6 @@ modes at once. The `PLAYBACK` gesture requires twice the touch slop
 of travel and commits on release; the `TOUCHED` state is the
 resting state from which the double-tap favorite is detected and
 dispatched through `handleGestureDoubleTap()`.
-
-The activity's listeners that are wired into the album-art carousel
-use `object : AlbumArtCarousel.SwipeCommitListener` rather than a
-SAM lambda, because `SwipeCommitListener` is a regular Kotlin
-interface, not a `fun interface`. Kotlin's SAM conversion only
-applies to Java interfaces and to `fun interface` declarations;
-regular Kotlin interfaces require the explicit `object :`
-expression. The same rule applies to
-`PlaylistAdapter.FavoriteListener`,
-`PlaylistAdapter.OnSongClickListener`,
-`PlaybackScopeDialog.OnScopeAppliedListener`, and every other
-listener declared in the app's own Kotlin source.
 
 ### Memory
 
@@ -389,30 +340,6 @@ destroyed, the library stops accepting work without waiting on the
 main thread; queued completion and progress callbacks check the
 owner's lifetime before reaching the UI.
 
-`SongDatabase` is a Kotlin class whose methods are
-`fun getAllSongs()` and `fun getLooseSongs()`, not synthesized
-properties. Kotlin does not synthesize property access for Kotlin
-functions — only for Java getters — so every caller writes
-`getAllSongs()` and `getLooseSongs()` explicitly. `getExistingPaths`
-returns `Set<String>` built from a Kotlin `HashSet`;
-`deleteSongsNotInSet` returns `Int` and takes a `Set<String>?`;
-every one of these is a Kotlin type, not a `java.util` type.
-`SongDatabase` also has a `setFavorite(String, Boolean)` method that
-is the only writer of the favorite column on an existing row, and
-an `updateSongMetadata(Song)` method that is deliberately blind to
-that column.
-
-`MusicLibrary` has a `val songCount: Int get() = getSongCount()`
-property so a caller that wants the count without a defensive copy
-can read `library.songCount` rather than paying the copy cost of
-`getAllSongs().size`. The `songCount` property reads
-`getSongCount()`, which locks the read lock and returns the size of
-the in-memory list. `getAllSongs()` locks the read lock and returns
-`ArrayList(mAllSongs)` — a copy — so the caller cannot mutate the
-library's state through the returned list. The two are the same
-number read through two different methods; the difference is the
-copy.
-
 ### The senses
 
 `EqualizerManager`, `StorageObserver`, `CharacterMapper`.
@@ -420,42 +347,21 @@ copy.
 `EqualizerManager` is the ears. It owns the audio effect objects and
 the persisted settings. SharedPreferences are the authoritative store;
 getters read what setters wrote, regardless of any rounding the
-underlying effect applies. Its calls into
-`android.media.audiofx.Equalizer` pass a `Short` band index
-(`band.toShort()`), because that is what the framework's JNI surface
-expects and Kotlin will not widen `Int` to `Short` implicitly.
-`getCenterFreq(band)` is `getCenterFreq(band.toShort())`;
-`setBandLevel(band, level)` is
-`setBandLevel(band.toShort(), level.toShort())`;
-`getBandLevel(band)` is `getBandLevel(band.toShort())`. Every call
-site in `attachToAudioSession`, `setBandLevel`, `getBandLevel`,
-`applyCustomPreset`, `applyStandardPreset`, and
-`clearCustomBandLevels` follows that rule. The band label above each
-slider reads its unit symbol from a resource, so a Russian device
-shows `Гц` and every other device shows `Hz`. Its audio-session and
-playback-params signals reach the service and any other consumer
-through `SessionEvent.AudioSessionChanged` and
-`SessionEvent.PlaybackParamsRefresh`.
+underlying effect applies. The band label above each slider reads its
+unit symbol from a resource, so a Russian device shows `Гц` and every
+other device shows `Hz`.
 
 `StorageObserver` is the listening. It registers a single content
 observer for the audio MediaStore URI. Audio additions, removals, and
-metadata edits trigger a quiet period and then a scan; the observer
-posts `PlaylistEvent.Refresh` and
-`PlaylistEvent.TriggerGenreLoading` on the bus. Image, video, and
-download writes do not.
+metadata edits trigger a quiet period and then a scan. Image, video,
+and download writes do not.
 
 `CharacterMapper` is the reading. When a tag is absent, unreadable, or
 carries a recognized placeholder value, the parser produces a
 canonical value in the app's current language. The value is resolved
 from a string resource at the moment it is needed, so a German library
 shows the German placeholder for a song whose artist tag is missing,
-and an Arabic library shows the Arabic one. Its
-recognized-placeholder set is a Kotlin `Set<String>`, initialized to
-`emptySet()` and built from
-`LanguageManager.getInstance(context).getLanguageTags()`; the
-localized context is read through
-`LanguageManager.getInstance(context).getLocalizedContext()`, not
-through a property.
+and an Arabic library shows the Arabic one.
 
 ### The reflex arc
 
@@ -463,17 +369,14 @@ through a property.
 
 A reflex arc is a small circuit — a sense, a nerve, a muscle, no
 brain in the loop. `BluetoothReceiver` is exactly that. When a headset
-or A2DP profile connects or disconnects, the receiver posts
-`TransportEvent.SetBluetoothConnected(true)` or
-`TransportEvent.Pause` on the bus. `MusicService.onTransportPause`
-consumes the pause. The service owns the pause because the service
-owns the audio, and the pause fires whether or not the player
-activity is alive. The receiver also posts
-`TransportEvent.SetBluetoothConnected(false)` on disconnect, which
-the service consumes to update its Bluetooth state. The receiver
-imports `com.ark.llama.event.LlamaEventBus`, not
-`com.ark.llama.event.Bus`, and calls `LlamaEventBus.post(...)`, not
-`Bus.post(...)`.
+or A2DP profile connects or disconnects, the receiver broadcasts a
+pause request that `MusicService` consumes. The service owns the
+pause because the service owns the audio, and the pause fires whether
+or not the player activity is alive. The receiver stays a manifest
+receiver — it is a system broadcast that fires when the app is not
+running — and the service's consumption of its pause request is now
+a `BluetoothPauseEvent` posted by `BroadcastTranslator`, not a
+receiver the service owned directly.
 
 ### The hands
 
@@ -489,24 +392,7 @@ step fails after the backup, the original is restored. The result of
 the write is an eight-value status enum, and one method on it answers
 the only question a caller should have to ask. `StorageAccessHelper`
 is the grip — holding the permissions that let the hands reach the
-files. Its `getAllFolderUris()` returns a Kotlin `Set<String>`
-built with `.toSet()` from the internal HashSet; its
-`getDocumentUriForFile` uses `current?.findFile(part)` and assigns
-`current = child` after the null check, so the nullable
-`DocumentFile?` chain resolves without an assertion.
-
-The editor publishes a single `MetadataEvent.Updated` event after a
-successful write, via `LlamaEventBus.post`. The player, the playlist
-activity, and the service each subscribe to that event. There is no
-`METADATA_UPDATED` broadcast; the notification receives the edit
-through the same `PlayerEvent.Snapshot` that the service posts when
-it refreshes its in-memory playlist from the edit.
-
-`MetadataReader` declares its writable-extension set as a Kotlin
-`setOf(...)`, not as a `HashSet(Arrays.asList(...))`. The Kotlin
-`setOf` returns a `Set<String>` that matches the declared field type;
-the Java-style construction returned a `java.util.HashSet` and
-required a cast.
+files.
 
 ### The voice
 
@@ -519,9 +405,7 @@ lower operation is retained but not shown. Cancelling an operation is
 removing its entry, which is indistinguishable from an operation that
 completed. The stack does not pretend to know what it cannot know;
 callers that need to distinguish those two cases carry their own
-terminal state. The overlay's text view is created with
-`setHorizontallyScrolling(false)`, not with the nonexistent
-`isHorizontalScrollingEnabled` property.
+terminal state.
 
 `NotificationController` is the outward voice — speaking from the
 notification and the lock screen. It is the sole writer of the media
@@ -546,9 +430,6 @@ The controller reads its rendered content from the service through
 `getDisplaySong()` unconditionally. The notification therefore shows
 the target during a transition, the same song the carousel and the
 player screen are showing, and advances with them on the same frame.
-The `PlayerEvent.Snapshot` that reaches the activity and the
-`commitFromBroadcast` call that reaches the controller carry the
-same generation and the same payload.
 
 The notification's own transport buttons dispatch directly to
 `MusicService.onStartCommand` through `PendingIntent.getService`
@@ -567,11 +448,15 @@ queue, during which a player-screen tap that arrived after the
 notification tap could execute first, and the two surfaces would
 end up in disagreement with the user's last tap.
 
-The controller imports `com.ark.llama.event.LlamaEventBus`. Its
-`@Subscribe onThemeColorChanged` is registered on the sticky
-`SettingsEvent.ThemeColorChanged` — its body is a no-op because the
-notification chrome is rebuilt from the persisted theme on the next
-commit.
+The voice speaks through one channel registry. Both `ToastManager`
+and `NotificationController` subscribe to `THEME_COLOR_CHANGED`
+through `BroadcastTranslator`, not through receivers they register
+themselves. The translator is the spinal cord every in-process
+signal travels along; the classes that read those signals are
+`@Subscribe` subscribers. A theme change reaches `ToastManager` as
+a `ThemeColorChangedEvent` and reaches `NotificationController` as
+the same event type; each subscriber answers by rebuilding its own
+surface from the persisted theme on the next commit.
 
 ### The skin
 
@@ -585,28 +470,14 @@ says "Königliches Lama" and an Arabic one says "لاما ملكي", and both
 refer to the same color value in the same array.
 
 A theme change is a rebuild, not a repaint.
-`ThemeManager.setThemeColor(int)` persists the value and posts a
-sticky `SettingsEvent.ThemeColorChanged` on the process bus via
-`LlamaEventBus.postSticky`; every activity subscribes in STICKY mode
-and answers with a posted recreate, every open dialog dismisses
-itself, and every surface is re-constructed against the persisted
-color. `ThemeHelper` still paints each newly-constructed view; it no
-longer has a live view tree to repaint on an event, and the theme's
-color is read at construction rather than patched in. The same shape
-is used for `SettingsEvent.LanguageChanged`: the sticky event is a
-signal to rebuild, not an instruction to patch.
-
-`ThemeHelper.themeColorInt` is a property, not a method. Every caller
-that wants the theme as an `Int` reads `themeHelper.themeColorInt`;
-the name `getThemeColorInt()` does not exist. `ThemeHelper` also
-declares `updateButton`, `updateButtonPendingState`,
-`updateControlButton`, `updateSeekBar`, `updateEditText`,
-`updateEditTextCursor`, `updateTextView`, `updateRadio`, and
-`updateCheckbox`. `updateControlButton(button: TextView?, ...)` and
-`updateButtonPendingState(button: TextView, ...)` differ in the
-nullability of their first parameter; a caller holding a
-`Button?` must pass it through `?.let { ... }` to the non-null
-overload and can pass it directly to the nullable one.
+`ThemeManager.setThemeColor(int)` persists the value and broadcasts
+`THEME_COLOR_CHANGED`; every activity recreates, every open dialog
+dismisses itself, and every surface is re-constructed against the
+persisted color. `ThemeHelper` still paints each newly-constructed
+view; it no longer has a live view tree to repaint on a broadcast,
+and the theme's color is read at construction rather than patched
+in. The same shape is used for `LANGUAGE_CHANGED`: the broadcast is
+a signal to rebuild, not an instruction to patch.
 
 ### The organs the user touches
 
@@ -622,39 +493,19 @@ the batch. The header reads `SORT MODE [TITLE A-Z]` or
 `SORTIEREN [TITEL A-Z]` or `СОРТИРОВКА [НАЗВАНИЕ А-Я]`, because the
 label after the bracket comes from a resource and the space between
 the two halves of the phrase is supplied by a Java-side constant.
-`mCurrentDisplayList` is a Kotlin `ArrayList<Song>`, which
-implements Kotlin's `List<Song>`; passing it to
-`PlaylistAdapter.updateList(newSongs: List<Song>)` requires no cast.
-`PlaylistAdapter.FavoriteListener` is a regular Kotlin interface,
-not a `fun interface`, so `setFavoriteListener` is called with
-`object : PlaylistAdapter.FavoriteListener { override fun
-onFavoriteToggle(songPath: String, favorite: Boolean) { ... } }`
-and not with a lambda.
 
 `EqualizerActivity` is the equalizer — ten bands and sixty presets,
 with every seek bar snapping to a step under a guard flag so a
 programmatic re-set does not re-enter the listener that performed the
 snap. The reset button reports *no change* when nothing has moved.
-`MusicService.isPlaying` is read as a property (no parentheses);
-`MusicService.isPausedOrReady()` is read as a method (parentheses);
-the two are different kinds of member on the same class and the call
-sites respect that. The equalizer's `themeColorInt` reads are
-`themeHelper.themeColorInt`, not `themeHelper.getThemeColorInt()`.
-The `serviceConnection` field is `ServiceConnection?`, and
-`unbindServiceSafely` calls `serviceConnection?.let {
-unbindService(it) }` so the nullable type does not force an
-assertion.
 
 `FolderManager` is the folder organ — speaking Storage Access
 Framework, taking a persistable permission, mapping the URI to a
 filesystem path, and cleaning up the loose tracks when a folder is
 removed. Its header carries the SCOPE button, which opens the
-playback-scope dialog; the dialog returns the serialized scope
-through its `OnScopeAppliedListener`, which is implemented with
-`object :` at the call site because it is a regular Kotlin interface
-rather than a `fun interface`. `FolderManager` then posts
-`PlayerEvent.ApplyScope` on the bus, so `FolderManager` itself does
-not bind `MusicService`.
+playback-scope dialog; the dialog broadcasts the serialized scope to
+the service through `APPLY_PLAYBACK_SCOPE`, so `FolderManager` itself
+does not bind `MusicService`.
 
 ### The face
 
@@ -670,14 +521,11 @@ Four dialogs share one top-bar shape: the Cancel button at the start
 with its natural width, the title in the middle with a weight of 1,
 and a trailing placeholder that reserves no width. The title is the
 only element that can yield, so a long translation truncates with an
-ellipsis rather than running under a button beside it. The corner
-radii on every dialog are constructed with `.toFloat()` on each
-element of the `floatArrayOf(...)` array, because `dpToPx` returns
-`Int` and `GradientDrawable.cornerRadii` expects `FloatArray`.
+ellipsis rather than running under a button beside it.
 
 A theme change made from `CreditsDialog`'s picker closes every dialog
 on the screen — the picker, the `ThemeDialog` it opened, and the
-`CreditsDialog` underneath — on the same sticky event the hosting
+`CreditsDialog` underneath — on the same broadcast the hosting
 activity recreates on. There is no window in which one dialog has
 been rebuilt and another has not, because no dialog is rebuilt in
 place; all of them are dismissed, and the next open constructs a new
@@ -702,13 +550,6 @@ commits the batch on pause. The toast is the adapter's event and the
 adapter's turn; the persistence is the activity's. The two owners do
 not overlap.
 
-`PlaylistAdapter` declares `updateList(newSongs: List<Song>)` with
-Kotlin's `List` — the same interface `ArrayList<Song>` implements —
-so passing the activity's `ArrayList<Song>` requires no cast. The
-adapter's `onBindViewHolder` overload that takes a payload list uses
-`MutableList<Any>`; this is the signature the library's own Kotlin
-mapping produces from `List<Object> payloads`.
-
 ### The immune system
 
 `PermissionChecker`.
@@ -732,13 +573,14 @@ they cannot disagree about what "permitted" means.
 
 The skeleton is the structure that everything else is built on.
 `FontAwesome` is the alphabet of shapes — the icons the app writes
-with. `LanguageManager` is the tongue. Every user-visible string the
-app shows is a resource, and the set of supported languages is
-declared three times:
+with. `LanguageManager` is the tongue.
+
+Every user-visible string the app shows is a resource, and the set of
+supported languages is declared three times:
 
 - `LanguageManager.LANGUAGE_TAGS` — the app's own list
 - `res/xml/locales_config.xml` — the platform's per-app language picker
-- `app/build.gradle.kts`'s `resourceConfigurations` — the release
+- `app/build.gradle`'s `resourceConfigurations` — the release
   artifact's bound set
 
 Three lists, one set. The set could have been derived at runtime from
@@ -797,6 +639,13 @@ Only marshalled `Runnable`s cross between the main thread and the
 player thread. Only the results of executor work — never the
 intermediate state — are posted back to the main thread.
 
+Every in-process event posted by `BroadcastTranslator` uses the
+default `ThreadMode.POSTING`, so a subscriber runs on the same
+main-thread turn the broadcast it consumes was originally
+dispatched on. Subscriber bodies are byte-for-byte the
+`onReceive` bodies they replace; they assume they are on the main
+thread for the same reason the receivers did.
+
 ### The commit turn
 
 Every transition the user can cause ends in a single main-thread
@@ -827,9 +676,7 @@ user had already left, and on some devices the two posts interleaved
 and produced a brief flash of the pre-tap icon after the post-tap
 one. A transport tap now produces exactly one notification commit,
 fired by `broadcastUpdate` when the state machine has reached the
-new state. `broadcastUpdate` also posts the `PlayerEvent.Snapshot`
-sticky event that every activity consumes, in the same turn, with
-the same payload.
+new state.
 
 ### Decisions made on the user's behalf
 
@@ -862,15 +709,15 @@ focus returns, the music resumes.
 
 When the user chooses a theme, every activity recreates on the turn
 the dialog dismisses. Not on the next launch. A theme change made
-from a dialog closes every dialog on the screen on the same sticky
-event, so no surface survives the change un-rebuilt.
+from a dialog closes every dialog on the screen on the same
+broadcast, so no surface survives the change un-rebuilt.
 
 When the user chooses a language, every activity rebuilds around it on
 the turn the dialog dismisses. Not on the next launch.
 
 ### Document the why
 
-Every method carries a KDoc that explains not only *what* it does
+Every method carries a javadoc that explains not only *what* it does
 but *why it exists*. The service class documentation includes a
 section called *Volume Semantics* and another called *Audio Focus
 Semantics*, and each reads like a decision that was made once and
@@ -939,26 +786,16 @@ supported locales carry the same resource contract as the English
 master. A native speaker's review remains valuable for idiom, tone,
 and regional terminology.
 
-**`MusicPlayer` is not yet obviously arranged.** Its state, subscribers,
+**`MusicPlayer` is not yet obviously arranged.** Its state, receivers,
 gesture handling, and rendering paths are all in one file. The seams
 are visible; the arrangement that would use them is not yet obvious.
 
-**The event bus is the app's internal signalling contract.**
-`LlamaEventBus` is the sole entry point for signalling, and the
-`com.ark.llama.event` package is the sole home of event definitions.
-No consumer may slip a direct `sendBroadcast` back into the tree
-without the change appearing in an audit of that package or of any
-file that registers a `BroadcastReceiver` — the one remaining receiver
-being `MusicService.mMusicVolumeReceiver`, whose trigger is external
-to the app. The gate exists so that the migration is not re-absorbed
-one convenience broadcast at a time.
-
 **The boundaries become clearer as the system grows.** A volume
 receiver has meaning only in relation to the listening session. A
-`PlayerEvent.Snapshot` has meaning only when its state belongs to the
-transition that produced it. Each new capability makes those
-relationships more explicit, and the architecture continues to be
-evaluated against the way the player is actually used.
+broadcast has meaning only when its state belongs to the transition
+that produced it. Each new capability makes those relationships more
+explicit, and the architecture continues to be evaluated against the
+way the player is actually used.
 
 ---
 

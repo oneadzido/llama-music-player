@@ -5,434 +5,153 @@ All notable changes to Llama Music Player are documented in this file.
 Current technical specifications, installation, and usage are
 documented in the [README](README.md).
 
-## [1.5.0] - Nov 14, 2026
+## [1.5.0] - Nov 15, 2026
 
 ### Overview
 
-Version 1.5.0 is an architecture release. The app's cross-component
-signalling moves from Android broadcast intents to the EventBus. Every
-activity, service, manager, and dialog subscribes to the bus for the
-events it cares about, and the in-process broadcasts that used to
-carry those signals are gone. The source tree is fully Kotlin. The
-toolchain moves to AGP 8.7.2, Gradle 8.9, Kotlin 2.0.21, and JDK 17.
-A new `LlamaMusicPlayer` Application class installs the EventBus, the
-managers, and the process-wide singletons in dependency order before
-any activity or service runs. User-visible behaviour is unchanged:
-playback, metadata editing, folder management, theme and language
-switching, the equalizer, the notification, the album-art carousel,
-and the home gesture all behave as they did in v1.4.8.
+The migration in this release moves every in-process broadcast
+receiver in the app to a single registrar, `BroadcastTranslator`,
+that converts each broadcast into a typed event and posts it to the
+greenrobot EventBus. Every class that used to own a receiver —
+`MusicPlayer`, `MusicService`, `PlaylistActivity`,
+`PlaylistManager`, `NotificationController`, `ToastManager`,
+`CreditsDialog`, `EqualizerActivity`, `MetadataEditor`,
+`FolderManager` — becomes an `@Subscribe` subscriber. Bodies are
+the original `onReceive` bodies, unchanged except for the
+`intent.get*Extra("key")` → `event.field` substitution.
 
-The migration is a single structural change applied across the whole
-tree. v1.4.8's internal events — transport requests, playlist
-lifecycle, metadata updates, theme and language changes, session
-notifications, playback snapshots — each used to travel by one of two
-mechanisms: a direct method call inside the app's own objects, or an
-Android broadcast for cross-component delivery. The broadcast half of
-that pair is removed. Every internal signal now travels on the
-EventBus and every consumer subscribes to the event it needs.
+Before the migration the app had 55 in-process broadcast receivers
+across those ten classes, registered and unregistered in the
+matching lifecycle method of each class. A class that forgot to
+unregister leaked its receiver; a class that forgot to register on
+a second entry path silently stopped receiving. The compiler could
+not see either failure because everything was dispatched on
+`intent.getAction()` and everything travelled as an `Intent` extra
+with a string key.
 
-The `LlamaEventBus` façade (`com.ark.llama.event.LlamaEventBus`) is
-the single entry point: `init`, `post`, `postSticky`, `register`,
-`unregister`, `latest`, `removeLatest`. No consumer touches
-`EventBus.getDefault()` directly. `LlamaEventBus.init` is called once
-from `LlamaMusicPlayer.onCreate`, before any manager whose constructor
-registers a subscriber.
+The migration makes the shape of the receiver set visible to the
+compiler and to a reader. It registers one receiver per stem, in
+one place, at process start. Every stem has a named event class
+whose fields are the fields the sender actually writes. Every
+subscriber method names the event type it consumes, so a reader
+can find "who handles `METADATA_UPDATED`" by grepping for
+`onMetadataUpdatedEvent`. Every `Intent` extra used by any stem is
+declared as a field on the corresponding event class — no
+subscriber ever re-reads an extra out of a reconstructed `Intent`.
 
-Sticky events (`PlayerEvent.Snapshot`, `PlaylistEvent.LibraryReset`,
-`SettingsEvent.LanguageChanged`, `SettingsEvent.ThemeColorChanged`)
-survive to any consumer that registers after them.
-`PlaylistEvent.Refresh`, `PlaylistEvent.Display`,
-`PlaylistEvent.SyncComplete`, `TransportEvent.*`, `MetadataEvent.*`,
-and `SessionEvent.*` are non-sticky: they are events, not state, and
-a late consumer has no business receiving a signal that has already
-served its purpose.
+The 55 receivers map onto 30 stems; the difference is accounted
+for by stems that had more than one receiver-owning class. The
+`THEME_COLOR_CHANGED` stem, for example, was received by
+`MusicPlayer`, `PlaylistActivity`, `EqualizerActivity`, and
+`FolderManager`, and is now a single event with four subscribers.
 
-`LlamaEventBus.init` is `@Synchronized` and idempotent, and installs
-the default bus with the library's reflective subscriber lookup. The
-one `@PublishedApi internal` constant is `TAG`, referenced by the two
-public inline functions `latest<T>()` and `removeLatest<T>()`; Kotlin
-rejects a public inline function that reads a non-public member, and
-`@PublishedApi` opens exactly that one reference.
+`MusicService`'s `VOLUME_CHANGED_ACTION` receiver and
+`MetadataEditor`'s ephemeral `stateReceiver` are **not** migrated.
+Both are synchronous patterns that read one broadcast and reply on
+the same turn; the migration's scope is strictly the set of
+process-wide broadcast receivers that could be forgotten,
+duplicated, or silently lost.
+
+### Added
+
+- **`BroadcastTranslator`** — new singleton. Registers one
+  `BroadcastReceiver` per stem at process start, converts each
+  `Intent` into a typed event, posts the event to the default
+  `EventBus`. Exposes `register(Object)` / `unregister(Object)` for
+  the ten migrating subscribers and `post` / `postSticky` /
+  `getSticky` / `removeSticky` for symmetric EventBus access. 30
+  event classes, one per stem.
+
+- **`LlamaMusicPlayer`** — new `Application` subclass. Owns the
+  process-lifetime `BroadcastTranslator`. Starts it in `onCreate`,
+  and stops it in `onTerminate` (emulator-only; on production
+  devices the translator lives for the process's lifetime and is
+  torn down with the process). Declared in `AndroidManifest.xml`
+  as `android:name=".LlamaMusicPlayer"`.
+
+- **Fifty-five `@Subscribe` methods** across the ten migrated
+  classes. Each method is the original `onReceive` body, unchanged
+  except for the substitution of `intent.get*Extra("key")` with
+  `event.field`.
 
 ### Changed
 
-- **Cross-component signalling moves to the EventBus.** Every
-  internal broadcast that carried a signal between app components is
-  replaced by a `LlamaEventBus.post` or `LlamaEventBus.postSticky` on
-  the process bus. The list of removed broadcasts:
+- **In-process broadcast receivers are registered by one class.**
+  The fifty-five per-class receivers, their `register*Receiver()`
+  helper methods, and their symmetric `unregisterReceiver` calls
+  are gone. Each migrated class now has one
+  `BroadcastTranslator.getInstance(this).register(this)` call in
+  its `onCreate` (or constructor, for the non-`Activity` classes)
+  and one matching `unregister(this)` call in its `onDestroy` (or
+  `shutdown()` / `dismiss()`).
 
-  - `THEME_COLOR_CHANGED` — replaced by
-    `SettingsEvent.ThemeColorChanged`, posted sticky from
-    `ThemeManager.setThemeColor`. Every activity subscribes in
-    STICKY mode and answers with a posted recreate; `CreditsDialog`
-    answers with a posted dismiss; `ToastManager` and
-    `NotificationController` answer with their own rebuild handlers.
+- **`MusicService` now subscribes to 13 events instead of owning
+  13 receivers.** The set is the same set the service used to
+  receive, plus `APPLY_PLAYBACK_SCOPE`, which the service's
+  existing `mApplyScopeReceiver` had registered. The
+  `APPLY_PLAYBACK_SCOPE` stem is a service facet under the same
+  rule as the other twelve: the service is the single writer of
+  the active scope, and applying a scope is a user-initiated
+  transition.
 
-  - `LANGUAGE_CHANGED` — replaced by
-    `SettingsEvent.LanguageChanged`, posted sticky from
-    `LanguageManager.setLanguage`. Every activity subscribes in
-    STICKY mode and recreates; `CreditsDialog` dismisses.
+- **`PlaylistManager` subscribes to one event instead of owning
+  one receiver.** The subscribe/unsubscribe pair is wired to the
+  singleton's own lifecycle — the private constructor and
+  `shutdown()` — because the manager is not an `Activity`.
 
-  - `UPDATE_PLAYER` — replaced by `PlayerEvent.Snapshot`, posted
-    sticky from `MusicService.broadcastUpdate`. `MusicPlayer` and
-    `PlaylistActivity` subscribe; `MusicService` also calls
-    `NotificationController.commitFromBroadcast` inline with the
-    same snapshot, so the notification, the media session, the
-    player UI, and the carousel advance together.
+- **`NotificationController` and `ToastManager` subscribe to
+  `THEME_COLOR_CHANGED` in their constructors.** The theme
+  subscriber's body is unchanged; it does not repaint in place.
+  The notification's themed placeholder and action icon caches are
+  still keyed by the color they were built against, and
+  `ToastManager` still tears down and re-creates its persistent
+  overlay's text view through `createOverlayInView`.
 
-  - `LIBRARY_RESET` — replaced by `PlaylistEvent.LibraryReset`,
-    posted sticky from `PlaylistManager.resetLibrary`.
-    `MusicPlayer`, `PlaylistActivity`, `FolderManager`, and
-    `MusicService` subscribe.
+- **`resolveBroadcastSongPath` takes `(songPath, songUri)` instead
+  of an `Intent`.** The migration removes the `Intent` parameter
+  from `MusicPlayer`, `MusicService`, and `PlaylistActivity`. The
+  resolver's body is unchanged; only its signature changed.
 
-  - `UPDATE_PLAYLIST`, `SOFT_UPDATE_PLAYLIST`, `DISPLAY_PLAYLIST` —
-    replaced by `PlaylistEvent.Refresh` and
-    `PlaylistEvent.Display`. `PlaylistManager`, `MusicLibrary`, and
-    `StorageObserver` post them.
-
-  - `SYNC_STARTED`, `SYNC_COMPLETE`,
-    `UPDATE_PLAYLIST_FROM_FOLDERS` — replaced by
-    `PlaylistEvent.SyncStarted`, `PlaylistEvent.SyncComplete`, and a
-    subsequent `PlaylistEvent.Refresh`. `FolderManager`,
-    `PlaylistManager`, and `MusicService` produce and consume them.
-
-  - `METADATA_UPDATED` — replaced by `MetadataEvent.Updated`,
-    posted from `MetadataEditor.onSaveSuccess`.
-
-  - `GENRE_UPDATE` — replaced by `MetadataEvent.GenreUpdated`,
-    posted from `PlaylistManager.sendGenreUpdateSignal`.
-
-  - `APPLY_PLAYBACK_SCOPE` — replaced by
-    `PlayerEvent.ApplyScope`. `FolderManager` posts;
-    `MusicService.onPlayerApplyScope` consumes.
-
-  - `ACTION_PLAY_SONG`, `ACTION_BLUETOOTH_PAUSE`,
-    `ACTION_AUDIO_SESSION_CHANGED`, `UPDATE_PLAYBACK_PARAMS` —
-    replaced by `TransportEvent.PlaySong`,
-    `TransportEvent.Pause`, `SessionEvent.AudioSessionChanged`,
-    `SessionEvent.PlaybackParamsRefresh`. Producers:
-    `PlaylistActivity`, `BluetoothReceiver`, `EqualizerManager`.
-    Consumer: `MusicService`.
-
-  - `ACTION_TRIGGER_GENRE_LOADING`, `LOOSE_TRACKS_UPDATED`,
-    `SAVE_PLAYER_STATE_NOW`, `UPDATE_SORT_MODE` — replaced by
-    `PlaylistEvent.TriggerGenreLoading`,
-    `PlaylistEvent.SongAdded`, `TransportEvent.SavePlayerState`,
-    `TransportEvent.SetPlaybackSortMode`.
-
-  - `GET_PLAYING_STATE` — removed. `MetadataEditor` reads
-    `MusicService.getAudioSessionId()` and the persisted playing
-    flag directly.
-
-  - `VOLUME_CHANGED_ACTION` — retained. This is a **system**
-    broadcast, not an internal signal: the framework emits it when
-    the user presses a hardware volume key. `MusicService` is a
-    consumer of the system, not a producer of an internal event.
-    The receiver, its registration in `onBind`, its unregistration
-    in `onDestroy`, and its `onMusicVolumeChanged` handler are
-    preserved intact.
-
-- **Transport-command events replace ad-hoc method calls where a
-  direct call would require a bound service.** `TransportEvent`
-  contains nine action-shaped carriers (`TogglePlayPause`, `Next`,
-  `Previous`, `Resume`, `Pause`, `Stop`, `ToggleFavorite`,
-  `RequestResumeFromGesture`, `SavePlayerState`) and eight
-  data-shaped carriers (`PlaySong`, `PlaySongByIndex`,
-  `PlaySongAtPosition`, `SeekTo`, `SetPendingSong`, `SetRepeatMode`,
-  `SetShuffle`, `SetBluetoothConnected`, `SetPlaybackSortMode`).
-  Producers include `MusicPlayer`, `PlaylistActivity`,
-  `BluetoothReceiver`, `MetadataEditor`, `FolderManager`, and
-  `EqualizerManager`. `MusicService` owns every subscriber.
-
-- **The source tree is fully Kotlin.** Every file under
-  `app/src/main/kotlin/com/ark/llama` and
-  `app/src/main/kotlin/com/ark/llama/event` is Kotlin. The
-  `app/src/main/java/` directory is absent. The
-  "Verify Kotlin-only source layout" step in the CI workflow is a
-  gate: it fails the build when a `.java` file appears outside the
-  build output, or when `.kt` files have drifted out of
-  `app/src/main/kotlin`.
-
-- **`LlamaMusicPlayer` Application class.** A new
-  `com.ark.llama.LlamaMusicPlayer` (distinct from the `MusicPlayer`
-  activity) installs the process-wide singletons in dependency
-  order: `LlamaEventBus.init` first, then `LanguageManager`, then
-  `CharacterMapper`, then `ThemeManager`, `FontAwesome`,
-  `AlbumArtCache`, `StorageAccessHelper`, `EqualizerManager`,
-  `NotificationController`, `ToastManager.init`,
-  `OverlayManager.init`, `PlaylistManager.getInstance`, and finally
-  `NavigationController.getInstance`. The class is declared in the
-  manifest as `android:name=".LlamaMusicPlayer"` on the
-  `<application>` element.
-
-- **Toolchain: AGP 8.7.2, Gradle 8.9, Kotlin 2.0.21, JDK 17.** The
-  Android Gradle Plugin moves from 8.2.2 to 8.7.2, and Gradle moves
-  to 8.9 — the two are compatible as a pair; a future bump must
-  move them together. `compileSdk = 36`, `targetSdk = 36`,
-  `minSdk = 23`, `buildToolsVersion = "36.0.0"`. Kotlin moves to
-  2.0.21. The build is compiled with Java 17 source and target,
-  with core library desugaring enabled for `java.time` on
-  API < 26.
-
-- **`android.suppressUnsupportedCompileSdk=36`** is set in
-  `gradle.properties`. AGP 8.7.2 was tested up to `compileSdk = 35`;
-  `compileSdk = 36` support arrives in AGP 8.9. The suppression
-  accepts the mismatch. API 36 is backward compatible with the
-  API 35 surface the app uses, and the app uses no API 36-only
-  features.
-
-- **The `pluginManagement` and `dependencyResolutionManagement`
-  blocks in `settings.gradle.kts` are set to
-  `RepositoriesMode.FAIL_ON_PROJECT_REPOS`.** A module that tries
-  to declare its own repositories fails at configuration time, so
-  a developer cannot accidentally introduce a repository a CI
-  runner does not have access to.
-
-- **ProGuard rules match the reflection surfaces.** The
-  `proguard-rules.pro` file's "Keep EventBus" section preserves the
-  `@Subscribe` methods on every class, the `ThreadMode` enum,
-  `ThrowableFailureEvent` and its subclasses, and the
-  `com.ark.llama.event.**` hierarchy. The "Keep Kotlin Runtime"
-  section preserves `kotlin.Metadata` and `kotlinx.coroutines.**`.
-  The existing class-level keep rules remain in place — they were
-  already correct for a Kotlin reflection surface (name stability,
-  constructor stability, nested class stability) and did not need
-  to change for the EventBus migration. The file has ~230 rules
-  total.
-
-### Removed
-
-- **29 internal `sendBroadcast` calls**, distributed as:
-  `PlaylistManager` (14 — sync, genre, reset, and playlist-update
-  lifecycle), `MusicService` (2 — `UPDATE_PLAYER` and
-  `ACTION_AUDIO_SESSION_CHANGED`), `FolderManager` (5 — sync
-  start, sync complete, playlist-from-folders, save-player-state,
-  playlist-rebuild), `MusicLibrary` (1 — per-song broadcast),
-  `PlaylistActivity` (3 — redundant startService and two sort-mode
-  broadcasts), `ThemeManager` (1 — `THEME_COLOR_CHANGED`),
-  `EqualizerManager` (3 — audio-session, two playback-params
-  writes).
-
-- **5 broadcast receivers** that existed only to consume the
-  removed broadcasts: `MusicService.mBluetoothPauseReceiver`,
-  `FolderManager.mLooseTracksUpdateReceiver`,
-  `FolderManager.mSyncCompleteReceiver`,
-  `FolderManager.mLibraryResetReceiver`,
-  `PlaylistManager.mTriggerGenreReceiver`. Each had a bus
-  `@Subscribe` handler in the same file covering the same signal.
-  `MusicService.mMusicVolumeReceiver` is **retained** — it
-  consumes the system `VOLUME_CHANGED_ACTION` broadcast, not an
-  app-internal signal.
-
-- **13 action constants** whose only readers were the removed
-  broadcasts: `ThemeManager.ACTION_THEME_COLOR_CHANGED`,
-  `MusicService.ACTION_AUDIO_SESSION_CHANGED`,
-  `MusicService.ACTION_UPDATE_PLAYBACK_PARAMS`,
-  `MusicService.ACTION_BLUETOOTH_PAUSE`,
-  `PlaylistManager.ACTION_SYNC_COMPLETE`,
-  `PlaylistManager.ACTION_UPDATE_PLAYLIST`,
-  `PlaylistManager.ACTION_DISPLAY_PLAYLIST`,
-  `PlaylistManager.ACTION_SOFT_UPDATE_PLAYLIST`,
-  `PlaylistManager.ACTION_GENRE_UPDATE`,
-  `PlaylistManager.ACTION_LIBRARY_RESET`,
-  `PlaylistManager.ACTION_PLAYLIST_REFRESH`,
-  `PlaylistManager.ACTION_TRIGGER_GENRE_LOADING`,
-  `MusicLibrary.ACTION_PLAYLIST_LOAD_PROGRESS`. The remaining
-  notification-action constants (`ACTION_PLAY_PAUSE`,
-  `ACTION_NEXT`, `ACTION_PREV`, `ACTION_STOP`, `ACTION_PLAY_SONG`,
-  `ACTION_BLUETOOTH_RESUME`) are kept because they are still the
-  `PendingIntent` actions that carry `MusicService.onStartCommand`'s
-  notification transport commands.
-
-- **5 dead-code stubs**: `MusicService.onTransportSetPendingSongAlso`
-  (a no-op duplicate `@Subscribe` on `TransportEvent.SetPendingSong`),
-  `PlaylistActivity.SessionEventPlayerRefresh` (an inert marker
-  object, and the `LlamaEventBus.post(SessionEventPlayerRefresh)`
-  call that targeted it), `PlaylistManager.registerTriggerGenreReceiver`
-  (whose sole registration was removed with the receiver),
-  `PlaylistManager.unregisterReceiverSafely` (whose only caller
-  was the receiver cleanup), and `MusicService.registerLegacyReceivers`
-  (whose only content was the Bluetooth-pause receiver registration).
+- **`jaudiotagger` is now resolved from the remote source.** The
+  `net.jthink:jaudiotagger:3.0.1` artifact is now resolved
+  remotely from Maven Central rather than bundled with the source
+  archive.
 
 ### Fixed
 
-- **No user-visible behaviour changed.** Every consumer of every
-  removed broadcast received the equivalent `LlamaEventBus.post` or
-  `LlamaEventBus.postSticky` on the same main-thread turn as the
-  source would have dispatched the broadcast. The sticky events
-  carry the same payloads; the non-sticky events carry the same
-  payloads and are dispatched in the same order relative to the
-  source method's state commit.
+- **`MusicPlayer`'s `onStart`/`onStop` visible-only gate on the
+  theme subscriber is preserved.** The subscriber is guarded by
+  `if (!isResumed()) return;`. A theme change that arrives while
+  the activity is stopped is dropped, matching the pre-migration
+  `onStart`/`onStop` registration pattern. The same guard is
+  applied to `PlaylistActivity`, `EqualizerActivity`, and
+  `FolderManager`, whose theme registrations were also
+  `onResume`/`onPause`.
 
-- **Every manager and activity reaches the bus through
-  `LlamaEventBus`.** The import name is `LlamaEventBus`, the class
-  name is `LlamaEventBus`, and the façade's public methods are
-  `init`, `post`, `postSticky`, `register`, `unregister`, `latest`,
-  and `removeLatest`. There is no `Bus` class in this codebase and
-  no `Bus.` call site anywhere.
-
-- **`LlamaEventBus.TAG` is `@PublishedApi internal`.** The two
-  public inline functions `latest<T>()` and `removeLatest<T>()`
-  read `TAG`, and the Kotlin compiler rejects a public inline
-  function that reads a non-public member. The annotation opens
-  exactly that one reference.
-
-- **The application class is installed before any activity or
-  service.** A cold start that reaches `MusicPlayer`, or a headset
-  connect that starts `MusicService` from a cold process, both run
-  `LlamaMusicPlayer.onCreate` first. Any manager that posts an
-  event during construction (`PlaylistManager` registers a
-  subscriber, `ThemeManager` posts a sticky event, `LanguageManager`
-  posts a sticky event) finds the bus already installed.
+- **Dead `ACTION_*` constants and dead `registerReceiverSafely` /
+  `unregisterReceiverSafely` helpers are removed.** The constants
+  that only the removed receivers used, and the two helper methods
+  whose only callers were the removed `unregisterReceiverSafely`
+  calls, are gone. The `BroadcastReceiver` and `IntentFilter`
+  imports that were only referenced by those removals are gone as
+  well. This is cleanup, not a behavioural change.
 
 ### Under the Hood
 
-- **New `event` package**: `com.ark.llama.event.LlamaEventBus` (the
-  façade), `com.ark.llama.event.MetadataEvent` (2 events),
-  `com.ark.llama.event.PlayerEvent` (2 events),
-  `com.ark.llama.event.PlaylistEvent` (7 events),
-  `com.ark.llama.event.SessionEvent` (2 events),
-  `com.ark.llama.event.SettingsEvent` (2 events),
-  `com.ark.llama.event.TransportEvent` (17 events). The sealed
-  interfaces group the events by producer surface. Events carry
-  `@JvmField` where a plain field is more useful to Java callers,
-  and `data class` where the payload is inherently a value.
+- `app/build.gradle` — `implementation 'org.greenrobot:eventbus:3.3.1'`
+  added to the `dependencies` block.
 
-- **`LlamaEventBus.init` idempotence** is in `init`'s KDoc and
-  body. `init` is `@Synchronized`; a second call returns
-  immediately after the first sets `initialised`. The bus is built
-  with the library's reflective subscriber lookup.
+- `app/proguard-rules.pro` — rules added to keep the
+  `@Subscribe` methods and the `ThreadMode` enum, which EventBus
+  invokes reflectively. The `*Annotation*` attribute keep is also
+  required for EventBus's reflective discovery of `@Subscribe`.
 
-- **`LlamaEventBus.post`, `LlamaEventBus.postSticky`,
-  `LlamaEventBus.register`, `LlamaEventBus.unregister`,
-  `LlamaEventBus.latest`, `LlamaEventBus.removeLatest`** are the
-  six static façade methods. `register` and `unregister` are
-  guarded by `EventBus.isRegistered(subscriber)` so a re-entrant
-  lifecycle is idempotent. `latest` and `removeLatest` are reified
-  inline functions that swallow exceptions and log through
-  `LlamaEventBus.TAG`.
+- `AndroidManifest.xml` — `android:name=".LlamaMusicPlayer"` added
+  to the `<application>` element. No other manifest change.
 
-- **`MusicService.broadcastUpdate`** now posts
-  `PlayerEvent.Snapshot` via `LlamaEventBus.postSticky` and calls
-  `NotificationController.commitFromBroadcast` inline with the
-  same snapshot. It no longer constructs or dispatches an
-  `Intent("UPDATE_PLAYER")`. The `commitFromBroadcast` call is the
-  notification commit; the sticky event is the state publication.
+- Every migrated class — `@version` moved to `1.5.0`.
 
-- **`MusicService.mStateSource`** is unchanged. It still implements
-  `NotificationController.ServiceStateSource`, and
-  `NotificationController` still calls
-  `snapshotForNotification()` on every sync tick. The commit path
-  and the poll path both read from the same source.
-
-- **`PlaylistManager`** no longer keeps any `BroadcastReceiver`. The
-  bus subscriber `@Subscribe onTriggerGenreLoading` is the sole
-  trigger path. Every sync, genre, and reset signal is emitted
-  through `LlamaEventBus.post` or `LlamaEventBus.postSticky`.
-
-- **`FolderManager`** no longer keeps any `BroadcastReceiver`. The
-  four bus subscribers `onLanguageChanged`, `onThemeColorChanged`,
-  `onLibraryReset`, and `onSyncComplete` are the sole subscribers.
-  `loadFolders` is called from `onSyncComplete` and
-  `onLibraryReset`; the refresh path the removed receivers covered
-  is fully replaced.
-
-- **`PlaylistActivity`** no longer performs the redundant
-  `startService(Intent(...PLAY_SONG...))` on song click. The bus
-  `LlamaEventBus.post(TransportEvent.PlaySong(song.path))` is the
-  sole signal. `cycleSortMode` and `applyCurrentSort` no longer send
-  `UPDATE_SORT_MODE`; `LlamaEventBus.post(TransportEvent.SetPlaybackSortMode(...))`
-  is the sole signal.
-
-- **`BluetoothReceiver`** posts `TransportEvent.SetBluetoothConnected(true)`
-  and `TransportEvent.Pause` on the bus. `MusicService.onTransportPause`
-  is the sole consumer. The `startForegroundService(ACTION_BLUETOOTH_RESUME)`
-  call in `handleBluetoothConnect` is retained — it is the cold-process
-  entry that brings the service back from a cold start when a
-  headset connects while the app is not running. That is not a bus
-  signal, it is a service-start mechanism.
-
-- **`MetadataEditor`** posts `MetadataEvent.Updated` after a
-  successful write. The `mServicePlayingCheck()` helper reads the
-  persisted playing flag directly; the removed `GET_PLAYING_STATE`
-  broadcast round-trip is gone. Playback is paused before the write
-  and resumed after via `LlamaEventBus.post(TransportEvent.Pause)`
-  and `LlamaEventBus.post(TransportEvent.Resume)`.
-
-- **`EqualizerManager`** posts `SessionEvent.AudioSessionChanged` on
-  `attachToAudioSession` and `SessionEvent.PlaybackParamsRefresh`
-  on `setPitch` and `setSpeed`. The `AUDIO_SESSION_CHANGED` and
-  `UPDATE_PLAYBACK_PARAMS` broadcasts are gone.
-
-- **`ThemeManager`** posts `SettingsEvent.ThemeColorChanged` as a
-  sticky event through `LlamaEventBus.postSticky`. The
-  `THEME_COLOR_CHANGED` broadcast, its `setPackage` call, and the
-  `ACTION_THEME_COLOR_CHANGED` constant are removed.
-
-- **`LanguageManager`** posts `SettingsEvent.LanguageChanged` as a
-  sticky event through `LlamaEventBus.postSticky`. It does not send
-  any broadcast.
-
-- **`StorageObserver`** posts `PlaylistEvent.Refresh` and
-  `PlaylistEvent.TriggerGenreLoading` on the bus through
-  `LlamaEventBus.post`. It does not send any broadcast.
-
-- **`MusicLibrary`** posts `PlaylistEvent.SongAdded` once per song
-  during a progress-reporting scan, through `LlamaEventBus.post`.
-  The `ACTION_PLAYLIST_LOAD_PROGRESS` broadcast and its eight
-  `putExtra` calls are removed.
-
-- **`NotificationController`** retains its sticky
-  `onThemeColorChanged` subscriber. The subscriber's body is a
-  no-op: the notification chrome is rebuilt from the persisted
-  theme on the next commit. The class imports
-  `com.ark.llama.event.LlamaEventBus`, not `com.ark.llama.event.Bus`.
-
-- **`ToastManager`** retains its sticky `onThemeColorChanged`
-  subscriber, which tears down and re-creates every persistent
-  overlay's view through `createOverlayInView`. Temporary toasts
-  are not rebuilt. The class imports
-  `com.ark.llama.event.LlamaEventBus`.
-
-- **`LlamaMusicPlayer`** is the new Application class. Its
-  `onCreate` calls `LlamaEventBus.init()` first, then the managers
-  and singletons in dependency order. The Application class name
-  is declared in the manifest via
-  `android:name=".LlamaMusicPlayer"`.
-
-- **`android:name=".LlamaMusicPlayer"`** in `AndroidManifest.xml`
-  ensures the Application class is instantiated before any other
-  component on every cold start.
-
-### Findings
-
-Four behavioural or code-integrity findings were raised during the
-migration. Each was resolved as part of the migration, not deferred:
-
-- **F1** — the system `VOLUME_CHANGED_ACTION` receiver in
-  `MusicService` is a **consumer** of a system broadcast, not a
-  producer of an app-internal signal. It was retained intact. Its
-  trigger is external to the app, so it has no migration target.
-  This is the sole `BroadcastReceiver` remaining in `MusicService`.
-
-- **F2** — `MusicService.onTransportSetPendingSongAlso`, a no-op
-  duplicate `@Subscribe` on `TransportEvent.SetPendingSong`, was
-  removed as dead code.
-
-- **F3** — `MusicService`'s notification transport-action constants
-  (`ACTION_PLAY_PAUSE`, `ACTION_NEXT`, `ACTION_PREV`, `ACTION_STOP`,
-  `ACTION_PLAY_SONG`, `ACTION_BLUETOOTH_RESUME`) are the
-  `PendingIntent` actions `NotificationController` attaches to the
-  notification buttons. They are not app-internal broadcasts, and
-  `MusicService.onStartCommand` still dispatches them. They are
-  retained.
-
-- **F4** — `BluetoothReceiver`'s `startForegroundService(ACTION_BLUETOOTH_RESUME)`
-  call is the cold-process entry into `MusicService`. A Bluetooth
-  headset can reconnect when the app has been evicted from memory
-  and no activity is bound, so an explicit service start is the
-  only reliable way to bring the service back. The call is
-  retained.
+- `BroadcastTranslator` and `LlamaMusicPlayer` — `@since 1.5.0`.
 
 ## [1.4.8] - Nov 13, 2026
 
