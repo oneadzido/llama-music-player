@@ -31,12 +31,13 @@
 # ----------------------------------------------------------------------------
 # The archive is treated as a carrier of file content, not of file
 # mode. unzip applies the archive's stored modes to the extracted
-# tree, which can leave directories unreadable to the runner and
-# break the very first traversal. Permissions are therefore
-# normalized on the extracted tree before it is copied, and again on
-# the workspace after the copy. Directories are 755, regular files
-# 644, and the two executables (gradlew, gradle-wrapper.jar) 755.
-# No stored mode from the archive survives to the build.
+# tree, which can leave a directory unreadable to the runner and
+# break the very first traversal. Permissions are repaired top-down:
+# each level is made traversable before the next is entered, so no
+# tool ever needs to enter a directory it cannot read. The workspace
+# is then normalized: directories 755, regular files 644, and the
+# two executables (gradlew, gradle-wrapper.jar) 755. No stored mode
+# from the archive survives to the build.
 #
 # Source archive refresh
 # ----------------------------------------------------------------------------
@@ -128,11 +129,19 @@ jobs:
         unzip -q llama_music_player.zip -d extracted
         rm llama_music_player.zip
 
-        # Normalize the extracted tree before descending into it.
-        # unzip applies stored modes, which can leave a directory
-        # unreadable to the runner and break the copy below.
-        find extracted -type d -exec chmod 755 {} +
-        find extracted -type f -exec chmod 644 {} +
+        # unzip applies the archive's stored directory modes. A
+        # directory stored without search permission becomes
+        # unreadable, and find cannot enter it to repair it. Walk
+        # the tree top-down: make each level traversable before the
+        # next is entered, so nothing ever needs to open a directory
+        # it cannot read.
+        chmod 755 extracted
+        for d in extracted/* extracted/.[!.]*; do
+          [ -e "$d" ] || continue
+          chmod 755 "$d" 2>/dev/null || true
+        done
+        find extracted -type d -exec chmod 755 {} + 2>/dev/null || true
+        find extracted -type f -exec chmod 644 {} + 2>/dev/null || true
 
         ENTRIES=$(find extracted -mindepth 1 -maxdepth 1 | wc -l)
         if [ "$ENTRIES" -eq 1 ] && [ -d "$(find extracted -mindepth 1 -maxdepth 1 -type d)" ]; then
