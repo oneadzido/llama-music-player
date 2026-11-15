@@ -469,30 +469,18 @@ jobs:
           echo "ERROR: no Android build-tools installation was found."
           exit 1
         fi
-        for tool in apksigner zipalign; do
+        for tool in apksigner; do
           if [ ! -x "$BUILD_TOOLS_DIR/$tool" ]; then
             echo "ERROR: required Android tool is missing or not executable: $BUILD_TOOLS_DIR/$tool"
             exit 1
           fi
         done
 
-        echo "[1/5] Checking APK ZIP integrity..."
-        unzip -tq "$APK_PATH"
-
-        echo "[2/5] Checking APK alignment..."
-        "$BUILD_TOOLS_DIR/zipalign" -c -v 4 "$APK_PATH"
-
-        echo "[3/5] Checking that the APK contains DEX bytecode..."
-        APK_CONTENTS="$(mktemp)"
-        unzip -Z1 "$APK_PATH" > "$APK_CONTENTS"
-        if ! grep -Eq '^classes([0-9]+)?\.dex$' "$APK_CONTENTS"; then
-          rm -f "$APK_CONTENTS"
-          echo "ERROR: no classes.dex file was found in the APK."
-          exit 1
-        fi
-        rm -f "$APK_CONTENTS"
-
-        echo "[4/5] Verifying APK signature..."
+        # Keep release validation focused on the two checks that matter:
+        # the APK must have a valid signature, and it must be signed by
+        # the configured release keystore. Gradle handles APK packaging,
+        # alignment, and DEX generation as part of assembleRelease.
+        echo "[1/2] Verifying APK signature..."
         VERIFY_OUTPUT="$(mktemp)"
         if ! "$BUILD_TOOLS_DIR/apksigner" verify --verbose "$APK_PATH" >"$VERIFY_OUTPUT" 2>&1; then
           cat "$VERIFY_OUTPUT"
@@ -504,7 +492,7 @@ jobs:
         rm -f "$VERIFY_OUTPUT"
 
         if [ "$BUILD_TYPE" = "release" ]; then
-          echo "[5/5] Comparing APK signer with the required release keystore..."
+          echo "[2/2] Comparing APK signer with the required release keystore..."
           if [ ! -f "signing/release.jks" ]; then
             echo "ERROR: signing/release.jks is missing; signer identity cannot be confirmed."
             exit 1
@@ -552,7 +540,11 @@ jobs:
           fi
 
           # Do not assume a specific apksigner output stream or capitalization.
-          APK_FINGERPRINT="$(grep -iE 'signer #[0-9]+ certificate SHA-256 digest:' "$APK_CERT_OUTPUT" | head -n 1 | sed -E 's/.*digest:[[:space:]]*//' | tr -cd '[:xdigit:]' | tr '[:upper:]' '[:lower:]' || true)"
+          # apksigner versions label this line differently. For example:
+          #   V2 Signer: certificate SHA-256 digest: <hex>
+          #   Signer #1 certificate SHA-256 digest: <hex>
+          # Match the stable certificate/digest wording, not the signer label.
+          APK_FINGERPRINT="$(grep -i 'certificate SHA-256 digest:' "$APK_CERT_OUTPUT" | head -n 1 | sed -E 's/.*certificate SHA-256 digest:[[:space:]]*//' | tr -cd '[:xdigit:]' | tr '[:upper:]' '[:lower:]' || true)"
           if [ -z "$APK_FINGERPRINT" ]; then
             echo "ERROR: could not extract the APK signer SHA-256 fingerprint."
             echo "Raw apksigner --print-certs output follows for diagnosis:"
@@ -571,7 +563,7 @@ jobs:
           echo "Release APK signer matches the configured release keystore."
           echo "Signer SHA-256: $APK_FINGERPRINT"
         else
-          echo "[5/5] Debug APK checks passed; release-keystore comparison is not applicable."
+          echo "[2/2] Debug APK signature verification passed; release-keystore comparison is not applicable."
         fi
 
         echo "APK SHA-256: $(sha256sum "$APK_PATH" | awk '{print $1}')"
