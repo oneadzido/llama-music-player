@@ -27,9 +27,17 @@
 # after the manifest check passes, and is not part of the manifest
 # because Gradle does not compile it.
 #
+# Permissions
+# ----------------------------------------------------------------------------
+# The archive is treated as a carrier of file content, not of file
+# mode. Extraction copies content only (cp -R, not cp -a), then
+# normalizes every path: directories 755, regular files 644, and the
+# two executables (gradlew, gradle-wrapper.jar) 755. No stored mode
+# from the archive survives to the build.
+#
 # Source archive refresh
 # ----------------------------------------------------------------------------
-#     zip -r llama_music_player.zip <source paths>
+#     zip -r -X llama_music_player.zip <source paths>
 #     sha256sum llama_music_player.zip > llama_music_player.zip.sha256
 #     sha256sum build.gradle settings.gradle gradle.properties \
 #       gradle/wrapper/gradle-wrapper.properties app/build.gradle \
@@ -53,7 +61,7 @@
 # debug keystore.
 #
 # @author Richard Korbla Adzido
-# @version 1.6.0
+# @version 1.6.1
 # @since 1.0.0
 # ============================================================================
 
@@ -113,6 +121,9 @@ jobs:
         set -e
         rm -rf app src build .gradle extracted
         mkdir -p extracted
+
+        # Extract without preserving stored mode bits. The archive
+        # carries file content; the runner decides permissions.
         unzip -q llama_music_player.zip -d extracted
         rm llama_music_player.zip
 
@@ -122,10 +133,22 @@ jobs:
         else
           SRC="extracted"
         fi
-        cp -a "$SRC"/. .
+
+        # Copy contents, not modes.
+        cp -R "$SRC"/. .
         rm -rf extracted
-        chmod +x gradlew
+
+        # Normalize permissions: directories 755, regular files 644,
+        # executables 755. Nothing else is executable.
+        find . -path ./.git -prune -o -type d -exec chmod 755 {} +
+        find . -path ./.git -prune -o -type f -exec chmod 644 {} +
+        chmod 755 gradlew
+        if [ -f gradle/wrapper/gradle-wrapper.jar ]; then
+          chmod 755 gradle/wrapper/gradle-wrapper.jar
+        fi
+
         echo "Source tree: $SRC"
+        echo "Permissions normalized."
 
     # ========================================================================
     # Verify compiler reads the approved bytes
