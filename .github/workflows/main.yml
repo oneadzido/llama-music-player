@@ -30,10 +30,13 @@
 # Permissions
 # ----------------------------------------------------------------------------
 # The archive is treated as a carrier of file content, not of file
-# mode. Extraction copies content only (cp -R, not cp -a), then
-# normalizes every path: directories 755, regular files 644, and the
-# two executables (gradlew, gradle-wrapper.jar) 755. No stored mode
-# from the archive survives to the build.
+# mode. unzip applies the archive's stored modes to the extracted
+# tree, which can leave directories unreadable to the runner and
+# break the very first traversal. Permissions are therefore
+# normalized on the extracted tree before it is copied, and again on
+# the workspace after the copy. Directories are 755, regular files
+# 644, and the two executables (gradlew, gradle-wrapper.jar) 755.
+# No stored mode from the archive survives to the build.
 #
 # Source archive refresh
 # ----------------------------------------------------------------------------
@@ -61,7 +64,7 @@
 # debug keystore.
 #
 # @author Richard Korbla Adzido
-# @version 1.6.1
+# @version 1.5.0
 # @since 1.0.0
 # ============================================================================
 
@@ -122,10 +125,14 @@ jobs:
         rm -rf app src build .gradle extracted
         mkdir -p extracted
 
-        # Extract without preserving stored mode bits. The archive
-        # carries file content; the runner decides permissions.
         unzip -q llama_music_player.zip -d extracted
         rm llama_music_player.zip
+
+        # Normalize the extracted tree before descending into it.
+        # unzip applies stored modes, which can leave a directory
+        # unreadable to the runner and break the copy below.
+        find extracted -type d -exec chmod 755 {} +
+        find extracted -type f -exec chmod 644 {} +
 
         ENTRIES=$(find extracted -mindepth 1 -maxdepth 1 | wc -l)
         if [ "$ENTRIES" -eq 1 ] && [ -d "$(find extracted -mindepth 1 -maxdepth 1 -type d)" ]; then
@@ -134,12 +141,11 @@ jobs:
           SRC="extracted"
         fi
 
-        # Copy contents, not modes.
         cp -R "$SRC"/. .
         rm -rf extracted
 
-        # Normalize permissions: directories 755, regular files 644,
-        # executables 755. Nothing else is executable.
+        # Normalize the workspace tree: directories 755, regular
+        # files 644, executables 755.
         find . -path ./.git -prune -o -type d -exec chmod 755 {} +
         find . -path ./.git -prune -o -type f -exec chmod 644 {} +
         chmod 755 gradlew
