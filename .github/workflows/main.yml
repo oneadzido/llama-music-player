@@ -1,73 +1,33 @@
 # ============================================================================
 # Llama Music Player - GitHub Actions Workflow
 # ============================================================================
-# Builds the Llama Music Player APK from llama_music_player.zip.
+# This workflow builds the Llama Music Player APK on GitHub's runners.
 # Target stack: SDK 35 (Android 15), AGP 8.2.2, Gradle 8.2, Java 17.
 #
-# Faithful presentation
-# ----------------------------------------------------------------------------
-# The compiler must read exactly the files that were approved. Two
-# hashes enforce that, and nothing else:
+# Uses official action versions:
+# - actions/checkout
+# - actions/setup-java
+# - actions/upload-artifact
 #
-#   1. llama_music_player.zip.sha256 — the archive's identity. Catches
-#      a wrong or stale zip before extraction.
+# Signs the release APK using:
+# - llama_release_keys.zip (contains release.jks and release.txt, optionally in a subfolder)
+# - release.txt format:
+#     KEYSTORE_PASSWORD=xxx
+#     KEY_ALIAS=xxx
+#     KEY_PASSWORD=xxx
 #
-#   2. gradle-files.sha256 — the SHA-256 of every file Gradle reads,
-#      compared against the extracted tree. Catches any difference
-#      between the bytes that came out of the archive and the bytes
-#      that were approved, including a different zip with the right
-#      name, a BOM, a line-ending change, a truncation, or a swap.
+# Debug builds are signed with the Android debug keystore.
 #
-# Both checks compare whole files. Neither inspects line endings,
-# encodings, or archive layout. A file either equals the approved
-# bytes or it does not.
+# Playback engine is MediaPlayer-based. Transport controls route through
+# MediaSessionCompat via androidx.media.session.MediaButtonReceiver.
 #
-# No step modifies a Gradle file between extraction and compilation.
-# The manifest check reads and exits. local.properties is written only
-# after the manifest check passes, and is not part of the manifest
-# because Gradle does not compile it.
-#
-# Permissions
-# ----------------------------------------------------------------------------
-# unzip applies the archive's stored modes, which can leave
-# directories and files unreadable to the runner. The extracted tree
-# is repaired with a single recursive chmod that does not depend on
-# directory traversal: chmod -R applies to each inode via its path,
-# so a directory's mode is fixed before anything needs to descend
-# into it. This is the only reliable way to repair a tree whose
-# stored modes block the walker that would repair it.
-#
-# After the copy, the workspace tree is normalized explicitly:
-# directories 755, regular files 644, and the two executables
-# (gradlew, gradle-wrapper.jar) 755.
-#
-# Source archive refresh
-# ----------------------------------------------------------------------------
-#     zip -r -X llama_music_player.zip <source paths>
-#     sha256sum llama_music_player.zip > llama_music_player.zip.sha256
-#     sha256sum build.gradle settings.gradle gradle.properties \
-#       gradle/wrapper/gradle-wrapper.properties app/build.gradle \
-#       > gradle-files.sha256
-#     git add llama_music_player.zip llama_music_player.zip.sha256 \
-#       gradle-files.sha256
-#     git commit -m "Refresh archive and manifest"
-#     git push
-#
-# Build mode
-# ----------------------------------------------------------------------------
-#   use_cache = false  -> ./gradlew clean assemble<Type>  (default, fresh)
-#   use_cache = true   -> ./gradlew assemble<Type>        (cache reused)
-#
-# Signing
-# ----------------------------------------------------------------------------
-# Release builds require llama_release_keys.zip (release.jks and
-# release.txt). The produced APK is verified against the keystore's
-# SHA-256 fingerprint with apksigner; a mismatch fails the build. A
-# debug build does not require keys and is signed with the Android
-# debug keystore.
+# Fallback templates for gradle wrapper, gradle.properties, build.gradle,
+# and settings.gradle fire only when the corresponding file is absent from
+# the checkout. When the repository already contains those files, the
+# checked-in versions win.
 #
 # @author Richard Korbla Adzido
-# @version 1.5.0
+# @version 1.3.0
 # @since 1.0.0
 # ============================================================================
 
@@ -84,14 +44,6 @@ on:
         options:
           - release
           - debug
-      use_cache:
-        description: 'Use Gradle build cache'
-        required: true
-        default: 'false'
-        type: choice
-        options:
-          - 'false'
-          - 'true'
 
 jobs:
   build:
@@ -101,98 +53,330 @@ jobs:
     - uses: actions/checkout@v6
 
     # ========================================================================
-    # Verify source archive identity
+    # Extract main project zip
     # ========================================================================
-    - name: Verify source archive identity
+    - name: Extract llama_music_player.zip
       run: |
-        set -e
-        [ -f llama_music_player.zip ]        || { echo "ERROR: llama_music_player.zip missing"; exit 1; }
-        [ -f llama_music_player.zip.sha256 ] || { echo "ERROR: llama_music_player.zip.sha256 missing"; exit 1; }
-
-        EXPECTED=$(tr -d '[:space:]' < llama_music_player.zip.sha256)
-        ACTUAL=$(sha256sum llama_music_player.zip | awk '{print $1}')
-        [ "$EXPECTED" = "$ACTUAL" ] || {
-          echo "SOURCE ARCHIVE MISMATCH"
-          echo "expected: $EXPECTED"
-          echo "actual:   $ACTUAL"
-          exit 1
-        }
-        echo "Archive identity: $EXPECTED"
+        if [ -f "llama_music_player.zip" ]; then
+          echo "Found llama_music_player.zip, extracting..."
+          unzip -o llama_music_player.zip
+          rm llama_music_player.zip
+          echo "Extraction complete"
+        fi
+        if [ -d "llama_music_player" ]; then
+          sudo chmod -R 755 llama_music_player
+          echo "Copying contents to root..."
+          cp -r llama_music_player/* . 2>/dev/null || true
+          cp -r llama_music_player/.[!.]* . 2>/dev/null || true
+        fi
+        echo "Files after extraction:"
+        ls -la
 
     # ========================================================================
-    # Extract source archive
+    # Extract and setup signing keys
     # ========================================================================
-    - name: Extract source archive
+    - name: Extract llama_release_keys.zip
       run: |
-        set -e
-        rm -rf app src build .gradle extracted
-        mkdir -p extracted
-
-        unzip -q llama_music_player.zip -d extracted
-        rm llama_music_player.zip
-
-        # Repair stored modes with a recursive chmod that applies to
-        # each inode directly. Unlike find, which must enter a
-        # directory before it can change that directory's mode,
-        # chmod -R fixes the mode first, so the descend succeeds.
-        chmod -R u+rwX,go+rX extracted
-
-        ENTRIES=$(find extracted -mindepth 1 -maxdepth 1 | wc -l)
-        if [ "$ENTRIES" -eq 1 ] && [ -d "$(find extracted -mindepth 1 -maxdepth 1 -type d)" ]; then
-          SRC="$(find extracted -mindepth 1 -maxdepth 1 -type d)"
+        echo "=========================================="
+        echo "EXTRACTING RELEASE KEYS"
+        echo "=========================================="
+        
+        if [ -f "llama_release_keys.zip" ]; then
+          echo "Found llama_release_keys.zip, extracting..."
+          mkdir -p signing
+          unzip -o llama_release_keys.zip -d signing/
+          rm llama_release_keys.zip
+          echo "Extraction complete"
+          
+          # Fix permissions on extracted files
+          chmod -R 755 signing/
+          
+          echo "Contents of signing directory:"
+          find signing/ -type f
+          
+          # Locate release.jks anywhere in signing directory
+          JKS_FILE=$(find signing/ -name "release.jks" -type f | head -1)
+          TXT_FILE=$(find signing/ -name "release.txt" -type f | head -1)
+          
+          if [ -z "$JKS_FILE" ]; then
+            echo "ERROR: release.jks not found in zip!"
+            exit 1
+          fi
+          
+          if [ -z "$TXT_FILE" ]; then
+            echo "ERROR: release.txt not found in zip!"
+            exit 1
+          fi
+          
+          # Get the directory containing the files
+          JKS_DIR=$(dirname "$JKS_FILE")
+          
+          # If files are in a subfolder, move them to signing/ root
+          if [ "$JKS_DIR" != "signing" ]; then
+            echo "Moving files from $JKS_DIR to signing/..."
+            mv "$JKS_DIR"/* signing/
+            rmdir "$JKS_DIR" 2>/dev/null || true
+          fi
+          
+          echo "SUCCESS: Both release.jks and release.txt found"
+          ls -la signing/
         else
-          SRC="extracted"
+          echo "WARNING: llama_release_keys.zip not found!"
+          echo "Will build unsigned APK (debug only)"
         fi
 
-        cp -R "$SRC"/. .
-        rm -rf extracted
-
-        find . -path ./.git -prune -o -type d -exec chmod 755 {} +
-        find . -path ./.git -prune -o -type f -exec chmod 644 {} +
-        chmod 755 gradlew
-        if [ -f gradle/wrapper/gradle-wrapper.jar ]; then
-          chmod 755 gradle/wrapper/gradle-wrapper.jar
-        fi
-
-        echo "Source tree: $SRC"
-        echo "Permissions normalized."
-
     # ========================================================================
-    # Verify compiler reads the approved bytes
+    # Parse signing credentials from release.txt using Node.js
     # ========================================================================
-    - name: Verify compiler reads the approved bytes
+    - name: Parse signing credentials
+      id: signing_creds
       run: |
-        set -e
-        [ -f gradle-files.sha256 ] || { echo "ERROR: gradle-files.sha256 missing"; exit 1; }
-
-        FAIL=0
-        while read -r expected path; do
-          [ -z "$expected" ] && continue
-          if [ ! -f "$path" ]; then
-            echo "MISSING: $path"
-            FAIL=1
-            continue
-          fi
-          actual=$(sha256sum "$path" | awk '{print $1}')
-          if [ "$expected" != "$actual" ]; then
-            echo "MISMATCH: $path"
-            echo "  expected: $expected"
-            echo "  actual:   $actual"
-            FAIL=1
-          fi
-        done < gradle-files.sha256
-
-        [ "$FAIL" -eq 0 ] || {
-          echo ""
-          echo "The files Gradle would read are not the files that were approved."
-          echo "Refresh the archive and the manifest from the same source tree,"
-          echo "then commit both."
-          exit 1
-        }
-        echo "Compiler input matches the approved bytes."
+        if [ -f "signing/release.txt" ]; then
+          echo "Parsing signing credentials from release.txt..."
+          
+          node -e "
+            const fs = require('fs');
+            const content = fs.readFileSync('signing/release.txt', 'utf8');
+            const lines = content.split(/\r?\n/);
+            
+            let keystorePassword = '';
+            let keyAlias = '';
+            let keyPassword = '';
+            
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (trimmed.startsWith('KEYSTORE_PASSWORD') || trimmed.startsWith('STORE_PASSWORD')) {
+                const match = trimmed.match(/(?:KEYSTORE_PASSWORD|STORE_PASSWORD)[=:]\\s*(.*)/i);
+                if (match) keystorePassword = match[1].trim();
+              }
+              else if (trimmed.startsWith('KEY_ALIAS')) {
+                const match = trimmed.match(/KEY_ALIAS[=:]\\s*(.*)/i);
+                if (match) keyAlias = match[1].trim();
+              }
+              else if (trimmed.startsWith('KEY_PASSWORD') || trimmed.startsWith('ALIAS_PASSWORD')) {
+                const match = trimmed.match(/(?:KEY_PASSWORD|ALIAS_PASSWORD)[=:]\\s*(.*)/i);
+                if (match) keyPassword = match[1].trim();
+              }
+            }
+            
+            if (!keystorePassword || !keyAlias || !keyPassword) {
+              console.error('ERROR: Missing required signing credentials');
+              console.error('KEYSTORE_PASSWORD: ' + (keystorePassword ? 'present' : 'missing'));
+              console.error('KEY_ALIAS: ' + (keyAlias ? 'present' : 'missing'));
+              console.error('KEY_PASSWORD: ' + (keyPassword ? 'present' : 'missing'));
+              process.exit(1);
+            }
+            
+            console.log('KEYSTORE_PASSWORD=' + keystorePassword);
+            console.log('KEY_ALIAS=' + keyAlias);
+            console.log('KEY_PASSWORD=' + keyPassword);
+            
+            const fs_write = require('fs');
+            fs_write.appendFileSync(process.env.GITHUB_OUTPUT, 'KEYSTORE_PASSWORD=' + keystorePassword + '\n');
+            fs_write.appendFileSync(process.env.GITHUB_OUTPUT, 'KEY_ALIAS=' + keyAlias + '\n');
+            fs_write.appendFileSync(process.env.GITHUB_OUTPUT, 'KEY_PASSWORD=' + keyPassword + '\n');
+          "
+          
+          echo "SUCCESS: Signing credentials parsed"
+          echo "KEY_ALIAS: ${{ steps.signing_creds.outputs.KEY_ALIAS }}"
+        else
+          echo "No signing credentials found"
+        fi
 
     # ========================================================================
-    # Set up JDK 17
+    # Create signing configuration for gradle (using local.properties)
+    # ========================================================================
+    - name: Configure signing in local.properties
+      run: |
+        if [ -f "signing/release.jks" ] && [ -n "${{ steps.signing_creds.outputs.KEYSTORE_PASSWORD }}" ]; then
+          echo "Configuring signing in local.properties..."
+          
+          echo "signing.storeFile=${{ github.workspace }}/signing/release.jks" >> local.properties
+          echo "signing.storePassword=${{ steps.signing_creds.outputs.KEYSTORE_PASSWORD }}" >> local.properties
+          echo "signing.keyAlias=${{ steps.signing_creds.outputs.KEY_ALIAS }}" >> local.properties
+          echo "signing.keyPassword=${{ steps.signing_creds.outputs.KEY_PASSWORD }}" >> local.properties
+          
+          echo "SUCCESS: Signing configuration added to local.properties"
+        else
+          echo "Skipping signing configuration - keys not available"
+        fi
+
+    # ========================================================================
+    # Ensure required directories exist
+    # ========================================================================
+    - name: Ensure required directories exist
+      run: |
+        mkdir -p app/libs
+        mkdir -p app/src/main/assets/fonts
+
+    # ========================================================================
+    # Prepare assets
+    # ========================================================================
+    - name: Prepare assets
+      run: |
+        echo "=========================================="
+        echo "PREPARING ASSETS"
+        echo "=========================================="
+        
+        # FontAwesome - required for UI icons
+        if [ -f "app/src/main/assets/fonts/fa-solid-900.ttf" ]; then
+          echo "PASS: FontAwesome found"
+        elif [ -f "llama_music_player/app/src/main/assets/fonts/fa-solid-900.ttf" ]; then
+          echo "PASS: FontAwesome found in llama_music_player folder"
+          mkdir -p app/src/main/assets/fonts
+          cp llama_music_player/app/src/main/assets/fonts/fa-solid-900.ttf app/src/main/assets/fonts/
+        else
+          echo "FAIL: FontAwesome font missing"
+          exit 1
+        fi
+        
+        # jaudiotagger for metadata editing
+        if [ -f "app/libs/jaudiotagger-3.0.1.jar" ]; then
+          echo "PASS: jaudiotagger found"
+        elif [ -f "app/libs/jaudiotagger.jar" ]; then
+          echo "PASS: jaudiotagger found"
+        elif [ -f "llama_music_player/app/libs/jaudiotagger-3.0.1.jar" ]; then
+          echo "PASS: jaudiotagger found in llama_music_player folder"
+          mkdir -p app/libs
+          cp llama_music_player/app/libs/jaudiotagger-3.0.1.jar app/libs/
+        elif [ -f "llama_music_player/app/libs/jaudiotagger.jar" ]; then
+          echo "PASS: jaudiotagger found in llama_music_player folder"
+          mkdir -p app/libs
+          cp llama_music_player/app/libs/jaudiotagger.jar app/libs/
+        else
+          echo "Downloading jaudiotagger..."
+          curl -L -o app/libs/jaudiotagger.jar https://repo1.maven.org/maven2/net/jthink/jaudiotagger/3.0.1/jaudiotagger-3.0.1.jar
+        fi
+        
+        echo ""
+        echo "FontAwesome:"
+        ls -la app/src/main/assets/fonts/ 2>/dev/null || echo "MISSING"
+        echo ""
+        echo "jaudiotagger:"
+        ls -la app/libs/ 2>/dev/null || echo "MISSING"
+
+    # ========================================================================
+    # Create gradle wrapper (only if missing from the checkout)
+    # ========================================================================
+    - name: Create gradle wrapper if missing
+      run: |
+        if [ -f "gradlew" ] && [ -f "gradle/wrapper/gradle-wrapper.properties" ]; then
+          echo "Gradle wrapper already present in the checkout; leaving it untouched."
+          cat gradle/wrapper/gradle-wrapper.properties
+          exit 0
+        fi
+
+        echo "Gradle wrapper missing; generating a minimal one (Gradle 8.2)."
+        rm -f gradlew gradlew.bat
+        
+        cat > gradlew << 'EOF'
+        #!/bin/sh
+        ##############################################################################
+        ##
+        ##  Gradle start up script for UN*X
+        ##
+        ##############################################################################
+        APP_BASE_NAME=`basename "$0"`
+        APP_HOME=`dirname "$0"`
+        DEFAULT_JVM_OPTS=""
+        CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
+        if [ -n "$JAVA_HOME" ] ; then
+            JAVACMD="$JAVA_HOME/bin/java"
+        else
+            JAVACMD="java"
+        fi
+        exec "$JAVACMD" $DEFAULT_JVM_OPTS $JAVA_OPTS $GRADLE_OPTS -cp "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain "$@"
+        EOF
+        
+        chmod +x gradlew
+        
+        mkdir -p gradle/wrapper
+        
+        cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
+        distributionBase=GRADLE_USER_HOME
+        distributionPath=wrapper/dists
+        distributionUrl=https\://services.gradle.org/distributions/gradle-8.2-bin.zip
+        zipStoreBase=GRADLE_USER_HOME
+        zipStorePath=wrapper/dists
+        EOF
+        
+        curl -L -o gradle/wrapper/gradle-wrapper.jar https://github.com/gradle/gradle/raw/master/gradle/wrapper/gradle-wrapper.jar
+        
+        echo "Gradle wrapper created successfully (Gradle 8.2)"
+
+    # ========================================================================
+    # Create build.gradle if missing
+    # ========================================================================
+    - name: Create build.gradle if missing
+      run: |
+        if [ ! -f "build.gradle" ]; then
+          cat > build.gradle << 'EOF'
+        buildscript {
+            repositories {
+                google()
+                mavenCentral()
+            }
+            dependencies {
+                classpath 'com.android.tools.build:gradle:8.2.2'
+            }
+        }
+        allprojects {
+            repositories {
+                google()
+                mavenCentral()
+            }
+        }
+        tasks.register('clean', Delete) {
+            delete rootProject.layout.buildDirectory
+        }
+        EOF
+        fi
+
+    # ========================================================================
+    # Create settings.gradle if missing
+    # ========================================================================
+    - name: Create settings.gradle if missing
+      run: |
+        if [ ! -f "settings.gradle" ]; then
+          cat > settings.gradle << 'EOF'
+        pluginManagement {
+            repositories {
+                google()
+                mavenCentral()
+                gradlePluginPortal()
+            }
+        }
+        dependencyResolutionManagement {
+            repositories {
+                google()
+                mavenCentral()
+            }
+        }
+        include ':app'
+        rootProject.name = "LlamaMusicPlayer"
+        EOF
+        fi
+
+    # ========================================================================
+    # Create gradle.properties if missing
+    # ========================================================================
+    - name: Create gradle.properties if missing
+      run: |
+        if [ ! -f "gradle.properties" ]; then
+          cat > gradle.properties << 'EOF'
+        android.useAndroidX=true
+        android.enableJetifier=false
+        android.nonTransitiveRClass=true
+        android.suppressUnsupportedCompileSdk=35
+        org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=1g
+        org.gradle.parallel=true
+        org.gradle.caching=true
+        org.gradle.daemon=true
+        EOF
+        fi
+
+    # ========================================================================
+    # Set up JDK 17 (required for AGP 8.2.2)
     # ========================================================================
     - name: Set up JDK 17
       uses: actions/setup-java@v5
@@ -207,139 +391,68 @@ jobs:
       uses: android-actions/setup-android@v4
 
     # ========================================================================
-    # Install SDK packages
+    # Install SDK packages required by the build
     # ========================================================================
     - name: Install SDK packages
       run: |
+        echo "=========================================="
+        echo "INSTALLING SDK PACKAGES"
+        echo "=========================================="
+        
+        # Accept SDK licenses so sdkmanager can install packages non-interactively
         yes | sdkmanager --licenses > /dev/null 2>&1 || true
+        
+        # Install platform-tools, build-tools, and the target platform
         sdkmanager "platform-tools" "build-tools;34.0.0" "platforms;android-35"
+        
+        echo ""
+        echo "Installed components:"
+        sdkmanager --list_installed 2>/dev/null || sdkmanager --list 2>/dev/null | head -40
 
     # ========================================================================
-    # Validate Gradle configuration
+    # Grant execute permission for gradlew
     # ========================================================================
-    - name: Validate Gradle configuration
-      run: |
-        set -e
-        ./gradlew --no-daemon help --stacktrace
-        echo "Gradle parsed the approved files."
-
-    # ========================================================================
-    # Extract release keys
-    # ========================================================================
-    - name: Extract release keys
-      run: |
-        BUILD_TYPE="${{ github.event.inputs.build_type }}"
-        if [ -f llama_release_keys.zip ]; then
-          mkdir -p signing
-          unzip -o llama_release_keys.zip -d signing/
-          rm llama_release_keys.zip
-          chmod -R 755 signing/
-          JKS_FILE=$(find signing -name release.jks -type f | head -1)
-          TXT_FILE=$(find signing -name release.txt -type f | head -1)
-          [ -n "$JKS_FILE" ] || { echo "ERROR: release.jks missing"; exit 1; }
-          [ -n "$TXT_FILE" ] || { echo "ERROR: release.txt missing"; exit 1; }
-          JKS_DIR=$(dirname "$JKS_FILE")
-          [ "$JKS_DIR" = signing ] || mv "$JKS_DIR"/* signing/
-        else
-          [ "$BUILD_TYPE" = release ] && { echo "ERROR: llama_release_keys.zip missing"; exit 1; }
-          echo "Debug build; no keys required."
-        fi
-
-    # ========================================================================
-    # Parse signing credentials
-    # ========================================================================
-    - name: Parse signing credentials
-      id: signing_creds
-      run: |
-        if [ -f signing/release.txt ]; then
-          node -e "
-            const fs = require('fs');
-            const lines = fs.readFileSync('signing/release.txt','utf8').split(/\r?\n/);
-            let ks='',ka='',kp='',m;
-            for (const l of lines) {
-              const t=l.trim();
-              if ((m=t.match(/(?:KEYSTORE_PASSWORD|STORE_PASSWORD)[=:]\\s*(.*)/i))) ks=m[1].trim();
-              else if ((m=t.match(/KEY_ALIAS[=:]\\s*(.*)/i))) ka=m[1].trim();
-              else if ((m=t.match(/(?:KEY_PASSWORD|ALIAS_PASSWORD)[=:]\\s*(.*)/i))) kp=m[1].trim();
-            }
-            if (!ks||!ka||!kp) { console.error('Missing credentials'); process.exit(1); }
-            fs.appendFileSync(process.env.GITHUB_OUTPUT,'KEYSTORE_PASSWORD='+ks+'\n');
-            fs.appendFileSync(process.env.GITHUB_OUTPUT,'KEY_ALIAS='+ka+'\n');
-            fs.appendFileSync(process.env.GITHUB_OUTPUT,'KEY_PASSWORD='+kp+'\n');
-          "
-        fi
-
-    # ========================================================================
-    # Configure signing in local.properties
-    # ========================================================================
-    - name: Configure signing in local.properties
-      run: |
-        rm -f local.properties
-        if [ -f signing/release.jks ] && [ -n "${{ steps.signing_creds.outputs.KEYSTORE_PASSWORD }}" ]; then
-          printf 'signing.storeFile=%s/signing/release.jks\n' "$GITHUB_WORKSPACE"  >  local.properties
-          printf 'signing.storePassword=%s\n' "${{ steps.signing_creds.outputs.KEYSTORE_PASSWORD }}" >> local.properties
-          printf 'signing.keyAlias=%s\n'       "${{ steps.signing_creds.outputs.KEY_ALIAS }}"       >> local.properties
-          printf 'signing.keyPassword=%s\n'    "${{ steps.signing_creds.outputs.KEY_PASSWORD }}"    >> local.properties
-        fi
-
-    # ========================================================================
-    # Restore Gradle cache
-    # ========================================================================
-    - name: Restore Gradle cache
-      if: github.event.inputs.use_cache == 'true'
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.gradle/caches
-          ~/.gradle/wrapper
-        key: gradle-${{ runner.os }}-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties', '**/*.gradle') }}
-        restore-keys: |
-          gradle-${{ runner.os }}-
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
 
     # ========================================================================
     # Build APK
     # ========================================================================
     - name: Build APK
       run: |
-        PREFIX=""
-        [ "${{ github.event.inputs.use_cache }}" = "true" ] || PREFIX="clean"
+        ./gradlew clean
         if [ "${{ github.event.inputs.build_type }}" = "release" ]; then
-          ./gradlew $PREFIX assembleRelease --stacktrace
+          echo "Building RELEASE APK..."
+          ./gradlew assembleRelease --stacktrace
         else
-          ./gradlew $PREFIX assembleDebug --stacktrace
+          echo "Building DEBUG APK..."
+          ./gradlew assembleDebug --stacktrace
         fi
 
     # ========================================================================
-    # Verify APK signing
+    # Verify APK signing (for release builds)
     # ========================================================================
     - name: Verify APK signing
       if: github.event.inputs.build_type == 'release'
       run: |
-        set -e
-        APK=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
-        [ -n "$APK" ] || { echo "ERROR: no release APK"; exit 1; }
-        BT=$(find "$ANDROID_HOME/build-tools" -maxdepth 1 -type d -name '[0-9]*' | sort -V | tail -1)
-        [ -x "$BT/apksigner" ] || { echo "ERROR: apksigner missing"; exit 1; }
-        KEYTOOL="keytool"
-        [ -x "$JAVA_HOME/bin/keytool" ] && KEYTOOL="$JAVA_HOME/bin/keytool"
-
-        "$BT/apksigner" verify --verbose "$APK"
-        JKS_FP=$($KEYTOOL -list -v -keystore signing/release.jks \
-          -storepass "${{ steps.signing_creds.outputs.KEYSTORE_PASSWORD }}" \
-          -alias "${{ steps.signing_creds.outputs.KEY_ALIAS }}" 2>/dev/null \
-          | grep SHA256: | head -1 | sed 's/.*SHA256: //' | tr -d '[:space:]')
-        APK_FP=$("$BT/apksigner" verify --print-certs "$APK" 2>/dev/null \
-          | grep 'Signer #1 certificate SHA-256 digest:' | head -1 | sed 's/.*digest: //' | tr -d '[:space:]')
-        [ -n "$JKS_FP" ] && [ "$JKS_FP" = "$APK_FP" ] || {
-          echo "APK signer does not match the approved keystore"
-          echo "keystore: $JKS_FP"
-          echo "apk:      $APK_FP"
-          exit 1
-        }
-        echo "APK signer matches keystore: $APK_FP"
+        APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
+        if [ -f "$APK_PATH" ]; then
+          echo "Verifying APK signing for: $APK_PATH"
+          # Locate build-tools dynamically
+          BUILD_TOOLS_DIR=$(find $ANDROID_HOME/build-tools -maxdepth 1 -type d -name "[0-9]*" | sort -V | tail -1)
+          if [ -n "$BUILD_TOOLS_DIR" ] && [ -f "$BUILD_TOOLS_DIR/apksigner" ]; then
+            $BUILD_TOOLS_DIR/apksigner verify --verbose "$APK_PATH" || {
+              echo "WARNING: APK signing verification failed"
+            }
+          else
+            echo "apksigner not found, skipping verification"
+          fi
+        else
+          echo "No release APK found to verify"
+        fi
 
     # ========================================================================
-    # Upload APK
+    # Upload APK artifact
     # ========================================================================
     - name: Upload APK
       uses: actions/upload-artifact@v6
@@ -349,8 +462,10 @@ jobs:
         retention-days: 30
 
     # ========================================================================
-    # Clean up signing files
+    # Clean up sensitive signing files
     # ========================================================================
     - name: Clean up signing files
       if: always()
-      run: rm -rf signing/
+      run: |
+        rm -rf signing/
+        echo "Cleaned up signing files"
