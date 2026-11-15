@@ -29,15 +29,17 @@
 #
 # Permissions
 # ----------------------------------------------------------------------------
-# The archive is treated as a carrier of file content, not of file
-# mode. unzip applies the archive's stored modes to the extracted
-# tree, which can leave a directory unreadable to the runner and
-# break the very first traversal. Permissions are repaired top-down:
-# each level is made traversable before the next is entered, so no
-# tool ever needs to enter a directory it cannot read. The workspace
-# is then normalized: directories 755, regular files 644, and the
-# two executables (gradlew, gradle-wrapper.jar) 755. No stored mode
-# from the archive survives to the build.
+# unzip applies the archive's stored modes, which can leave
+# directories and files unreadable to the runner. The extracted tree
+# is repaired with a single recursive chmod that does not depend on
+# directory traversal: chmod -R applies to each inode via its path,
+# so a directory's mode is fixed before anything needs to descend
+# into it. This is the only reliable way to repair a tree whose
+# stored modes block the walker that would repair it.
+#
+# After the copy, the workspace tree is normalized explicitly:
+# directories 755, regular files 644, and the two executables
+# (gradlew, gradle-wrapper.jar) 755.
 #
 # Source archive refresh
 # ----------------------------------------------------------------------------
@@ -129,19 +131,11 @@ jobs:
         unzip -q llama_music_player.zip -d extracted
         rm llama_music_player.zip
 
-        # unzip applies the archive's stored directory modes. A
-        # directory stored without search permission becomes
-        # unreadable, and find cannot enter it to repair it. Walk
-        # the tree top-down: make each level traversable before the
-        # next is entered, so nothing ever needs to open a directory
-        # it cannot read.
-        chmod 755 extracted
-        for d in extracted/* extracted/.[!.]*; do
-          [ -e "$d" ] || continue
-          chmod 755 "$d" 2>/dev/null || true
-        done
-        find extracted -type d -exec chmod 755 {} + 2>/dev/null || true
-        find extracted -type f -exec chmod 644 {} + 2>/dev/null || true
+        # Repair stored modes with a recursive chmod that applies to
+        # each inode directly. Unlike find, which must enter a
+        # directory before it can change that directory's mode,
+        # chmod -R fixes the mode first, so the descend succeeds.
+        chmod -R u+rwX,go+rX extracted
 
         ENTRIES=$(find extracted -mindepth 1 -maxdepth 1 | wc -l)
         if [ "$ENTRIES" -eq 1 ] && [ -d "$(find extracted -mindepth 1 -maxdepth 1 -type d)" ]; then
@@ -153,8 +147,6 @@ jobs:
         cp -R "$SRC"/. .
         rm -rf extracted
 
-        # Normalize the workspace tree: directories 755, regular
-        # files 644, executables 755.
         find . -path ./.git -prune -o -type d -exec chmod 755 {} +
         find . -path ./.git -prune -o -type f -exec chmod 644 {} +
         chmod 755 gradlew
