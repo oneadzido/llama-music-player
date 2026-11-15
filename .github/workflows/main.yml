@@ -1,0 +1,597 @@
+# ============================================================================
+# Llama Music Player - GitHub Actions Workflow
+# ============================================================================
+# This workflow builds the Llama Music Player APK on GitHub's runners.
+# Target stack configured by this workflow: SDK 35 (Android 15), AGP 8.2.2, Gradle 8.2, Java 17.
+#
+# Uses official action versions:
+# - actions/checkout
+# - actions/setup-java
+# - actions/upload-artifact
+#
+# Signs the release APK using:
+# - llama_release_keys.zip (contains release.jks and release.txt, optionally in a subfolder)
+# - release.txt format:
+#     KEYSTORE_PASSWORD=xxx
+#     KEY_ALIAS=xxx
+#     KEY_PASSWORD=xxx
+#
+# A release build requires llama_release_keys.zip. Its absence is a
+# hard failure. A debug build does not require it and is signed with
+# the Android debug keystore.
+#
+# ============================================================================
+# SOURCE ARCHIVE IDENTITY
+# ============================================================================
+# The repository has no checked-in source tree. The only source the
+# workflow reads is llama_music_player.zip. Its identity is enforced,
+# not assumed: every build verifies the archive against
+# llama_music_player.zip.sha256, the file that records the SHA-256 of
+# the latest archive, before any other step touches it.
+#
+# The extracted source tree is then proven to be the tree the compiler
+# reads. Two facts are checked:
+#   1. The extraction step deletes app/src before unzipping, so no
+#      file can survive from a prior run. The tree is composed only
+#      of archive contents.
+#   2. The extracted tree's canonical hash is recorded, and compared
+#      to the tree the compiler is about to read. Any drift between
+#      the two fails the build.
+#
+# Both the archive and the sha file are mandatory. A missing archive,
+# a missing sha file, a hash mismatch, or a tree mismatch is a hard
+# failure; the build does not proceed.
+#
+# Refreshing the archive, from the source tree:
+#     zip -r llama_music_player.zip <source paths>
+#     sha256sum llama_music_player.zip > llama_music_player.zip.sha256
+#     git add llama_music_player.zip llama_music_player.zip.sha256
+#     git commit -m "Refresh source archive"
+#     git push
+#
+# ============================================================================
+# BUILD MODE
+# ============================================================================
+# Chosen by workflow_dispatch input use_cache:
+#   use_cache = false  -> ./gradlew clean assemble<Type>  (default, fresh)
+#   use_cache = true   -> ./gradlew assemble<Type>        (cache reused)
+#
+# ============================================================================
+# SIGNING VERIFICATION
+# ============================================================================
+# Release builds verify the produced APK's signature with apksigner
+# from the installed Android SDK build-tools. Three properties are
+# enforced:
+#   1. A release build with no llama_release_keys.zip fails before
+#      Gradle runs. The workflow does not produce an unsigned release
+#      APK.
+#   2. apksigner must exist on the runner. If it does not, the build
+#      fails: the workflow cannot prove the APK is signed.
+#   3. apksigner verify must pass. The APK must be signed, and its
+#      signing certificate's SHA-256 fingerprint must match the
+#      fingerprint of signing/release.jks. A match is the only
+#      evidence that the committed keystore is the keystore the APK
+#      was actually signed with.
+#
+# @author Richard Korbla Adzido
+# @version 1.5.0
+# @since 1.0.0
+# ============================================================================
+
+name: Build Llama Music Player APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - release
+          - debug
+      use_cache:
+        description: 'Use Gradle build cache'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v6
+
+    # ========================================================================
+    # Verify source archive identity
+    # ========================================================================
+    - name: Verify source archive identity
+      run: |
+        set -e
+        ARCHIVE="llama_music_player.zip"
+        SHA_FILE="llama_music_player.zip.sha256"
+
+        if [ ! -f "$ARCHIVE" ]; then
+          echo "ERROR: $ARCHIVE is missing."
+          echo "This repository builds from the archive; commit it and"
+          echo "its SHA-256, then rerun."
+          exit 1
+        fi
+
+        if [ ! -f "$SHA_FILE" ]; then
+          echo "ERROR: $SHA_FILE is missing."
+          echo "The archive is present but its expected SHA-256 is not."
+          echo "Regenerate the sha file, commit it alongside the archive,"
+          echo "then rerun."
+          exit 1
+        fi
+
+        EXPECTED=$(tr -d '[:space:]' < "$SHA_FILE")
+        ACTUAL=$(sha256sum "$ARCHIVE" | awk '{print $1}')
+
+        if [ "$EXPECTED" != "$ACTUAL" ]; then
+          echo ""
+          echo "=========================================="
+          echo "SOURCE ARCHIVE MISMATCH"
+          echo "=========================================="
+          echo "Expected (from $SHA_FILE): $EXPECTED"
+          echo "Actual   (sha256sum $ARCHIVE): $ACTUAL"
+          echo ""
+          echo "Refresh the archive from the current source tree, regenerate"
+          echo "$SHA_FILE, and commit both. Then rerun this workflow."
+          exit 1
+        fi
+
+        echo "Source archive identity verified."
+        echo "SHA-256: $EXPECTED"
+
+    # ========================================================================
+    # Extract main project zip
+    # ========================================================================
+    - name: Extract llama_music_player.zip
+      run: |
+        # Clear any leftover tree from a prior run so the extracted
+        # directory contains only archive contents.
+        rm -rf app/src app/build build .gradle
+
+        unzip -o llama_music_player.zip
+        rm llama_music_player.zip
+        if [ -d "llama_music_player" ]; then
+          sudo chmod -R 755 llama_music_player
+          echo "Copying contents to root..."
+          cp -r llama_music_player/* . 2>/dev/null || true
+          cp -r llama_music_player/.[!.]* . 2>/dev/null || true
+          rm -rf llama_music_player
+        fi
+        echo "Files after extraction:"
+        ls -la
+
+        # Record the canonical hash of the tree the compiler will read.
+        find app/src -type f -print0 \
+          | sort -z \
+          | xargs -0 sha256sum > /tmp/extracted-tree.sha256
+        echo "Extracted tree recorded at /tmp/extracted-tree.sha256"
+
+    # ========================================================================
+    # Verify compiler reads the approved source
+    # ========================================================================
+    - name: Verify compiler reads the approved source
+      run: |
+        set -e
+
+        if [ ! -f "/tmp/extracted-tree.sha256" ]; then
+          echo "ERROR: no extracted-tree hash available."
+          echo "The extraction step did not run, or did not record a hash."
+          exit 1
+        fi
+
+        find app/src -type f -print0 \
+          | sort -z \
+          | xargs -0 sha256sum > /tmp/compiler-tree.sha256
+
+        if ! diff -q /tmp/extracted-tree.sha256 /tmp/compiler-tree.sha256 > /dev/null; then
+          echo ""
+          echo "=========================================="
+          echo "SOURCE TREE MUTATED BETWEEN EXTRACTION AND BUILD"
+          echo "=========================================="
+          echo "The files under app/src that the compiler is about to"
+          echo "read do not match the files that came out of the"
+          echo "verified archive."
+          echo ""
+          diff /tmp/extracted-tree.sha256 /tmp/compiler-tree.sha256 || true
+          echo ""
+          echo "The build will not proceed."
+          exit 1
+        fi
+
+        echo "Compiler tree matches the tree extracted from the archive."
+
+    # ========================================================================
+    # Verify required Gradle files are present
+    # ========================================================================
+    - name: Verify required Gradle files are present
+      run: |
+        set -e
+        MISSING=0
+
+        for f in build.gradle settings.gradle gradle.properties gradlew \
+                 gradle/wrapper/gradle-wrapper.properties \
+                 gradle/wrapper/gradle-wrapper.jar \
+                 app/build.gradle; do
+          if [ ! -e "$f" ]; then
+            echo "MISSING: $f"
+            MISSING=1
+          fi
+        done
+
+        if [ "$MISSING" -ne 0 ]; then
+          echo ""
+          echo "=========================================="
+          echo "GRADLE FILES MISSING FROM ARCHIVE"
+          echo "=========================================="
+          echo "Add the missing files to the source tree, re-zip,"
+          echo "regenerate the SHA-256, and commit both."
+          exit 1
+        fi
+
+        echo "All required Gradle files are present."
+
+    # ========================================================================
+    # Extract and setup signing keys
+    # ========================================================================
+    - name: Extract llama_release_keys.zip
+      run: |
+        echo "=========================================="
+        echo "EXTRACTING RELEASE KEYS"
+        echo "=========================================="
+
+        BUILD_TYPE="${{ github.event.inputs.build_type }}"
+
+        if [ -f "llama_release_keys.zip" ]; then
+          echo "Found llama_release_keys.zip, extracting..."
+          mkdir -p signing
+          unzip -o llama_release_keys.zip -d signing/
+          rm llama_release_keys.zip
+          echo "Extraction complete"
+
+          chmod -R 755 signing/
+
+          echo "Contents of signing directory:"
+          find signing/ -type f
+
+          JKS_FILE=$(find signing/ -name "release.jks" -type f | head -1)
+          TXT_FILE=$(find signing/ -name "release.txt" -type f | head -1)
+
+          if [ -z "$JKS_FILE" ]; then
+            echo "ERROR: release.jks not found in zip!"
+            exit 1
+          fi
+
+          if [ -z "$TXT_FILE" ]; then
+            echo "ERROR: release.txt not found in zip!"
+            exit 1
+          fi
+
+          JKS_DIR=$(dirname "$JKS_FILE")
+
+          if [ "$JKS_DIR" != "signing" ]; then
+            echo "Moving files from $JKS_DIR to signing/..."
+            mv "$JKS_DIR"/* signing/
+            rmdir "$JKS_DIR" 2>/dev/null || true
+          fi
+
+          echo "SUCCESS: Both release.jks and release.txt found"
+          ls -la signing/
+        else
+          if [ "$BUILD_TYPE" = "release" ]; then
+            echo "ERROR: llama_release_keys.zip is missing."
+            echo "A release build must produce a signed APK; the"
+            echo "workflow will not build an unsigned release."
+            exit 1
+          else
+            echo "No signing keys found; building unsigned debug APK."
+          fi
+        fi
+
+    # ========================================================================
+    # Parse signing credentials from release.txt without printing secrets
+    # ========================================================================
+    - name: Parse signing credentials
+      run: |
+        set -euo pipefail
+        if [ -f "signing/release.txt" ]; then
+          node <<'NODE'
+        const fs = require('fs');
+        const content = fs.readFileSync('signing/release.txt', 'utf8');
+        const values = {};
+
+        for (const line of content.split(/\r?\n/)) {
+          const match = line.trim().match(/^([A-Z_]+)\s*[=:]\s*(.*)$/i);
+          if (!match) continue;
+          const key = match[1].toUpperCase();
+          const value = match[2].trim();
+          if (['KEYSTORE_PASSWORD', 'STORE_PASSWORD'].includes(key)) values.store = value;
+          if (key === 'KEY_ALIAS') values.alias = value;
+          if (['KEY_PASSWORD', 'ALIAS_PASSWORD'].includes(key)) values.key = value;
+        }
+
+        if (!values.store || !values.alias || !values.key) {
+          console.error('ERROR: release.txt is missing one or more required signing values.');
+          console.error(`KEYSTORE_PASSWORD: ${values.store ? 'present' : 'missing'}`);
+          console.error(`KEY_ALIAS: ${values.alias ? 'present' : 'missing'}`);
+          console.error(`KEY_PASSWORD: ${values.key ? 'present' : 'missing'}`);
+          process.exit(1);
+        }
+
+        for (const [name, value] of Object.entries({
+          KEYSTORE_PASSWORD: values.store,
+          KEY_ALIAS: values.alias,
+          KEY_PASSWORD: values.key,
+        })) {
+          if (/[\r\n]/.test(value)) {
+            console.error(`ERROR: ${name} must be a single-line value.`);
+            process.exit(1);
+          }
+          process.stdout.write(`::add-mask::${value}\n`);
+          fs.appendFileSync(process.env.GITHUB_ENV, `${name}=${value}\n`);
+        }
+        console.log('Signing credentials loaded and masked.');
+        NODE
+        else
+          echo "No signing credentials found."
+          if [ "${{ github.event.inputs.build_type }}" = "release" ]; then
+            echo "ERROR: release builds require signing/release.txt."
+            exit 1
+          fi
+        fi
+
+    # ========================================================================
+    # Configure signing in local.properties
+    # ========================================================================
+    - name: Configure signing in local.properties
+      run: |
+        set -euo pipefail
+        if [ -f "signing/release.jks" ] && [ -n "${KEYSTORE_PASSWORD:-}" ]; then
+          touch local.properties
+          {
+            printf 'signing.storeFile=%s\n' "${GITHUB_WORKSPACE}/signing/release.jks"
+            printf 'signing.storePassword=%s\n' "$KEYSTORE_PASSWORD"
+            printf 'signing.keyAlias=%s\n' "$KEY_ALIAS"
+            printf 'signing.keyPassword=%s\n' "$KEY_PASSWORD"
+          } >> local.properties
+          echo "Signing configuration added to local.properties."
+        elif [ "${{ github.event.inputs.build_type }}" = "release" ]; then
+          echo "ERROR: release signing configuration is incomplete."
+          exit 1
+        else
+          echo "Skipping release signing configuration for debug build."
+        fi
+
+    # ========================================================================
+    # Set up JDK 17 (required for AGP 8.2.2)
+    # ========================================================================
+    - name: Set up JDK 17
+      uses: actions/setup-java@v5
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    # ========================================================================
+    # Set up Android SDK
+    # ========================================================================
+    - name: Set up Android SDK
+      uses: android-actions/setup-android@v4
+
+    # ========================================================================
+    # Install SDK packages required by the build
+    # ========================================================================
+    - name: Install SDK packages
+      run: |
+        echo "=========================================="
+        echo "INSTALLING SDK PACKAGES"
+        echo "=========================================="
+
+        yes | sdkmanager --licenses > /dev/null 2>&1 || true
+
+        sdkmanager "platform-tools" "build-tools;34.0.0" "platforms;android-35"
+
+        echo ""
+        echo "Installed components:"
+        sdkmanager --list_installed 2>/dev/null || sdkmanager --list 2>/dev/null | head -40
+
+    # ========================================================================
+    # Grant execute permission for gradlew
+    # ========================================================================
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+
+    # ========================================================================
+    # Restore Gradle cache (only when use_cache = true)
+    # ========================================================================
+    - name: Restore Gradle cache
+      if: github.event.inputs.use_cache == 'true'
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: gradle-${{ runner.os }}-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties', '**/*.gradle', '**/*.gradle.kts') }}
+        restore-keys: |
+          gradle-${{ runner.os }}-
+
+    # ========================================================================
+    # Build APK
+    # ========================================================================
+    - name: Build APK
+      run: |
+        if [ "${{ github.event.inputs.use_cache }}" = "true" ]; then
+          echo "Building with cache reuse (skipping clean)."
+          BUILD_PREFIX=""
+        else
+          echo "Building fresh (clean, no cache reuse)."
+          BUILD_PREFIX="clean"
+        fi
+
+        if [ "${{ github.event.inputs.build_type }}" = "release" ]; then
+          echo "Building RELEASE APK..."
+          ./gradlew ${BUILD_PREFIX} assembleRelease --stacktrace
+        else
+          echo "Building DEBUG APK..."
+          ./gradlew ${BUILD_PREFIX} assembleDebug --stacktrace
+        fi
+
+    # ========================================================================
+    # Verify APK integrity, alignment, and signing
+    # ========================================================================
+    - name: Verify APK integrity and signing
+      env:
+        BUILD_TYPE: ${{ github.event.inputs.build_type }}
+      run: |
+        set -euo pipefail
+        export LC_ALL=C
+
+        APK_DIR="app/build/outputs/apk/${BUILD_TYPE}"
+        APK_PATH="$(find "$APK_DIR" -type f -name '*.apk' -print -quit 2>/dev/null || true)"
+        if [ -z "$APK_PATH" ]; then
+          echo "ERROR: no ${BUILD_TYPE} APK found in ${APK_DIR}."
+          exit 1
+        fi
+
+        echo "Validating APK: $APK_PATH"
+
+        BUILD_TOOLS_DIR="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d -name '[0-9]*' | sort -V | tail -n 1)"
+        if [ -z "$BUILD_TOOLS_DIR" ]; then
+          echo "ERROR: no Android build-tools installation was found."
+          exit 1
+        fi
+        for tool in apksigner zipalign; do
+          if [ ! -x "$BUILD_TOOLS_DIR/$tool" ]; then
+            echo "ERROR: required Android tool is missing or not executable: $BUILD_TOOLS_DIR/$tool"
+            exit 1
+          fi
+        done
+
+        echo "[1/5] Checking APK ZIP integrity..."
+        unzip -tq "$APK_PATH"
+
+        echo "[2/5] Checking APK alignment..."
+        "$BUILD_TOOLS_DIR/zipalign" -c -v 4 "$APK_PATH"
+
+        echo "[3/5] Checking that the APK contains DEX bytecode..."
+        APK_CONTENTS="$(mktemp)"
+        unzip -Z1 "$APK_PATH" > "$APK_CONTENTS"
+        if ! grep -Eq '^classes([0-9]+)?\.dex$' "$APK_CONTENTS"; then
+          rm -f "$APK_CONTENTS"
+          echo "ERROR: no classes.dex file was found in the APK."
+          exit 1
+        fi
+        rm -f "$APK_CONTENTS"
+
+        echo "[4/5] Verifying APK signature..."
+        VERIFY_OUTPUT="$(mktemp)"
+        if ! "$BUILD_TOOLS_DIR/apksigner" verify --verbose "$APK_PATH" >"$VERIFY_OUTPUT" 2>&1; then
+          cat "$VERIFY_OUTPUT"
+          rm -f "$VERIFY_OUTPUT"
+          echo "ERROR: apksigner rejected the APK signature."
+          exit 1
+        fi
+        cat "$VERIFY_OUTPUT"
+        rm -f "$VERIFY_OUTPUT"
+
+        if [ "$BUILD_TYPE" = "release" ]; then
+          echo "[5/5] Comparing APK signer with the required release keystore..."
+          if [ ! -f "signing/release.jks" ]; then
+            echo "ERROR: signing/release.jks is missing; signer identity cannot be confirmed."
+            exit 1
+          fi
+          if [ -z "${KEYSTORE_PASSWORD:-}" ] || [ -z "${KEY_ALIAS:-}" ]; then
+            echo "ERROR: release signing credentials are unavailable."
+            exit 1
+          fi
+
+          KEYTOOL="${JAVA_HOME:+$JAVA_HOME/bin/keytool}"
+          if [ -z "$KEYTOOL" ] || [ ! -x "$KEYTOOL" ]; then
+            KEYTOOL="$(command -v keytool || true)"
+          fi
+          if [ -z "$KEYTOOL" ] || [ ! -x "$KEYTOOL" ]; then
+            echo "ERROR: keytool was not found."
+            exit 1
+          fi
+
+          KEYTOOL_OUTPUT="$(mktemp)"
+          if ! "$KEYTOOL" -list -v \
+            -keystore signing/release.jks \
+            -storepass "$KEYSTORE_PASSWORD" \
+            -alias "$KEY_ALIAS" >"$KEYTOOL_OUTPUT" 2>&1; then
+            cat "$KEYTOOL_OUTPUT"
+            rm -f "$KEYTOOL_OUTPUT"
+            echo "ERROR: keytool could not read the configured release certificate."
+            exit 1
+          fi
+
+          # keytool prints a colon-separated SHA256 fingerprint. Strip the
+          # label and punctuation so it can be compared with apksigner output.
+          JKS_FINGERPRINT="$(grep -i 'SHA256:' "$KEYTOOL_OUTPUT" | head -n 1 | sed -E 's/.*SHA256:[[:space:]]*//' | tr -cd '[:xdigit:]' | tr '[:upper:]' '[:lower:]' || true)"
+          rm -f "$KEYTOOL_OUTPUT"
+          if [ -z "$JKS_FINGERPRINT" ]; then
+            echo "ERROR: could not extract the keystore SHA-256 fingerprint."
+            exit 1
+          fi
+
+          APK_CERT_OUTPUT="$(mktemp)"
+          if ! "$BUILD_TOOLS_DIR/apksigner" verify --print-certs "$APK_PATH" >"$APK_CERT_OUTPUT" 2>&1; then
+            cat "$APK_CERT_OUTPUT"
+            rm -f "$APK_CERT_OUTPUT"
+            echo "ERROR: apksigner could not report the APK signer certificate."
+            exit 1
+          fi
+
+          # Do not assume a specific apksigner output stream or capitalization.
+          APK_FINGERPRINT="$(grep -iE 'signer #[0-9]+ certificate SHA-256 digest:' "$APK_CERT_OUTPUT" | head -n 1 | sed -E 's/.*digest:[[:space:]]*//' | tr -cd '[:xdigit:]' | tr '[:upper:]' '[:lower:]' || true)"
+          if [ -z "$APK_FINGERPRINT" ]; then
+            echo "ERROR: could not extract the APK signer SHA-256 fingerprint."
+            echo "Raw apksigner --print-certs output follows for diagnosis:"
+            cat "$APK_CERT_OUTPUT"
+            rm -f "$APK_CERT_OUTPUT"
+            exit 1
+          fi
+          rm -f "$APK_CERT_OUTPUT"
+
+          if [ "$JKS_FINGERPRINT" != "$APK_FINGERPRINT" ]; then
+            echo "ERROR: APK signer does not match signing/release.jks."
+            echo "Keystore fingerprint: $JKS_FINGERPRINT"
+            echo "APK signer fingerprint: $APK_FINGERPRINT"
+            exit 1
+          fi
+          echo "Release APK signer matches the configured release keystore."
+          echo "Signer SHA-256: $APK_FINGERPRINT"
+        else
+          echo "[5/5] Debug APK checks passed; release-keystore comparison is not applicable."
+        fi
+
+        echo "APK SHA-256: $(sha256sum "$APK_PATH" | awk '{print $1}')"
+        echo "All APK validation checks passed."
+
+    # ========================================================================
+    # Upload APK artifact
+    # ========================================================================
+    - name: Upload APK
+      uses: actions/upload-artifact@v6
+      with:
+        name: llama_music_player-${{ github.event.inputs.build_type }}-apk
+        path: app/build/outputs/apk/${{ github.event.inputs.build_type }}/*.apk
+        retention-days: 30
+
+    # ========================================================================
+    # Clean up sensitive signing files
+    # ========================================================================
+    - name: Clean up signing files
+      if: always()
+      run: |
+        rm -rf signing/
+        echo "Cleaned up signing files"
