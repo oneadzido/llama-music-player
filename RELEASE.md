@@ -1,6 +1,6 @@
 # Llama Music Player v1.5.0
 
-**Release date:** November 15, 2026
+**Release date:** November 16, 2026
 
 Version 1.5.0 ships one change: the migration of the app's
 in-process broadcast receivers to a single registrar. The two new
