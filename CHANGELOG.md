@@ -5,6 +5,177 @@ All notable changes to Llama Music Player are documented in this file.
 Current technical specifications, installation, and usage are
 documented in the [README](README.md).
 
+## [1.5.1] - Nov 16, 2026
+
+### Overview
+
+Three fixes. The transport controls — play/pause, favorite, and
+the four mode buttons — are now written in the subscriber's own
+main-thread turn instead of inside the album-art carousel's
+commit runnable, so they respond on the same turn the state
+machine commits the change. A language change now rebuilds the
+app on the same path a theme change does: through
+`BroadcastTranslator`, fired from the picker's `onDismiss`
+callback, and answered by `recreate()`. The Credits dialog's
+open-and-close gesture continues to use `slide_out_down.xml` and
+`slide_in_up.xml`, the same XML animations every other screen
+transition in the app uses, but its two halves are now driven
+from the animation callbacks rather than from two independent
+delayed runnables, so they start on the same frame.
+
+The transport-control delay was caused by a coupling between
+two surfaces whose timings are unrelated. The play/pause and
+favorite button states are functions of the service snapshot
+alone. They were being written inside the runnable that the
+album-art carousel executes when its strip settles, so every
+transport change — a play tap, a pause tap, a favorite tap, an
+automatic song change — waited for the carousel before it
+reached the buttons. The transport writes now run before the
+carousel is touched. The album-art writes stay in the carousel
+commit, where their timing is correct.
+
+The language change was going out as a raw broadcast whose
+action string happened to match the translator's action
+constant. It now goes through the translator, and the picker
+fires its listener from `onDismiss`, which runs after the
+picker window has detached. The previous ordering fired the
+listener from a delayed runnable that could run before the
+picker's window teardown had completed on a slower input
+pipeline, which is what made the language change unreliable
+on some devices while the theme change — which had no picker
+in its path — was reliable. Both stems now share one path, one
+`onDismiss` firing order, and one `recreate()` handler.
+
+The Credits gesture previously started its outgoing slide
+from the click handler and its incoming slide from the
+dialog's `onDismiss`, using the legacy `startAnimation` API
+on a view the framework was about to tear down. The two
+halves started on different callbacks and could slip by a
+vsync. The gesture now loads its existing
+`slide_out_down.xml` and `slide_in_up.xml`, shows the dialog
+in the outgoing animation's `onAnimationEnd`, and starts the
+incoming animation from `onDismiss`. Both halves are the
+same length because the length lives in one place per
+direction.
+
+### Fixed
+
+- **Play/pause and favorite buttons respond on the turn of the
+  change.** `onUpdatePlayerEvent` calls `refreshTransportControls()`
+  before the carousel window is touched.
+  `refreshTransportControls` schedules its writes through
+  `updateUISafely`, which now runs synchronously when the caller
+  is already on the main thread and no other update is in flight.
+  The two changes together remove the intermediate post that
+  delayed every transport change on slower input pipelines.
+
+- **A language change reaches every surface on every device.**
+  `CreditsDialog.showLanguageDialog` posts
+  `BroadcastTranslator.LanguageChangedEvent.create()` through
+  `BroadcastTranslator` rather than sending a raw
+  `"LANGUAGE_CHANGED"` broadcast. `LanguageDialog` fires its
+  listener from `setOnDismissListener`, which runs after the
+  dialog window has detached. `MusicPlayer.onLanguageChangedEvent`
+  answers with `recreateActivity()`. The recreation re-runs
+  `attachBaseContext`, which re-applies the locale through
+  `LanguageManager.wrap()`, so every string the new activity
+  resolves through `getString` from its `onCreate` onward is
+  read from the matching resource folder.
+
+- **A theme change rebuilds on the same path.** The
+  `ThemeDialog` selection listener now also fires from
+  `setOnDismissListener`, matching `LanguageDialog`. The two
+  dialogs and their host activities share one path, one
+  dismissal order, and one `recreateActivity()` handler.
+
+- **The Credits gesture starts both halves on the same frame.**
+  `MusicPlayer.showCreditsDialog()` loads the existing
+  `R.anim.slide_out_down` and starts it on
+  `android.R.id.content`; the dialog shows in the outgoing
+  animation's `onAnimationEnd`; the incoming animation
+  `R.anim.slide_in_up` starts on `onDismiss`. Both durations
+  live in the XML resources the rest of the app already uses
+  for screen transitions.
+
+- **`recreateWithConfiguration` is renamed to
+  `recreateActivity`.** The method no longer calls
+  `Resources.updateConfiguration` before `recreate()`. The
+  incoming activity builds its resources from
+  `attachBaseContext` and `onCreate`; mutating the outgoing
+  activity's resources only changed the configuration its own
+  final lifecycle callbacks saw, without any consumer left to
+  read it. The rename reflects what the method does.
+
+- **The transport refresh issues one redraw, not two.**
+  `refreshTransportControls` no longer calls
+  `postInvalidateOnAnimation` on the transport row and the
+  play button. The `setText`, `setBackground`, and
+  `setTextColor` calls the method already issues invalidate
+  their views on the next frame. The second invalidate only
+  added a second redraw behind the same vsync, which on slower
+  input pipelines could be serialised behind the animation
+  callback scheduler.
+
+### Under the Hood
+
+- `BroadcastTranslator.LanguageChangedEvent` — gains a public
+  `create()` factory. The constructor remains private; the
+  factory exists so `CreditsDialog` can post the event without
+  reconstructing an `Intent`.
+
+- `CreditsDialog.showLanguageDialog` — the
+  `mContext.sendBroadcast(new Intent("LANGUAGE_CHANGED")...)`
+  call is replaced with
+  `BroadcastTranslator.getInstance(mContext).post(
+  BroadcastTranslator.LanguageChangedEvent.create())`. The
+  dead `language_tag` extra is dropped; nothing read it.
+
+- `LanguageDialog.animateLanguageSelection` and
+  `ThemeDialog.animateThemeSelection` — the listener now
+  fires from `setOnDismissListener`, not from the
+  `DISMISS_DELAY_MS` runnable. The runnable calls `dismiss()`
+  only. `android.content.DialogInterface` is added to the
+  imports of both files.
+
+- `MusicPlayer.onUpdatePlayerEvent` —
+  `refreshTransportControls()` is called before the
+  `updateUISafely` block that drives the carousel. The
+  `refreshTransportControls()` call inside the carousel commit
+  runnable is removed.
+
+- `MusicPlayer.updateUISafely` — a synchronous branch runs the
+  update directly when `Looper.myLooper()` is the main looper
+  and `mIsUpdatingUI` is false. The post path is kept for
+  updates that originate off the main thread. Coalescing is
+  preserved in both branches.
+
+- `MusicPlayer.refreshTransportControls` — the
+  `postInvalidateOnAnimation` calls on `mTransportRow` and
+  `mPlayButton` are removed.
+
+- `MusicPlayer.onLanguageChangedEvent` and
+  `onThemeColorChangedEvent` — the call to
+  `recreateWithConfiguration()` is renamed to
+  `recreateActivity()`.
+
+- `MusicPlayer.recreateActivity` — the
+  `Resources.updateConfiguration` call is removed. The method
+  calls `recreate()` and `overridePendingTransition(0, 0)`.
+
+- `MusicPlayer.showCreditsDialog` — new private method,
+  called from the Llama button's click handler.
+  `AnimationUtils.loadAnimation(this, R.anim.slide_out_down)`
+  runs on `android.R.id.content`; the dialog shows in
+  `onAnimationEnd`; `R.anim.slide_in_up` runs on the same view
+  from the dialog's `onDismiss` listener. The Llama handler no
+  longer calls `AnimationUtils.loadAnimation` directly; the
+  handler's only change is the call to
+  `showCreditsDialog()`.
+
+- `MusicPlayer` imports — `android.view.animation.Animation`
+  is added. `AnimationUtils` remains; the credits gesture is
+  its only consumer.
+
 ## [1.5.0] - Nov 16, 2026
 
 ### Overview

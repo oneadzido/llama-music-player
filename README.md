@@ -8,7 +8,7 @@ scoping, and sixteen languages.
 [![Android](https://img.shields.io/badge/Android-6.0%2B-brightgreen.svg)](https://developer.android.com)
 [![Privacy](https://img.shields.io/badge/Privacy-Policy-blue.svg)](PRIVACY.md)
 
-[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.5.0.apk)
+[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.5.1.apk)
 
 [![Build](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml/badge.svg)](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml)
 
@@ -48,8 +48,11 @@ Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
 - **Sixteen languages:** English, Español, Français, Deutsch,
   Italiano, Português, Русский, 中文, 日本語, 한국어, हिन्दी,
   العربية, Türkçe, Bahasa Indonesia, Nederlands, Polski. The picker
-  lives in the Credits dialog and rebuilds the UI in the new locale
-  without a restart.
+  lives in the Credits dialog. Selecting a language posts a
+  `LanguageChangedEvent` through `BroadcastTranslator`; every
+  subscribed activity answers with `recreate()`, which re-runs
+  `attachBaseContext` and rebuilds the UI in the new locale. The
+  process is not restarted.
 - **Favorites:** Double-tap the album art, tap the heart beside the
   transport controls, or tap a playlist row's heart. The player's
   heart is a 48dp control button. The playlist row uses a 36dp
@@ -1051,46 +1054,49 @@ reads the same way in every call site.
 
 ### 17. Cross-cutting: theme and language rebuild
 
-Two broadcasts — `THEME_COLOR_CHANGED` and `LANGUAGE_CHANGED` —
-share a single contract across every surface of the app.
+Two stems — `THEME_COLOR_CHANGED` and `LANGUAGE_CHANGED` — share a
+single contract across every surface of the app.
 
 `ThemeManager.setThemeColor(int)` and
 `LanguageManager.setLanguage(String)` each persist the new value and
-broadcast the change. Neither touches a view. Every activity
-subscribes to both events through `BroadcastTranslator` and answers
-each with `recreateWithConfiguration()`. Every dialog that has a
-theme subscriber (`CreditsDialog`) dismisses itself; the three
-dialogs that do not (`LanguageDialog`, `PresetDialog`,
+announce it on the EventBus through `BroadcastTranslator`. Neither
+touches a view. Every activity subscribes to both events through the
+translator and answers each with `recreateActivity()`. Every dialog
+that has a theme subscriber (`CreditsDialog`) dismisses itself; the
+three dialogs that do not (`LanguageDialog`, `PresetDialog`,
 `PlaybackScopeDialog`) are dismissed transitively by their hosts'
-recreation. `ThemeDialog` reports the selection through its
-listener, and the caller's listener persists it; the dialog does
-not call `setThemeColor()` itself. `ToastManager` tears down and
-re-creates its persistent overlay's text view through the same
-`createOverlayInView` path its first show uses.
-`NotificationController` does not repaint in place; its themed
-placeholder and action icon caches are keyed by the color they
-were built against, so the recreated activity's next commit reads
-the persisted theme and either reuses a matching entry or
+recreation. `ThemeDialog` and `LanguageDialog` report their
+selection through a listener that fires from the dialog's own
+`OnDismissListener`, so the dialog window is already detached before
+the host activity's recreation runs. The picker does not call
+`setThemeColor()` or `setLanguage()` itself; the caller's listener
+does. `ToastManager` tears down and re-creates its persistent
+overlay's text view through the same `createOverlayInView` path its
+first show uses. `NotificationController` does not repaint in place;
+its themed placeholder and action icon caches are keyed by the color
+they were built against, so the recreated activity's next commit
+reads the persisted theme and either reuses a matching entry or
 rebuilds.
 
-The invariant is the same for both broadcasts: **the broadcast is a
-signal to rebuild, not an instruction to patch.** There is no view
-in the app whose theme or locale is written after the frame it was
-first drawn on. Every color and every string visible to the user is
-the result of a freshly constructed view or a freshly built
+`recreateActivity()` does not call
+`Resources.updateConfiguration` before `recreate()`. The incoming
+activity builds its resources from `attachBaseContext`, which
+applies the current locale through `LanguageManager.wrap()` and
+reads the current theme through `ThemeManager` in its own
+`onCreate`. The outgoing activity's resources are not mutated on
+their way out.
+
+The invariant is the same for both stems: **the event is a signal
+to rebuild, not an instruction to patch.** There is no view in the
+app whose theme or locale is written after the frame it was first
+drawn on. Every color and every string visible to the user is the
+result of a freshly constructed view or a freshly built
 notification reading a persisted value. The two paths cannot drift
-apart on any device because they run the same code shape.
+apart on any device because they run the same code shape and the
+same dismissal order.
 
-The same reasoning extended to the language picker in 1.3.0 and to
-the theme picker in 1.4.6. The `LanguageManager` and `ThemeManager`
-classes carry the full contract in their class Javadocs.
-
-In 1.5.0 both broadcasts are delivered through
-`BroadcastTranslator`. The `THEME_COLOR_CHANGED` and
-`LANGUAGE_CHANGED` receivers each activity used to own are now
-`@Subscribe` methods on the activity itself. The contract above is
-unchanged; only the delivery mechanism moved from a per-activity
-receiver to the translator's single subscriber.
+The `LanguageManager` and `ThemeManager` classes carry the full
+contract in their class Javadocs.
 
 ### 18. Cross-cutting: localization
 

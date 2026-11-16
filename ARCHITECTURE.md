@@ -470,14 +470,19 @@ says "Königliches Lama" and an Arabic one says "لاما ملكي", and both
 refer to the same color value in the same array.
 
 A theme change is a rebuild, not a repaint.
-`ThemeManager.setThemeColor(int)` persists the value and broadcasts
-`THEME_COLOR_CHANGED`; every activity recreates, every open dialog
+`ThemeManager.setThemeColor(int)` persists the value and posts
+`ThemeColorChangedEvent` through `BroadcastTranslator`; every
+activity answers with `recreateActivity()`, every open dialog
 dismisses itself, and every surface is re-constructed against the
 persisted color. `ThemeHelper` still paints each newly-constructed
 view; it no longer has a live view tree to repaint on a broadcast,
 and the theme's color is read at construction rather than patched
-in. The same shape is used for `LANGUAGE_CHANGED`: the broadcast is
-a signal to rebuild, not an instruction to patch.
+in. `LanguageManager.setLanguage(String)` posts
+`LanguageChangedEvent` through the same translator, and every
+subscriber answers with the same `recreateActivity()`. The two
+stems share one delivery mechanism, one dismissal order, and one
+handler. The broadcast is a signal to rebuild, not an instruction
+to patch.
 
 ### The organs the user touches
 
@@ -525,11 +530,14 @@ ellipsis rather than running under a button beside it.
 
 A theme change made from `CreditsDialog`'s picker closes every dialog
 on the screen — the picker, the `ThemeDialog` it opened, and the
-`CreditsDialog` underneath — on the same broadcast the hosting
-activity recreates on. There is no window in which one dialog has
-been rebuilt and another has not, because no dialog is rebuilt in
-place; all of them are dismissed, and the next open constructs a new
-dialog against the persisted theme from the first frame.
+`CreditsDialog` underneath — on the same event the hosting activity
+recreates on. `ThemeDialog` and `LanguageDialog` fire their listeners
+from their own `OnDismissListener`, so the picker's window is already
+detached before the host activity's `recreateActivity()` runs. There
+is no window in which one dialog has been rebuilt and another has
+not, because no dialog is rebuilt in place; all of them are
+dismissed, and the next open constructs a new dialog against the
+persisted theme or locale from the first frame.
 
 ### The fingers
 
