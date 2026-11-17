@@ -5,6 +5,89 @@ All notable changes to Llama Music Player are documented in this file.
 Current technical specifications, installation, and usage are
 documented in the [README](README.md).
 
+## [1.5.3] - Nov 17, 2026
+
+### Overview
+
+Version 1.5.3 addresses dialog dismissal, activity recreation, and
+transport-control visual synchronization issues.
+
+The Credits dialog could become unresponsive after opening and
+dismissing the theme or language picker without selecting an item.
+The picker-showing flags were cleared through dismissal handling
+that was not reliably independent of the selection flow. Both pickers
+now expose a dedicated host dismissal callback, allowing the Credits
+dialog to reset its flags whenever a picker closes.
+
+Activity recreation handling has also been improved with a
+pending-recreation guard and deferred execution through the
+activity's window decor view. Playback and favorite controls now
+explicitly refresh their visual states after toggle actions.
+
+### Fixed
+
+- **The Credits dialog buttons remain usable after dismissing the
+  pickers.**
+  `ThemeDialog` and `LanguageDialog` now provide a dedicated
+  dismissal callback for the host. The callback runs independently
+  of the selection callback, allowing the Credits dialog to clear its
+  picker-showing flags even when the user closes a picker without
+  selecting an item.
+
+- **Play/pause visual state synchronization.**
+  Play/pause toggle paths now explicitly refresh the transport
+  controls after changing playback state. The play/pause
+  active-state styling also uses the actual playback state rather
+  than the control's enabled state.
+
+- **Favorite icon visual synchronization.**
+  Favorite toggle paths now explicitly refresh the transport controls
+  after changing the current song's favorite state, allowing the icon
+  to reflect the updated state without requiring activity recreation.
+
+### Improved
+
+- **Activity recreation lifecycle handling.**
+  Activities now use a pending-recreation guard to prevent
+  duplicate recreation requests. Recreation is posted through the
+  activity's window decor view and checks whether the activity is
+  finishing or destroyed before proceeding.
+
+- **Credits dialog dismissal coordination.**
+  Language and theme change events now dismiss the Credits dialog
+  directly instead of posting an additional dismissal runnable to the
+  main handler. This reduces overlapping dismissal operations during
+  activity recreation.
+
+- **Transport-control state rendering.**
+  Existing transport-control refresh logic is used to synchronize
+  playback and favorite icons with the current service state.
+
+### Under the Hood
+
+- `recreateActivity()` — introduces `mRecreationPending`,
+  validates the activity lifecycle, and posts recreation through
+  the window decor view.
+
+- `LanguageDialog` — registers a dedicated host dismissal callback
+  during dialog creation and invokes it from the dismissal flow
+  independently of language selection handling.
+
+- `ThemeDialog` — implements the same dedicated host dismissal
+  callback while preserving the existing theme-selection callback.
+
+- `CreditsDialog.showThemeDialog()` — registers the host dismissal
+  callback to clear `mIsThemeDialogShowing` whenever the theme
+  picker closes.
+
+- `CreditsDialog.showLanguageDialog()` — registers the host
+  dismissal callback to clear `mIsLanguageDialogShowing` whenever
+  the language picker closes.
+
+- `MusicPlayer.refreshTransportControls()` — reused after
+  play/pause and favorite toggle operations to synchronize the
+  visible controls with the current service state.
+
 ## [1.5.2] - Nov 17, 2026
 
 ### Overview
