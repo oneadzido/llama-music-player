@@ -5,6 +5,41 @@ All notable changes to Llama Music Player are documented in this file.
 Current technical specifications, installation, and usage are
 documented in the [README](README.md).
 
+## [1.5.2] - Nov 17, 2026
+
+### Overview
+
+The theme and language buttons in the Credits dialog could stop
+responding after the user reselected the current item. Each picker
+installed its selection callback with `setOnDismissListener()`,
+replacing the callback that cleared the Credits dialog's
+picker-showing flag. Since reselecting the current item does not
+change or broadcast a new value, the Credits dialog stayed open
+with its flag still set. The fix gives each picker a separate
+dismiss callback for the host, preserving the selection callback
+while allowing the flag to be cleared after reselection.
+
+### Fixed
+
+- **The theme and language buttons remain usable after reselection.**
+  `ThemeDialog` and `LanguageDialog` replaced the Credits dialog's
+  dismiss listener when they installed their selection callbacks.
+  On reselection, the selection listener returned without applying
+  a change, and the Credits dialog's picker-showing flag remained
+  `true`. The pickers now notify the host through a separate dismiss
+  callback, so the corresponding button can open its picker again.
+
+### Under the Hood
+
+- `ThemeDialog` and `LanguageDialog` — add a dedicated host dismiss
+  callback alongside the existing selection callback. After a
+  selection, both callbacks run from the picker's dismiss flow.
+
+- `CreditsDialog.showThemeDialog()` and
+  `CreditsDialog.showLanguageDialog()` — register the dedicated
+  callback to clear the matching picker-showing flag. The existing
+  selection listeners continue to apply only changed selections.
+
 ## [1.5.1] - Nov 17, 2026
 
 ### Overview

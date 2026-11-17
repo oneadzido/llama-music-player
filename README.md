@@ -8,9 +8,32 @@ scoping, and sixteen languages.
 [![Android](https://img.shields.io/badge/Android-6.0%2B-brightgreen.svg)](https://developer.android.com)
 [![Privacy](https://img.shields.io/badge/Privacy-Policy-blue.svg)](PRIVACY.md)
 
-[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.5.1.apk)
+[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.5.2.apk)
 
 [![Build](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml/badge.svg)](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml)
+
+---
+
+## Latest Release
+
+### v1.5.2
+
+A small but user-visible fix landed in the Credits dialog: the theme
+and language buttons could become unusable after the user reselected
+the current theme or language. The cause was a single Android
+`Dialog` contract: each dialog holds only one dismiss listener. The
+picker's selection callback was replacing the host dialog's reset
+callback, leaving the picker-open flags stuck at `true`. The fix
+keeps the selection callback and adds a second host-side dismiss
+callback for each picker, so the guard clears whenever the picker
+closes. The selection still closes cleanly on reselection, but the
+button remains usable for the next tap.
+
+- Fix: theme and language buttons still work after selecting the
+  same current item again.
+- Fix: host dialog guard flags are cleared on every picker's
+  dismissal, including no-op reselection.
+- No change to the dialog's selection behaviour or rebuild flow.
 
 ---
 
@@ -347,8 +370,8 @@ because the telephony stack holds focus through its own teardown
 after a call ends, and a single request inside the gain callback
 fails on a meaningful fraction of devices. A gain that arrives while
 `AudioManager.getMode()` reports a call mode skips the first focus
-attempt and enters the retry path directly. When the retry budget
-is exhausted, the interruption record is left in place: the
+attempt and enters the retry path directly. When the retry budget is
+exhausted, the interruption record is left in place: the
 notification stays foreground, the shade entry and lockscreen
 controls survive, and the play button resumes through the ordinary
 transport path. `doResume()` and `resumeAfterInterruption()` request
@@ -382,8 +405,8 @@ audio's transition are the same value by construction.
 
 Eighth, a Bluetooth disconnect is a facet of the same machine. The
 service registers a receiver for the pause request in `onCreate` and
-unregisters it in `onDestroy`, so the pause fires whether or not
-the player activity is alive. The pause is gated on three
+unregisters it in `onDestroy`, so the pause fires whether or not the
+player activity is alive. The pause is gated on three
 conditions, all required: the Bluetooth device is the current audio
 route, no interruption is already handling the pause, and the state
 is playing. A disconnect during a call, a link loss on a
@@ -1024,9 +1047,9 @@ the task behind the next one in the stack — the same mechanism
 the framework uses for back-at-root, and one that does not
 depend on resolving a home intent.
 
-Both phases are carried by a single `mHomeReturnRunnable`
-field; its body branches on `mHomeConfirmState` to decide
-whether it is ending the ARMED window or the CONFIRMED dwell.
+Both phases are carried by a single `mHomeReturnRunnable` field;
+its body branches on `mHomeConfirmState` to decide whether it is
+ending the ARMED window or the CONFIRMED dwell.
 `cancelReturnHome()` cancels the pending runnable without
 needing to know which phase scheduled it, resets the state to
 `IDLE`, and repaints the button in its inactive colour. Every
@@ -1068,15 +1091,15 @@ three dialogs that do not (`LanguageDialog`, `PresetDialog`,
 recreation. `ThemeDialog` and `LanguageDialog` report their
 selection through a listener that fires from the dialog's own
 `OnDismissListener`, so the dialog window is already detached before
-the host activity's recreation runs. The picker does not call
-`setThemeColor()` or `setLanguage()` itself; the caller's listener
-does. `ToastManager` tears down and re-creates its persistent
-overlay's text view through the same `createOverlayInView` path its
-first show uses. `NotificationController` does not repaint in place;
-its themed placeholder and action icon caches are keyed by the color
-they were built against, so the recreated activity's next commit
-reads the persisted theme and either reuses a matching entry or
-rebuilds.
+the host activity's `recreateActivity()` runs. The picker does not
+call `setThemeColor()` or `setLanguage()` itself; the caller's
+listener does. `ToastManager` tears down and re-creates its
+persistent overlay's text view through the same `createOverlayInView`
+path its first show uses. `NotificationController` does not repaint
+in place; its themed placeholder and action icon caches are keyed by
+the color they were built against, so the recreated activity's next
+commit reads the persisted theme and either reuses a matching entry
+or rebuilds.
 
 `recreateActivity()` does not call
 `Resources.updateConfiguration` before `recreate()`. The incoming
