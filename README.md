@@ -164,8 +164,8 @@ Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
   other apps transition through a cross-fade.
 - **Volume gesture:** Swipe up or down along the album-art edge to
   change the music volume.
-- **Volume-aware playback:** Music pauses at volume 0 and resumes when
-  the volume is raised.
+- **Volume-aware playback:** Music pauses at volume 0 and resumes
+  when the volume is raised.
 - **Live search:** A search bar at the top of the playlist filters
   on every keystroke, case-insensitively, across title, artist, album,
   and genre. The header shows the visible count over the total while a

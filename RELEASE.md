@@ -63,9 +63,6 @@ operations. This allows the existing transport-control renderer
 to retrieve the current service state and update the corresponding
 icons without relying on manual activity recreation.
 
-The play/pause active-state styling also uses the actual playback
-state rather than the availability of the control.
-
 ### Existing playback controls are preserved
 
 The existing repeat and shuffle behavior remains intact. The

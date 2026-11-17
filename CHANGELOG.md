@@ -36,9 +36,7 @@ explicitly refresh their visual states after toggle actions.
 
 - **Play/pause visual state synchronization.**
   Play/pause toggle paths now explicitly refresh the transport
-  controls after changing playback state. The play/pause
-  active-state styling also uses the actual playback state rather
-  than the control's enabled state.
+  controls after changing playback state.
 
 - **Favorite icon visual synchronization.**
   Favorite toggle paths now explicitly refresh the transport controls
