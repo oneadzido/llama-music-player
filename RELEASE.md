@@ -1,6 +1,6 @@
 # Llama Music Player v1.5.1
 
-**Release date:** November 16, 2026
+**Release date:** November 17, 2026
 
 Version 1.5.1 ships two correctness fixes to the surfaces a 1.5.0
 user touches most: the transport controls now respond on the same

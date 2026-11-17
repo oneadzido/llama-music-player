@@ -5,7 +5,7 @@ All notable changes to Llama Music Player are documented in this file.
 Current technical specifications, installation, and usage are
 documented in the [README](README.md).
 
-## [1.5.1] - Nov 16, 2026
+## [1.5.1] - Nov 17, 2026
 
 ### Overview
 
