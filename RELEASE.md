@@ -1,6 +1,6 @@
 # Llama Music Player v1.5.3
 
-**Release date:** November 17, 2026
+**Release date:** November 18, 2026
 
 Version 1.5.3 improves dialog reliability, activity recreation handling,
 and music-player interface responsiveness. It fixes an issue where
