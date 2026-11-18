@@ -33,9 +33,20 @@ states after toggle actions, addressing cases where the underlying
 action succeeded but the corresponding icon remained visually
 unchanged.
 
-- Fix: theme and language buttons remain usable after closing pickers without selection.
-- Fix: play/pause and favorite icons explicitly reflect toggle actions.
-- Improved: activity recreation handling guarded against duplicate requests via window decor view.
+Playback resumption initiated by the player screen now also respects
+the activity's foreground state. Volume-triggered and centre-swipe
+playback resumption are restricted to the active, resumed player
+screen, while normal background music playback and playback controls
+from external surfaces remain supported. Music-volume observer
+callbacks also verify that the actual music-stream volume changed
+before checking whether playback should resume.
+
+- Fixed: theme and language buttons remain usable after closing pickers without selection.
+- Fixed: play/pause and favorite icons explicitly reflect toggle actions.
+- Improved: activity recreation handling guarded against duplicate requests via the window decor view.
+- Improved: player-screen volume and swipe resume actions require the activity to be resumed and foreground-interactive.
+- Improved: music-volume observer checks actual music-stream volume changes before applying the maximum-volume resume rule.
+- Preserved: background playback and playback resumption through supported external controls.
 
 ---
 
@@ -113,11 +124,11 @@ Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
   during a prepare failure's recovery.
 - **Resume after a phone call:** A call, a navigation prompt, or
   any other audio-focus interruption is recorded once, and playback
-  resumes when focus returns. Focus acquisition is retried for up
-  to six seconds, so the resume lands on devices where the
-  telephony stack releases focus late. A user action during the
-  interruption — a tap, a next, a stop, a volume change to zero —
-  clears the record and the automatic resume does not fire.
+  resumes when focus returns. Focus acquisition is retried for up to
+  six seconds, so the resume lands on devices where the telephony
+  stack releases focus late. A user action during the interruption —
+  a tap, a next, a stop, a volume change to zero — clears the record
+  and the automatic resume does not fire.
 - **A backgrounded volume key does not steal focus:** A hardware
   volume press while the player is backgrounded and another app is
   playing does not take audio focus back. The volume-raise path
@@ -126,14 +137,27 @@ Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
   the volume key does not act on it. The same rule covers the
   Bluetooth headset's volume remap and the media-session play
   callback.
-- **Audible resume from every surface:** A resume from the player
-  screen's centre-up swipe, the playback notification's play action,
-  the lockscreen and media-session play callback, a headset media
-  key, or an external intent delivers sound at music stream volume
-  zero. The service raises the stream to three steps above zero on
-  the same main-thread turn that starts the player. On devices whose
-  music stream range is one or two steps, the write clamps to the
-  device maximum.
+- **Audible resume from every surface:** A resume from the playback
+  notification's play action, the lockscreen and media-session play
+  callback, a headset media key, or an external intent delivers sound
+  at music stream volume zero. The service raises the stream to three
+  steps above zero on the same main-thread turn that starts the
+  player. On devices whose music stream range is one or two steps,
+  the write clamps to the device maximum. The player screen's
+  centre-up swipe also resumes audibly when the activity is active.
+- **Foreground-aware player-screen resumption:** Volume-triggered
+  and centre-swipe playback resumption from the player screen require
+  the activity to be resumed and foreground-interactive. This keeps
+  activity-originated resume actions from firing while the player is
+  backgrounded or after the user returns to the home screen. It does
+  not stop music that is already playing in the background, and it
+  does not disable playback actions initiated through supported
+  external controls.
+- **Precise music-volume observation:** The volume observer compares
+  the actual music-stream volume with its previously observed value
+  before applying the maximum-volume resume check. Unrelated
+  system-settings notifications therefore do not trigger unnecessary
+  playback-resume checks.
 - **Notification continuity through an interruption:** The
   playback notification stays a foreground notification while an
   interruption is in progress and playback is resumable, so the
@@ -154,18 +178,22 @@ Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
 - **Centre swipe:** Swipe up on the centre of the album art to resume
   a paused song, or down to pause a playing one. The gesture requires
   twice the touch slop of travel to distinguish it from digitizer
-  wobble, and commits on release rather than on each move, so a single
-  drag toggles at most once. A swipe up at music-stream volume zero
-  resumes the song through `MusicService.resume()`; the service
+  wobble, and commits on release rather than on each move, so a
+  single drag toggles at most once. A swipe up at music-stream volume
+  zero resumes the song through `MusicService.resume()`; the service
   raises the stream to three steps above zero on the same main-thread
-  turn, so the resume is audible rather than silent.
-- **Album-art carousel:** Swipe left or right across the album art, or
-  tap the transport buttons, to move between songs. Files opened from
-  other apps transition through a cross-fade.
+  turn, so the resume is audible rather than silent. Player-screen
+  resume is accepted only while the activity is resumed and
+  foreground-interactive.
+- **Album-art carousel:** Swipe left or right across the album art,
+  or tap the transport buttons, to move between songs. Files opened
+  from other apps transition through a cross-fade.
 - **Volume gesture:** Swipe up or down along the album-art edge to
   change the music volume.
 - **Volume-aware playback:** Music pauses at volume 0 and resumes
-  when the volume is raised.
+  when the volume is raised through the active player screen. The
+  player-screen resume check is gated by the activity's resumed,
+  foreground-interactive state; background playback is unaffected.
 - **Live search:** A search bar at the top of the playlist filters
   on every keystroke, case-insensitively, across title, artist, album,
   and genre. The header shows the visible count over the total while a
@@ -175,8 +203,8 @@ Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
 - **Playlist and scope fast-scroll:** Drag vertically along the
   leftmost or rightmost edge of a long list to scroll proportionally.
   The playlist and the playback-scope dialog share the same
-  implementation, so the edge width, engagement threshold, and scroll
-  rate are identical on both surfaces.
+  implementation, so the edge width, engagement threshold, and
+  scroll rate are identical on both surfaces.
 - **Sort progress feedback:** Cycling the sort mode shows the
   dim-and-spinner overlay, hidden only once the reordered list has
   settled and drawn.
@@ -196,15 +224,15 @@ Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
   composed content actually exceeds the current window's usable
   width. The overlay composes its visible text once, inside
   `ToastManager.composeOverlayText(title, body)`, from the two
-  strings the operation's owner supplies. The middle dot between the
-  verb and the count is the composition site's separator, not the
-  caller's.
+  strings the operation's owner supplies. The middle dot between
+  the verb and the count is the composition site's separator, not
+  the caller's.
 - **Library-notification titles and bodies as two strings:** The
   library notification renders its verb phrase and its count into
   two separate slots. `ToastManager` composes the in-app overlay's
-  visible text once from those two strings, joined with a middle
-  dot; the notification mirror receives the two strings separately
-  and renders each into its own line. The composition site is
+  visible text once from those two strings, joined with a middle dot;
+  the notification mirror receives the two strings separately and
+  renders each into its own line. The composition site is
   `ToastManager.composeOverlayText`; the notification's two slots
   are written by
   `NotificationController.buildLibraryNotification(title, body)`.
@@ -221,8 +249,8 @@ Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
   activity, every open dialog, and the toast overlay — against the
   persisted color, on every device. No view is repainted in place.
 - **Split-screen layout:** The album art resizes, shrinks, or hides
-  with the window height; every screen adjusts its own content so the
-  controls always fit.
+  with the window height; every screen adjusts its own content so
+  the controls always fit.
 - **Bluetooth support:** Headset controls, with the pause on
   disconnect scoped to the case it describes. A disconnect pauses
   playback only when the headset was the active output, no other

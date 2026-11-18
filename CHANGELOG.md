@@ -24,6 +24,11 @@ pending-recreation guard and deferred execution through the
 activity's window decor view. Playback and favorite controls now
 explicitly refresh their visual states after toggle actions.
 
+Foreground-aware playback resumption has also been strengthened.
+Volume-triggered and swipe-triggered playback actions now require
+the activity to be resumed and foreground-interactive, preventing
+unintended playback resumption while the player is in the background.
+
 ### Fixed
 
 - **The Credits dialog buttons remain usable after dismissing the
@@ -43,23 +48,37 @@ explicitly refresh their visual states after toggle actions.
   after changing the current song's favorite state, allowing the icon
   to reflect the updated state without requiring activity recreation.
 
+- **Foreground-aware playback resumption.**
+  Volume-triggered and swipe-triggered playback resumption now require
+  the activity to be resumed and foreground-interactive. This prevents
+  unintended playback resumption when the player is in the background
+  or the user returns to the home screen, while preserving normal
+  background music playback.
+
 ### Improved
 
 - **Activity recreation lifecycle handling.**
   Activities now use a pending-recreation guard to prevent
-  duplicate recreation requests. Recreation is posted through the
-  activity's window decor view and checks whether the activity is
-  finishing or destroyed before proceeding.
+  duplicate recreation requests. Recreation is posted through
+  the activity's window decor view and checks whether the activity
+  is finishing or destroyed before proceeding.
 
 - **Credits dialog dismissal coordination.**
   Language and theme change events now dismiss the Credits dialog
-  directly instead of posting an additional dismissal runnable to the
-  main handler. This reduces overlapping dismissal operations during
-  activity recreation.
+  directly instead of posting an additional dismissal runnable to
+  the main handler. This reduces overlapping dismissal operations
+  during activity recreation.
 
 - **Transport-control state rendering.**
   Existing transport-control refresh logic is used to synchronize
   playback and favorite icons with the current service state.
+
+- **Music-volume change detection.**
+  Volume observer callbacks now compare the actual music-stream
+  volume against the previously observed value before initiating
+  the maximum-volume resume check. This prevents unrelated
+  system-settings notifications from unnecessarily triggering
+  playback checks.
 
 ### Under the Hood
 
@@ -83,8 +102,22 @@ explicitly refresh their visual states after toggle actions.
   the language picker closes.
 
 - `MusicPlayer.refreshTransportControls()` — reused after
-  play/pause and favorite toggle operations to synchronize the
-  visible controls with the current service state.
+  play/pause and favorite toggle operations to synchronize
+  the visible controls with the current service state.
+
+- `MusicPlayer.mIsResumed` — tracks whether the activity is
+  currently resumed and foreground-interactive, independently
+  of its started state.
+
+- `MusicPlayer.onResume()` / `onPause()` — synchronize the
+  service's activity-foreground state with the activity lifecycle.
+
+- `MusicPlayer.resumeIfPausedAndFocused()` — checks the resumed
+  state before allowing activity-originated playback resumption.
+
+- `MusicPlayer.handleObservedMusicVolumeChange()` — detects
+  actual music-volume changes before invoking the maximum-volume
+  resume handler.
 
 ## [1.5.2] - Nov 17, 2026
 
