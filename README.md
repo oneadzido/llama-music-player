@@ -356,7 +356,7 @@ the experience.
 
 Licensed under the MIT License.
 
-Copyright (c) 2026 Richard Korbla Adzido.
+Copyright (C) 2026 Richard Korbla Adzido.
 
 ---
 
