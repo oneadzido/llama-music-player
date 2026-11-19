@@ -4,19 +4,36 @@ A privacy-respecting Android music player with a custom playback
 engine, a sixty-preset equalizer, metadata editing, playback
 scoping, and sixteen languages.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Android](https://img.shields.io/badge/Android-6.0%2B-brightgreen.svg)](https://developer.android.com)
-[![Privacy](https://img.shields.io/badge/Privacy-Policy-blue.svg)](PRIVACY.md)
+[[License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[[Android](https://img.shields.io/badge/Android-6.0%2B-brightgreen.svg)](https://developer.android.com)
+[[Privacy](https://img.shields.io/badge/Privacy-Policy-blue.svg)](PRIVACY.md)
 
-[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.5.5.apk)
+[[Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.5.6.apk)
 
-[![Build](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml/badge.svg)](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml)
+[[Build](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml/badge.svg)](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml)
 
 ---
 
 ## Latest Release
 
-### v1.5.5
+### v1.5.6
+
+Version 1.5.6 fixes a stale-target end-of-song deadlock after a
+playback rebuild while playing, and makes the playlist re-evaluate
+its displayed list when a song is tapped.
+
+- Fixed: playback no longer stalls silent at end-of-song in the
+  `PLAYING` state after a scope, favorite, sort, or playlist
+  rebuild while playing; a stale target no longer suppresses
+  natural completion.
+- Fixed: tapping a song in the playlist now refreshes the displayed
+  list before highlighting, so songs that no longer belong are
+  evicted and the tapped song is highlighted only from the fresh
+  list.
+- Preserved: scope matching, repeat, shuffle, sort, search,
+  favorite persistence, and click debounce behavior.
+
+### Previous release: v1.5.5
 
 Version 1.5.5 adds greenrobot attribution to the Credits dialog,
 migrates all license texts to `assets/licenses`, and fixes natural
@@ -28,56 +45,6 @@ completion after a scope change back to All Songs.
   scope change back to All Songs, for example from Favorites.
 - Preserved: existing jaudiotagger and FontAwesome credits and
   license viewer behavior.
-
-### Previous release: v1.5.4
-
-Version 1.5.4 improves playback-scope matching across Android storage
-path representations, enforces the selected scope across manual and
-automatic playback navigation, and corrects metadata refresh propagation
-across the service, player screen, and playlist display.
-
-Playback-scope comparisons now normalize path separators, redundant
-path segments, and common aliases for primary shared storage before
-matching loose tracks and selected folders. Folder matching retains
-path-boundary checks so similarly named sibling folders are not
-mistakenly included. When a scope excludes the current song, playback
-moves to an eligible song if one remains. An empty scope stops and releases
-the player, clears current and pending song state, and enters a genuine
-no-song state; an excluded song cannot continue playing beneath placeholder
-metadata. In-flight prepares targeting excluded songs are invalidated, and
-stale scope broadcasts cannot overwrite a newer player display. When a
-later scope contains songs again, the last song from before the empty state
-is restored if eligible; otherwise the first song in the new scope is
-loaded.
-
-Metadata refresh now preserves unchanged raw metadata values, allows
-explicitly cleared text fields to remain empty, and retains unrelated
-song state such as favorites and duration. Artwork caches are invalidated
-only when artwork is actually changed or removed. The player screen
-refreshes the current song's displayed title and artist, while the
-playlist updates only the affected row and safely refreshes its playing
-indicator.
-
-- Fixed: loose-track and selected-folder scope matching when Android
-  storage paths use equivalent but differently written path forms.
-- Improved: path normalization for separators, `.` / `..` segments, and
-  common primary shared-storage aliases.
-- Fixed: manual Next and Previous, automatic completion, and failure
-  recovery now select destinations only from the active playback scope.
-- Fixed: shuffle history and carousel-neighbour previews remain within
-  the selected scope; retained current/pending songs cannot leak into
-  later navigation when they are outside that scope.
-- Fixed: repeat one no longer keeps repeating a song excluded by a newly
-  applied scope.
-- Fixed: metadata refresh no longer replaces unchanged fields with
-  display placeholders or discards unrelated song state.
-- Fixed: explicitly empty metadata values remain valid clear operations.
-- Improved: artwork cache invalidation and replacement are limited to
-  actual artwork changes.
-- Fixed: current-song title and artist refresh immediately after metadata
-  edits; playlist updates remain limited to the affected row.
-- Preserved: playback queue ownership, transition behavior, favorite
-  persistence, and normal background playback behavior.
 
 ---
 

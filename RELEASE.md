@@ -1,14 +1,14 @@
-# Llama Music Player v1.5.5
+# Llama Music Player v1.5.6
 
 **Release date:** November 19, 2026
 
-Version 1.5.5 adds greenrobot attribution to the Credits dialog,
-migrates all license texts to `assets/licenses`, and fixes natural
-completion after a scope change back to All Songs.
+Version 1.5.6 fixes a stale-target end-of-song deadlock after a
+playback rebuild while playing, and makes the playlist re-evaluate
+its displayed list when a song is tapped.
 
 Llama Music Player itself remains licensed under the MIT License.
 
-For the full change history, see the `[1.5.5]` entry in the
+For the full change history, see the `[1.5.6]` entry in the
 [CHANGELOG](CHANGELOG.md). For technical specifications, installation,
 and usage, see the [README](README.md).
 
@@ -16,49 +16,44 @@ and usage, see the [README](README.md).
 
 ## What's in this release
 
-### greenrobot attribution
+### Fixed: stale-target end-of-song deadlock
 
-The Credits dialog now lists **greenrobot** alongside
-jaudiotagger and FontAwesome. It uses the existing clickable
-library-credit row.
+After a scope, favorite, sort, or `setPlaylist()` rebuild while
+`PLAYING`, a stale `mTargetIndex` could suppress `onCompletion()`,
+leaving playback stuck silent at end-of-song in the `PLAYING`
+state. The health check could not save it, because the position
+was already at the duration.
 
-Tapping the `greenrobot` clickable text displays:
+A handoff is now only real while `PREPARING`. While `PLAYING`, the
+target must equal the current song, and `onCompletion()` never
+suppresses completion for a stale target. `onCompletion()` aligns
+a stale target to the current song before resolving the next song,
+`applyPlaybackScopeInternal()` and
+`reconcilePlaybackAfterScopeChange()` align a stale target while
+`PLAYING`, and `onCompletion()` uses the new `scopeEmpty()` helper
+to enter the no-song state when the scope has no eligible songs.
 
-  > greenrobot
-  >
-  > Copyright (C) 2012-2021 Markus Junginger, greenrobot (https://greenrobot.org)
-  >
-  > Licensed under the Apache License, Version 2.0 (the "License");
-  > you may not use this file except in compliance with the License.
-  > You may obtain a copy of the License at:
-  >
-  >  https://www.apache.org/licenses/LICENSE-2.0
-  >
-  > Unless required by applicable law or agreed to in writing, software
-  > distributed under the License is distributed on an "AS IS" BASIS,
-  > WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  > See the License for the specific language governing permissions and
-  > limitations under the License.
-  >
-  > greenrobot is used for in-process event delivery between application components in Llama Music Player.
+### Fixed: playlist refresh on song tap
 
-The full Apache License 2.0 text is included in the source
-for reference.
+`PlaylistActivity` now refreshes its displayed list on a song tap,
+before highlighting the tapped row. The refresh re-reads the
+service's current playlist after the service's `rebuildPlaylists()`
+on commit, so it evaluates whether each song still belongs to the
+current displayed list.
 
-### Licenses in assets/licenses
-
-All license texts are now stored under
-`app/src/main/assets/licenses/`.
-
-### Fixed: completion after a scope change to All Songs
-
-After changing the scope back to All Songs — for example, from
-Favorites — playback now advances correctly when the current song
-completes naturally. The next song is chosen from the new scope.
+Songs no longer in scope and no longer current/target are evicted.
+The tapped song survives as the grace-period current/target when it
+committed, even if it is out of scope. A tapped song that never
+became current is not highlighted as playing.
+`onUpdatePlayerEvent()` refreshes again when the playing song is
+not in the displayed list, covering a prepare that commits after
+the tap's own refresh. No new service evaluation logic was added
+for this refresh; the mechanism already existed in the service.
 
 ### Existing behavior preserved
 
-The existing jaudiotagger and FontAwesome credits and license
-texts remain unchanged. The dialog's theme and language picker
-handling, dismissal behavior, click debounce and animation, and
-all event-delivery code remain untouched.
+Scope matching, repeat, shuffle, sort, search, favorite
+persistence, and click debounce behavior are unchanged. Playlist
+refresh remains suppressed during genre loading and user scrolling,
+as before. No event delivery, dependency version, dialog lifecycle,
+or animation changes were made.

@@ -237,6 +237,22 @@ position was resolved against the old scope.
 songs aligned with the new scope before completion runs, so the completion
 path never reads a stale index.
 
+The two-index model carries one invariant the completion path depends
+on: a handoff is only real while `PREPARING`. While `PLAYING`, the
+target must equal the current song. The reason is that `onCompletion()`
+fires only once. If it returns for a stale target, playback sits silent
+at end-of-song in `PLAYING`, with the position already at the duration,
+and the health check cannot save it — there is no stall left to detect,
+only a finished song that will never fire again. Any rebuild while
+`PLAYING` — a scope, favorite, sort, or `setPlaylist()` rebuild — can
+leave `mTargetIndex` pointing at an old-scope or grace-period song, so
+the invariant is re-established, not assumed. `applyPlaybackScopeInternal()`
+and `reconcilePlaybackAfterScopeChange()` align a stale target to the
+current song while `PLAYING`, and `onCompletion()` itself aligns a
+stale target before resolving the next song and never suppresses
+completion for one. `onCompletion()` also uses the `scopeEmpty()`
+helper to enter the no-song state when the scope has no eligible songs.
+
 The carousel's previous/next neighbour preview uses the same scoped
 candidate set. Shuffle preview and commit share the same memoised choice,
 and the shuffle history stores and returns only scoped destinations.
@@ -567,6 +583,22 @@ the batch. The header reads `SORT MODE [TITLE A-Z]` or
 `SORTIEREN [TITEL A-Z]` or `СОРТИРОВКА [НАЗВАНИЕ А-Я]`, because the
 label after the bracket comes from a resource and the space between
 the two halves of the phrase is supplied by a Java-side constant.
+
+A tap on a playlist row does not highlight from the stale displayed
+list. The tap sends `PLAY_SONG`, then the activity refreshes first —
+`refreshPlaylistFromService()` in the delayed block, before it computes
+the highlight — re-reading the service's current playlist after the
+service's `rebuildPlaylists()` on commit. The refresh is the evaluation:
+songs no longer in scope and no longer current/target are evicted, the
+tapped song survives as the grace-period current/target when it
+committed even if it is out of scope, and a tapped song that never
+became current is not highlighted as playing. If the prepare commits
+after the tap's own refresh, the `UPDATE_PLAYER` broadcast does the
+same work again: `onUpdatePlayerEvent()` refreshes when the playing
+song is not in the displayed list, then highlights from the fresh
+list. The refresh still respects the genre-loading and scrolling
+suppression, and it adds no new evaluation to the service — the
+service already rebuilt; the activity only asks for the result.
 
 `EqualizerActivity` is the equalizer — ten bands and sixty presets,
 with every seek bar snapping to a step under a guard flag so a
