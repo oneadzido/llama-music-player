@@ -4,19 +4,32 @@ A privacy-respecting Android music player with a custom playback
 engine, a sixty-preset equalizer, metadata editing, playback
 scoping, and sixteen languages.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Android](https://img.shields.io/badge/Android-6.0%2B-brightgreen.svg)](https://developer.android.com)
-[![Privacy](https://img.shields.io/badge/Privacy-Policy-blue.svg)](PRIVACY.md)
+[[License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[[Android](https://img.shields.io/badge/Android-6.0%2B-brightgreen.svg)](https://developer.android.com)
+[[Privacy](https://img.shields.io/badge/Privacy-Policy-blue.svg)](PRIVACY.md)
 
-[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.5.4.apk)
+[[Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.5.5.apk)
 
-[![Build](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml/badge.svg)](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml)
+[[Build](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml/badge.svg)](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml)
 
 ---
 
 ## Latest Release
 
-### v1.5.4
+### v1.5.5
+
+Version 1.5.5 adds greenrobot attribution to the Credits dialog,
+migrates all license texts to `assets/licenses`, and fixes natural
+completion after a scope change back to All Songs.
+
+- Added: greenrobot credit with upstream copyright attribution.
+- Added: all license texts under `app/src/main/assets/licenses/`.
+- Fixed: playback now transitions at natural completion after a
+  scope change back to All Songs, for example from Favorites.
+- Preserved: existing jaudiotagger and FontAwesome credits and
+  license viewer behavior.
+
+### Previous release: v1.5.4
 
 Version 1.5.4 improves playback-scope matching across Android storage
 path representations, enforces the selected scope across manual and
@@ -367,7 +380,8 @@ the experience.
 ## Credits
 
 - jaudiotagger by jthink Ltd
-- Font Awesome by Fonticons, Inc.
+- FontAwesome by Fonticons, Inc.
+- greenrobot EventBus by Markus Junginger and greenrobot (Apache License 2.0)
 
 ---
 

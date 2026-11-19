@@ -227,6 +227,16 @@ prepare-failure recovery, player-error recovery, or stall recovery.
 and map the selected `Song` back to its current-playlist index, preserving
 the state machine's existing index model and transition owner.
 
+Natural completion is also a scoped destination. `onCompletion()`
+resolves the next song from `mScopedPlaylist`, not from the
+grace-period-extended `mCurrentPlaylist`. A scope change that returns
+to All Songs — for example, from Favorites — therefore advances into
+All Songs on completion, rather than stalling because the completed song's
+position was resolved against the old scope.
+`reconcilePlaybackAfterScopeChange()` keeps the current and pending
+songs aligned with the new scope before completion runs, so the completion
+path never reads a stale index.
+
 The carousel's previous/next neighbour preview uses the same scoped
 candidate set. Shuffle preview and commit share the same memoised choice,
 and the shuffle history stores and returns only scoped destinations.

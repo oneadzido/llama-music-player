@@ -5,6 +5,57 @@ All notable changes to Llama Music Player are documented in this file.
 Current technical specifications, installation, and usage are
 documented in the [README](README.md).
 
+## [1.5.5] - Nov 19, 2026
+
+### Overview
+
+Version 1.5.5 adds greenrobot attribution to the Credits dialog,
+migrates all license texts to `assets/licenses`, and fixes natural
+completion after a scope change back to All Songs.
+
+### Added
+
+- **greenrobot attribution.** The Credits dialog now lists
+  `greenrobot` alongside jaudiotagger and FontAwesome, using the
+  same clickable library-credit row.
+- **greenrobot clickable text.** Tapping the `greenrobot` clickable text displays:
+
+  > greenrobot
+  >
+  > Copyright (C) 2012-2021 Markus Junginger, greenrobot (https://greenrobot.org)
+  >
+  > Licensed under the Apache License, Version 2.0.
+  >
+  > This license is available at:
+  > https://www.apache.org/licenses/LICENSE-2.0
+  >
+  > greenrobot EventBus is used for in-process event delivery between application
+  > components in Llama Music Player.
+
+  The full Apache License 2.0 text is included in the source for reference.
+- **Licenses migrated to `assets/licenses`.** All license texts now
+  live under `app/src/main/assets/licenses/`.
+
+### Fixed
+
+- **Completion after a scope change back to All Songs.** After a scope
+  change from, for example, Favorites back to All Songs, playback now
+  transitions when the current song completes naturally. Previously,
+  it could fail to advance when the completed song's position was
+  resolved against the old scope. `onCompletion()` now resolves the
+  next song from `mScopedPlaylist`, and
+  `reconcilePlaybackAfterScopeChange()` keeps the current and pending
+  songs aligned with the new scope.
+
+### Preserved
+
+- The existing jaudiotagger and FontAwesome entries and license texts
+  remain unchanged.
+- The application's MIT license remains the license for Llama Music
+  Player itself; the Apache license applies to greenrobot EventBus.
+- No event delivery, dependency version, dialog lifecycle, click
+  debounce, or animation changes.
+
 ## [1.5.4] - Nov 19, 2026
 
 ### Overview
