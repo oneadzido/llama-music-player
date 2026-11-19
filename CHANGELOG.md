@@ -10,9 +10,10 @@ documented in the [README](README.md).
 ### Overview
 
 Version 1.5.4 addresses playback-scope matching when Android exposes the
-same shared-storage location through different path spellings, and
-improves metadata refresh consistency across the service, player screen,
-and playlist display.
+same shared-storage location through different path spellings, enforces
+the selected scope across manual and automatic navigation, and improves
+metadata refresh consistency across the service, player screen, and
+playlist display.
 
 ### Fixed
 
@@ -23,6 +24,28 @@ and playlist display.
   normalized before comparison. Folder matches retain an explicit path
   boundary, preventing a folder such as `Music` from matching a sibling
   such as `Music2`.
+- **Scope-safe manual navigation.** Next and Previous now select only
+  songs in the active scope, including when the current or pending song
+  is temporarily retained outside it.
+- **Scope-safe recovery and shuffle history.** Prepare failures, player
+  errors, and stall recovery advance within the active scope. Shuffle
+  previews, forward picks, and backward history are also restricted to
+  scoped songs.
+- **No-song-in-scope state.** Applying a scope with no eligible songs
+  now stops and releases playback, clears the active and pending song
+  indices, empties the transitional current playlist, clears artwork and
+  notification state, and publishes a genuine idle/no-song state. The
+  excluded song can no longer continue playing beneath placeholder
+  metadata.
+- **Scope-change reconciliation.** If the current song is excluded but
+  eligible songs remain, playback transitions to an eligible song. An
+  in-flight prepare whose target becomes excluded is invalidated before
+  a valid replacement is prepared. Favorite changes that remove the
+  current song from a Favorites scope use the same reconciliation.
+- **Repeat-one after a scope change.** Repeat one continues to repeat a
+  current song while it belongs to the active scope. An excluded current
+  song is replaced by an eligible song, or playback enters the no-song
+  state when the scope has no eligible songs.
 - **Metadata preservation during partial updates.** Unchanged fields are
   preserved from raw song values instead of being replaced with
   localized display placeholders.
@@ -60,6 +83,19 @@ and playlist display.
 - `MusicService.refreshMetadataForSong()` — applies metadata to matching
   full/current playlist entries, persists the resulting song state, and
   updates artwork caches only for actual artwork changes.
+- `MusicService.computeNext()` / `computePrevious()` — resolve manual
+  navigation and recovery destinations through `mScopedPlaylist`, then
+  map the selected song back to the state machine's current-playlist
+  index.
+- `MusicService.peekNextIndex()` / `peekPreviousIndex()` — keep carousel
+  neighbour previews consistent with scope-aware navigation, including
+  shuffle previews and shuffle history.
+- `MusicService.reconcilePlaybackAfterScopeChange()` — stops and clears
+  playback for an empty scope, replaces an excluded current song when
+  eligible songs remain, and invalidates an out-of-scope in-flight prepare.
+- `MusicPlayer.onUpdatePlayerEvent()` — rejects stale generations before
+  applying the empty-scope UI, preventing delayed broadcasts from clearing
+  a newer scope's display.
 - `MusicPlayer.onMetadataUpdatedEvent()` — refreshes the library cache,
   conditionally invalidates artwork, and refreshes the current song's
   displayed title and artist.
@@ -69,8 +105,12 @@ and playlist display.
 ### Preserved
 
 - The service remains the owner of playback scope and playback state.
-- Existing queue ownership, queue order, and track-transition behavior
-  are unchanged by the metadata refresh work.
+- The current and pending songs may remain in the active queue only
+  while a valid in-scope transition is being completed. An empty scope
+  clears the active queue and stops playback; an excluded current song
+  cannot remain active beneath an empty player display.
+- Existing queue ownership and track-transition behavior remain owned by
+  the service state machine.
 - Favorite persistence remains separate from metadata editing.
 - Background playback and external playback controls remain supported.
 

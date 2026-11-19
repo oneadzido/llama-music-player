@@ -19,14 +19,20 @@ scoping, and sixteen languages.
 ### v1.5.4
 
 Version 1.5.4 improves playback-scope matching across Android storage
-path representations and corrects metadata refresh propagation across
-the service, player screen, and playlist display.
+path representations, enforces the selected scope across manual and
+automatic playback navigation, and corrects metadata refresh propagation
+across the service, player screen, and playlist display.
 
 Playback-scope comparisons now normalize path separators, redundant
 path segments, and common aliases for primary shared storage before
 matching loose tracks and selected folders. Folder matching retains
 path-boundary checks so similarly named sibling folders are not
-mistakenly included.
+mistakenly included. When a scope excludes the current song, playback
+moves to an eligible song if one remains. An empty scope stops and releases
+the player, clears current and pending song state, and enters a genuine
+no-song state; an excluded song cannot continue playing beneath placeholder
+metadata. In-flight prepares targeting excluded songs are invalidated, and
+stale scope broadcasts cannot overwrite a newer player display.
 
 Metadata refresh now preserves unchanged raw metadata values, allows
 explicitly cleared text fields to remain empty, and retains unrelated
@@ -40,6 +46,13 @@ indicator.
   storage paths use equivalent but differently written path forms.
 - Improved: path normalization for separators, `.` / `..` segments, and
   common primary shared-storage aliases.
+- Fixed: manual Next and Previous, automatic completion, and failure
+  recovery now select destinations only from the active playback scope.
+- Fixed: shuffle history and carousel-neighbour previews remain within
+  the selected scope; retained current/pending songs cannot leak into
+  later navigation when they are outside that scope.
+- Fixed: repeat one no longer keeps repeating a song excluded by a newly
+  applied scope.
 - Fixed: metadata refresh no longer replaces unchanged fields with
   display placeholders or discards unrelated song state.
 - Fixed: explicitly empty metadata values remain valid clear operations.
@@ -111,11 +124,16 @@ Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
   regardless of scope. The dialog's title uses logical layout margins
   to guarantee exactly 8dp of space from the CANCEL and APPLY buttons
   in every locale.
-- **Scope-aware song completion:** When the current song ends, the
-  next song is chosen from the active scope, not from the
-  grace-period-extended current playlist. A scope change mid-song
-  advances into the new scope under repeat off and shuffle, and wraps
-  to the new scope's first song under repeat all. A scope that
+- **Scope-aware playback navigation:** Manual Next and Previous,
+  automatic song completion, prepare-failure recovery, player-error
+  recovery, and playback-stall recovery all choose destinations from
+  the active scope, not from the grace-period-extended current playlist.
+  Carousel-neighbour previews and shuffle history use the same scoped
+  candidates. A current or pending song retained outside a newly applied
+  scope can finish its in-flight role, but cannot become a later
+  navigation destination. A scope change mid-song advances into the new
+  scope on completion under repeat off and shuffle, and wraps to the
+  new scope's first song under repeat all. A scope that
   contains no songs — All Songs on an empty library, Favorites with
   none marked, or a specific-artists scope with no artists checked —
   pauses at the end of the current song rather than looping the

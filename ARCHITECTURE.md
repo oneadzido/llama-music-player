@@ -209,13 +209,40 @@ the selected scope through `OnScopeAppliedListener`, and
 `FolderManager` broadcasts it under `APPLY_PLAYBACK_SCOPE`. The
 service is the single writer of the active scope.
 
-Song completion is evaluated against `mScopedPlaylist`, not the
-grace-period-extended `mCurrentPlaylist`. The grace-period entries keep
-the current and pending songs alive while a scope changes; they do not
-become candidates for the next completed-song selection. Repeat off
-advances within the scope and pauses when the scope is empty or the
-current song is its final entry. Repeat all wraps within the scope,
-shuffle selects from it, and repeat one continues the current song.
+Every playback destination is evaluated against `mScopedPlaylist`, not
+the grace-period-extended `mCurrentPlaylist`. The grace-period entries
+keep the current and pending songs alive while a scope changes; they do
+not become candidates for manual Next or Previous, automatic completion,
+prepare-failure recovery, player-error recovery, or stall recovery.
+`computeNext()` and `computePrevious()` resolve a path in the scoped list
+and map the selected `Song` back to its current-playlist index, preserving
+the state machine's existing index model and transition owner.
+
+The carousel's previous/next neighbour preview uses the same scoped
+candidate set. Shuffle preview and commit share the same memoised choice,
+and the shuffle history stores and returns only scoped destinations.
+When a scope change leaves the current song outside the new scope, forward
+navigation enters the first scoped song and backward navigation enters
+the last scoped song; the out-of-scope grace-period entry cannot leak into
+subsequent navigation. Repeat off advances within the scope and pauses
+when the current song is its final entry. An empty scope stops playback
+and clears the current queue rather than pausing an excluded song. Repeat
+all wraps within the scope, shuffle selects from it, and repeat one
+continues the current song only while that song belongs to the active
+scope. If it does not, completion or manual navigation enters the new
+scope instead of repeating the excluded song. Applying an empty scope is
+a stronger state transition: `MusicService.reconcilePlaybackAfterScopeChange()`
+releases the player, clears current and target indices, empties the
+transitional current playlist, clears playback artwork and notification
+state, and publishes IDLE with a zero scoped-song count. The UI's no-song
+state therefore corresponds to actual service silence, not placeholder
+labels over a still-playing excluded track. If the new scope has eligible
+songs, an excluded current song is replaced by a scoped song; an in-flight
+prepare targeting an excluded song is invalidated before it can commit.
+Favorite changes that remove the current song from a Favorites scope use
+the same reconciliation. Scope-only broadcasts receive a newer generation
+when no prepare is in flight, so delayed updates cannot overwrite a newer
+display.
 
 The heart also owns the audio-focus record. A loss that interrupts a
 live transition is written once, as an `Interruption`, and a
