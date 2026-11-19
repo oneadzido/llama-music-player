@@ -1,6 +1,6 @@
 # Privacy Policy for Llama Music Player
 
-**Last Updated:** November 15, 2026
+**Last Updated:** November 19, 2026
 
 ---
 
@@ -40,16 +40,16 @@ not by Llama Music Player, and follows the backup settings you choose.
 The app stores the following information locally:
 
 - **Song metadata and favorites** (title, artist, album, genre, and
-  favorite state) — stored in the local SQLite database
-- **Album artwork** — cached in memory for efficient display; embedded
+  favorite state) - stored in the local SQLite database
+- **Album artwork** - cached in memory for efficient display; embedded
   artwork edits are written to the selected audio file
-- **Equalizer preferences** — stored in SharedPreferences
+- **Equalizer preferences** - stored in SharedPreferences
 - **Playback state** (current track, position, repeat and shuffle
-  settings) — stored in SharedPreferences
-- **Playback scope** — the selected mode and filter values are stored
+  settings) - stored in SharedPreferences
+- **Playback scope** - the selected mode and filter values are stored
   in SharedPreferences
-- **Selected music folders** — stored in SharedPreferences
-- **Theme and language preferences** — stored in SharedPreferences
+- **Selected music folders** - stored in SharedPreferences
+- **Theme and language preferences** - stored in SharedPreferences
 
 The sixteen languages the app ships are resource folders bundled in
 the APK. No translation service, API key, or network call is
@@ -57,9 +57,9 @@ involved. Selecting a language changes the display strings on your
 device; it does not tell anyone anything about you.
 
 The app's own components communicate with each other through
-in-process events delivered by a small on-device event bus. These
+in-process events delivered by greenrobot. These
 events carry the same information a broadcast receiver would have
-carried — a song title, a playback position, a UI state — and they
+carried - a song title, a playback position, a UI state - and they
 never leave the app's process. No event is sent over the network,
 and no event is logged to a remote service.
 
@@ -71,23 +71,23 @@ Llama Music Player declares only the permissions used by its music
 library, playback, and audio features. Android presents runtime
 permission requests when the related feature needs access:
 
-- **Music library access** — `READ_MEDIA_AUDIO` on Android 13 and
+- **Music library access** - `READ_MEDIA_AUDIO` on Android 13 and
   later, or `READ_EXTERNAL_STORAGE` on earlier supported versions.
-- **Notifications** — `POST_NOTIFICATIONS` on Android 13 and later,
+- **Notifications** - `POST_NOTIFICATIONS` on Android 13 and later,
   so playback and library notifications can appear in the shade.
-- **Bluetooth** — `BLUETOOTH_CONNECT` on Android 12 and later for
+- **Bluetooth** - `BLUETOOTH_CONNECT` on Android 12 and later for
   headset connection state and media-button routing.
-- **Album artwork** — `READ_MEDIA_IMAGES` on Android 13 and later, or
+- **Album artwork** - `READ_MEDIA_IMAGES` on Android 13 and later, or
   `READ_EXTERNAL_STORAGE` on earlier supported versions, is requested
   by the Metadata Editor when the user selects artwork, not as part
   of the initial library permission flow.
-- **Audio and playback** — `MODIFY_AUDIO_SETTINGS` and `WAKE_LOCK`
+- **Audio and playback** - `MODIFY_AUDIO_SETTINGS` and `WAKE_LOCK`
   support audio effects and sustained playback.
   `FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_MEDIA_PLAYBACK` are
   declared in the manifest; Android grants the media-playback
   service-type permission at install time rather than presenting it
   as a runtime prompt.
-- **Battery optimization** — when the user chooses uninterrupted
+- **Battery optimization** - when the user chooses uninterrupted
   playback support, the app opens Android's system settings for the
   battery-optimization exemption. The choice is managed by Android.
 
@@ -103,13 +103,13 @@ or tracking services**.
 
 The app uses three open-source libraries:
 
-- **jaudiotagger** — for reading and writing ID3 metadata tags
-- **FontAwesome** — for vector icon rendering
-- **greenrobot EventBus** — for delivering in-process events between
+- **jaudiotagger** - for reading and writing ID3 metadata tags
+- **FontAwesome** - for vector icon rendering
+- **greenrobot** - for delivering in-process events between
   the app's own components
 
 All three libraries operate entirely on your device and do not
-transmit any data. EventBus dispatches events in memory, inside the
+transmit any data. greenrobot dispatches events in memory, inside the
 app's own process; it has no network capability and is not
 configured to use one.
 

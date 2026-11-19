@@ -24,13 +24,19 @@ completion after a scope change back to All Songs.
   >
   > Copyright (C) 2012-2021 Markus Junginger, greenrobot (https://greenrobot.org)
   >
-  > Licensed under the Apache License, Version 2.0.
+  > Licensed under the Apache License, Version 2.0 (the "License");
+  > you may not use this file except in compliance with the License.
+  > You may obtain a copy of the License at:
   >
-  > This license is available at:
-  > https://www.apache.org/licenses/LICENSE-2.0
+  >  https://www.apache.org/licenses/LICENSE-2.0
   >
-  > greenrobot EventBus is used for in-process event delivery between application
-  > components in Llama Music Player.
+  > Unless required by applicable law or agreed to in writing, software
+  > distributed under the License is distributed on an "AS IS" BASIS,
+  > WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  > See the License for the specific language governing permissions and
+  > limitations under the License.
+  >
+  > greenrobot is used for in-process event delivery between application components in Llama Music Player.
 
   The full Apache License 2.0 text is included in the source for reference.
 - **Licenses migrated to `assets/licenses`.** All license texts now
@@ -52,7 +58,7 @@ completion after a scope change back to All Songs.
 - The existing jaudiotagger and FontAwesome entries and license texts
   remain unchanged.
 - The application's MIT license remains the license for Llama Music
-  Player itself; the Apache license applies to greenrobot EventBus.
+  Player itself; the Apache license applies to greenrobot.
 - No event delivery, dependency version, dialog lifecycle, click
   debounce, or animation changes.
 

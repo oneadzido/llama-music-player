@@ -40,7 +40,7 @@ same shape it has in every other class. The role determines the shape,
 not the class. Every singleton with no construction-time side effects
 uses the same double-checked locking pattern. Every safely-suffixed
 helper takes a nullable parameter, returns early on null, catches
-`Exception`, and writes the reason in a comment. Every EventBus
+`Exception`, and writes the reason in a comment. Every greenrobot
 subscriber uses the default `ThreadMode.POSTING` and expects to run
 on the main thread.
 
@@ -363,7 +363,9 @@ the senders and the subscribers. It is the trunk those signals
 travel along: registered once at process start, one receiver per
 stem, one typed event on the way out, one subscriber per event on
 the way back. Every in-process broadcast the app uses goes through
-it, so no class needs to know where the other classes are.
+it, so no class needs to know where the other classes are. In-process
+event delivery is provided by greenrobot, delivered through
+`BroadcastTranslator`.
 
 `NavigationController` is the peripheral nerves. Where the spinal
 cord carries every signal along a shared trunk, a peripheral nerve

@@ -307,7 +307,7 @@ Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
 - **Readable audio formats:** MP3, FLAC, OGG, M4A, AAC, WAV
 - **Writable audio formats:** MP3, FLAC, OGG, M4A, MP4
 - **Icons:** FontAwesome 6 (Free Solid)
-- **In-process events:** greenrobot EventBus 3.3.1, delivered by `BroadcastTranslator`
+- **In-process events:** greenrobot, delivered by `BroadcastTranslator`
 
 ---
 
@@ -381,7 +381,7 @@ the experience.
 
 - jaudiotagger by jthink Ltd
 - FontAwesome by Fonticons, Inc.
-- greenrobot EventBus by Markus Junginger and greenrobot (Apache License 2.0)
+- greenrobot by Markus Junginger and greenrobot (Apache License 2.0)
 
 ---
 

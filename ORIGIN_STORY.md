@@ -32,7 +32,7 @@ This is how it happened.
 
 ### Part One: The Seed
 
-I heard stories about the people who built software — the developers
+I heard stories about the people who built software - the developers
 who could make machines do anything. I wondered: *why are they called
 developers? What does it mean to develop?*
 
@@ -40,12 +40,12 @@ In school I played Road Rash and Need For Speed SE II on the desktop
 and wondered how those games were made. The question stayed with me.
 It grew roots.
 
-I loved music, too — not just listening to it, but feeling it. AIMP
+I loved music, too - not just listening to it, but feeling it. AIMP
 was the player I used for years. I would download the latest version
 and new skins, watch how the player behaved, and take mental notes.
 I used VLC as well. Both served me well.
 
-But something was missing. I wanted to build a music player myself —
+But something was missing. I wanted to build a music player myself -
 not to replace them, but to offer something new. An alternative. A
 player that just plays music, with metadata editing features, because
 updating metadata for my local files is something I enjoy doing.
@@ -68,7 +68,7 @@ learn by finding out why you failed. I read every guide I could find
 on how to develop a music player. I did not have what it took to
 start, but I had one belief: *I could bring Llama to life.*
 
-The first version was a WebView app — a browser window wrapped in an
+The first version was a WebView app - a browser window wrapped in an
 APK. Crude and simple, but it played music. It had the basic features
 of adding songs and clearing them. And something about the sound
 quality attracted me to it: it sounded louder than AIMP through my
@@ -115,7 +115,7 @@ partnership deepened.
 
 I named the app `Llama Music Player` because of how it was developed.
 
-**LLaMA** stands for **Large Language Meta AI** — the name Meta gave
+**LLaMA** stands for **Large Language Meta AI** - the name Meta gave
 to their AI. But that was not the full story. I also told the AI that
 the app could be compared to a real llama, an animal known for being
 calm and sociable.
@@ -150,47 +150,48 @@ practices for Android.
 The architecture mirrors a living organism. Every class is a part of
 the body, and every part has a job it does and no other.
 
-- **The heart** — `MusicService` pumps the audio. `PlaybackWindow` is
+- **The heart** - `MusicService` pumps the audio. `PlaybackWindow` is
   the blood, carrying the current transition to every surface.
   `AlbumArtCarousel` is the pulse, showing the transition on the album
   art.
-- **The lungs** — `PlaylistManager` breathes life into the playlist.
-- **The nervous system** — `MusicPlayer` is the brain, the main
+- **The lungs** - `PlaylistManager` breathes life into the playlist.
+- **The nervous system** - `MusicPlayer` is the brain, the main
   surface the user sees. `BroadcastTranslator` is the spinal cord,
   the central pathway every in-process signal travels through, so a
   signal that begins anywhere in the body reaches the brain and the
   peripheral nerves without any one part having to know where the
-  others are. `NavigationController` is the peripheral nerves,
+  others are. In-process event delivery is provided by greenrobot,
+  delivered through `BroadcastTranslator`. `NavigationController` is the peripheral nerves,
   carrying specific actions out to the specific classes that listen
   for them.
-- **Memory** — `MusicLibrary` is the working memory. `SongDatabase` is
+- **Memory** - `MusicLibrary` is the working memory. `SongDatabase` is
   the long-term memory. `AlbumArtCache` is the visual memory. `Song`
   is a single memory, one song and its facts.
-- **The senses** — `EqualizerManager` shapes the sound.
+- **The senses** - `EqualizerManager` shapes the sound.
   `StorageObserver` listens for changes to the music folder.
   `CharacterMapper` decides what a tag means when it is missing.
-- **The reflex arc** — `BluetoothReceiver` reacts to a headset
+- **The reflex arc** - `BluetoothReceiver` reacts to a headset
   connecting or disconnecting.
-- **The hands** — `MetadataEditor` lets the user modify ID3 tags.
+- **The hands** - `MetadataEditor` lets the user modify ID3 tags.
   `MetadataReader` pulls tags out of a file. `MetadataWriter` puts
   tags back without corrupting the file. `StorageAccessHelper` holds
   the permissions that let the hands reach the files.
-- **The voice** — `ToastManager` speaks to the user inside the app.
+- **The voice** - `ToastManager` speaks to the user inside the app.
   `NotificationController` speaks from the notification and the lock
   screen.
-- **The skin** — `ThemeManager` is the current theme. `ThemeHelper`
+- **The skin** - `ThemeManager` is the current theme. `ThemeHelper`
   paints every control.
-- **The organs the user touches** — `PlaylistActivity`,
+- **The organs the user touches** - `PlaylistActivity`,
   `EqualizerActivity`, `FolderManager`.
-- **The face** — `CreditsDialog`, `LanguageDialog`, `PresetDialog`,
+- **The face** - `CreditsDialog`, `LanguageDialog`, `PresetDialog`,
   `ThemeDialog`.
-- **The fingers** — `PlaylistAdapter` and `FolderAdapter` render each
+- **The fingers** - `PlaylistAdapter` and `FolderAdapter` render each
   row.
-- **The immune system** — `PermissionChecker` decides what the app is
+- **The immune system** - `PermissionChecker` decides what the app is
   allowed to touch.
-- **The skeleton** — `FontAwesome` is the alphabet of shapes.
+- **The skeleton** - `FontAwesome` is the alphabet of shapes.
   `LanguageManager` is the tongue.
-- **The eyelid** — `OverlayManager` dims the view while work is
+- **The eyelid** - `OverlayManager` dims the view while work is
   happening.
 
 Every class has a purpose. I asked the AI to document the codebase so
