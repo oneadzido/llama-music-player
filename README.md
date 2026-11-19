@@ -8,7 +8,7 @@ scoping, and sixteen languages.
 [![Android](https://img.shields.io/badge/Android-6.0%2B-brightgreen.svg)](https://developer.android.com)
 [![Privacy](https://img.shields.io/badge/Privacy-Policy-blue.svg)](PRIVACY.md)
 
-[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.5.3.apk)
+[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.5.4.apk)
 
 [![Build](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml/badge.svg)](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml)
 
@@ -16,37 +16,39 @@ scoping, and sixteen languages.
 
 ## Latest Release
 
-### v1.5.3
+### v1.5.4
 
-Version 1.5.3 improves dialog reliability, activity recreation handling,
-and music-player interface responsiveness. It fixes an issue where
-the Credits dialog's theme and language buttons could become
-unusable after opening and closing their pickers without making a
-selection. The pickers now notify the host through a dedicated
-dismiss callback, allowing the Credits dialog to clear its picker-open
-flags independently of selection handling.
+Version 1.5.4 improves playback-scope matching across Android storage
+path representations and corrects metadata refresh propagation across
+the service, player screen, and playlist display.
 
-This release also improves coordination between dialog dismissal and
-activity recreation during language and theme changes.
-Playback and favorite controls now explicitly refresh their visual
-states after toggle actions, addressing cases where the underlying
-action succeeded but the corresponding icon remained visually
-unchanged.
+Playback-scope comparisons now normalize path separators, redundant
+path segments, and common aliases for primary shared storage before
+matching loose tracks and selected folders. Folder matching retains
+path-boundary checks so similarly named sibling folders are not
+mistakenly included.
 
-Playback resumption initiated by the player screen now also respects
-the activity's foreground state. Volume-triggered and centre-swipe
-playback resumption are restricted to the active, resumed player
-screen, while normal background music playback and playback controls
-from external surfaces remain supported. Music-volume observer
-callbacks also verify that the actual music-stream volume changed
-before checking whether playback should resume.
+Metadata refresh now preserves unchanged raw metadata values, allows
+explicitly cleared text fields to remain empty, and retains unrelated
+song state such as favorites and duration. Artwork caches are invalidated
+only when artwork is actually changed or removed. The player screen
+refreshes the current song's displayed title and artist, while the
+playlist updates only the affected row and safely refreshes its playing
+indicator.
 
-- Fixed: theme and language buttons remain usable after closing pickers without selection.
-- Fixed: play/pause and favorite icons explicitly reflect toggle actions.
-- Improved: activity recreation handling guarded against duplicate requests via the window decor view.
-- Improved: player-screen volume and swipe resume actions require the activity to be resumed and foreground-interactive.
-- Improved: music-volume observer checks actual music-stream volume changes before applying the maximum-volume resume rule.
-- Preserved: background playback and playback resumption through supported external controls.
+- Fixed: loose-track and selected-folder scope matching when Android
+  storage paths use equivalent but differently written path forms.
+- Improved: path normalization for separators, `.` / `..` segments, and
+  common primary shared-storage aliases.
+- Fixed: metadata refresh no longer replaces unchanged fields with
+  display placeholders or discards unrelated song state.
+- Fixed: explicitly empty metadata values remain valid clear operations.
+- Improved: artwork cache invalidation and replacement are limited to
+  actual artwork changes.
+- Fixed: current-song title and artist refresh immediately after metadata
+  edits; playlist updates remain limited to the affected row.
+- Preserved: playback queue ownership, transition behavior, favorite
+  persistence, and normal background playback behavior.
 
 ---
 

@@ -161,6 +161,20 @@ the fresh-row branch of the insert; every other metadata write goes
 through `SongDatabase.updateSongMetadata(Song)`, which deliberately
 omits that column, so a scan cannot clobber a user's favorites.
 
+Metadata editor announcements are consumed independently by
+`MusicService`, `MusicPlayer`, and `PlaylistActivity`. The service applies
+announced fields to matching entries in its full and current playlists.
+For each text field, `null` means unchanged, an empty string means an
+explicit clear, and a non-empty value replaces the stored value. The
+service uses raw song values for fields not present in a partial update,
+so localized display placeholders do not become persisted metadata.
+Artwork follows a separate three-state contract: `null` means unchanged,
+an empty byte array means removed, and non-empty bytes mean replacement.
+The player invalidates its album-art carousel path only when artwork
+actually changes, and refreshes the title and artist when the edited song
+is current. The playlist replaces and notifies only the affected row and
+updates its playing indicator only when that row exists.
+
 The scope itself is `PlaybackScope`: an immutable value with seven
 kinds — All Songs, Favorites, Loose Tracks, Specific Folders,
 Specific Genres, Specific Artists, Specific Albums — and four filter
@@ -168,7 +182,14 @@ sets, of which exactly one is populated for the four filter kinds.
 `matches(Song, Set)` is the only read; it consults
 `CharacterMapper.isUnknownX(String)` so a song whose field is the
 current locale's placeholder is never matched against a stored
-value. A malformed serialized scope deserializes to
+value. Loose-track and selected-folder comparisons pass filesystem
+paths through `PlaybackScope.normalizePath()` first. The normalizer
+standardizes slash direction, removes redundant `.` and `..` segments,
+and maps common primary shared-storage aliases to
+`/storage/emulated/0`. It is lexical only: it does not resolve symbolic
+links or change path case. Folder matching still checks the separator
+boundary after the selected folder, so sibling names with a shared
+prefix are not included. A malformed serialized scope deserializes to
 `PlaybackScope.ALL_SONGS`, so a corrupted preference cannot leave
 the player with a scope that matches nothing. `MusicService` persists
 the active scope under `playback_scope_json` and exposes it through

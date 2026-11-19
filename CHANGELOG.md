@@ -5,6 +5,75 @@ All notable changes to Llama Music Player are documented in this file.
 Current technical specifications, installation, and usage are
 documented in the [README](README.md).
 
+## [1.5.4] - Nov 19, 2026
+
+### Overview
+
+Version 1.5.4 addresses playback-scope matching when Android exposes the
+same shared-storage location through different path spellings, and
+improves metadata refresh consistency across the service, player screen,
+and playlist display.
+
+### Fixed
+
+- **Loose-track playback scope matching.** Loose-track paths are
+  normalized before membership checks so equivalent separator and
+  primary-storage path forms can match consistently.
+- **Selected-folder playback scope matching.** Folder and song paths are
+  normalized before comparison. Folder matches retain an explicit path
+  boundary, preventing a folder such as `Music` from matching a sibling
+  such as `Music2`.
+- **Metadata preservation during partial updates.** Unchanged fields are
+  preserved from raw song values instead of being replaced with
+  localized display placeholders.
+- **Explicit metadata clearing.** Empty strings remain distinct from
+  `null`: an empty string clears a text field, while `null` leaves it
+  unchanged.
+- **Current-song display refresh.** The player screen refreshes the
+  currently playing song's title and artist after metadata updates.
+- **Playlist playing-index safety.** The playing indicator is updated
+  only when the edited song is present in the current display list.
+
+### Improved
+
+- **Filesystem path normalization.** Playback-scope matching normalizes
+  slash direction, redundant `.` and `..` segments, and common aliases
+  for primary shared storage. It is lexical normalization; it does not
+  resolve symbolic links or change path case.
+- **Artwork cache handling.** Artwork caches are invalidated and
+  repopulated only when artwork is changed or removed; a `null` artwork
+  payload means no artwork change, while an empty payload represents
+  removal.
+- **Narrow playlist refresh.** Metadata changes replace and notify only
+  the affected playlist row rather than rebuilding the full display.
+- **Song-state preservation.** Metadata refresh retains favorite state,
+  duration, and unrelated song state.
+
+### Under the Hood
+
+- `PlaybackScope.normalizePath()` — standardizes path separators,
+  removes redundant path segments, and canonicalizes common primary
+  shared-storage aliases for scope comparisons.
+- `PlaybackScope.matches()` — applies normalized paths to loose-track
+  membership and selected-folder matching while retaining folder
+  boundary checks.
+- `MusicService.refreshMetadataForSong()` — applies metadata to matching
+  full/current playlist entries, persists the resulting song state, and
+  updates artwork caches only for actual artwork changes.
+- `MusicPlayer.onMetadataUpdatedEvent()` — refreshes the library cache,
+  conditionally invalidates artwork, and refreshes the current song's
+  displayed title and artist.
+- `PlaylistActivity.onMetadataUpdatedEvent()` — preserves raw unchanged
+  fields and favorite state, then updates only the affected row.
+
+### Preserved
+
+- The service remains the owner of playback scope and playback state.
+- Existing queue ownership, queue order, and track-transition behavior
+  are unchanged by the metadata refresh work.
+- Favorite persistence remains separate from metadata editing.
+- Background playback and external playback controls remain supported.
+
 ## [1.5.3] - Nov 18, 2026
 
 ### Overview
