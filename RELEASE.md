@@ -87,6 +87,14 @@ Favorites scope follow the same rule. Scope publication generations are
 advanced so delayed updates from an older scope cannot overwrite the latest
 player display.
 
+
+When the user leaves an empty scope, the service restores the last song
+that was active before the empty state if that song is included in the new
+scope. If it is not included, the first song in the new scoped playlist is
+loaded instead. The remembered song identity is kept separately from the
+active player state, so it does not undermine the no-song state while the
+scope is empty.
+
 ### Player and playlist displays refresh narrowly
 
 When the edited song is currently playing, the player screen refreshes

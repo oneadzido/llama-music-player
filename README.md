@@ -32,7 +32,10 @@ moves to an eligible song if one remains. An empty scope stops and releases
 the player, clears current and pending song state, and enters a genuine
 no-song state; an excluded song cannot continue playing beneath placeholder
 metadata. In-flight prepares targeting excluded songs are invalidated, and
-stale scope broadcasts cannot overwrite a newer player display.
+stale scope broadcasts cannot overwrite a newer player display. When a
+later scope contains songs again, the last song from before the empty state
+is restored if eligible; otherwise the first song in the new scope is
+loaded.
 
 Metadata refresh now preserves unchanged raw metadata values, allows
 explicitly cleared text fields to remain empty, and retains unrelated

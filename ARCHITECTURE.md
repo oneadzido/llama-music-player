@@ -72,6 +72,15 @@ transition-related value. State mutations run on the main thread; raw
 `MediaPlayer` calls run on a dedicated `HandlerThread`. Only
 marshalled `Runnable`s cross between them.
 
+An empty playback scope is a real state, not an empty-looking playlist
+that still owns a hidden current song. Entering it tears down the active
+player and clears current and pending indices. The service retains only
+the prior song path under a separate scope-resume preference. When a later
+scope becomes non-empty, that path is selected if it belongs to the new
+scope; otherwise the first song in the scoped playlist is loaded. The
+retained path is cleared only after a replacement song successfully
+prepares, so a failed preparation does not lose the restoration choice.
+
 The heart has one method that expresses the display-song rule. It
 is not a two-line accessor; it is a guarded evaluation of "which song
 should the carousel be sliding toward" that returns null when the

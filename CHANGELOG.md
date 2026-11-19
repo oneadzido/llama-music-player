@@ -37,6 +37,11 @@ playlist display.
   notification state, and publishes a genuine idle/no-song state. The
   excluded song can no longer continue playing beneath placeholder
   metadata.
+- **Restore playback after leaving an empty scope.** When a later scope
+  contains eligible songs, the service reloads the previously active song
+  if that song belongs to the new scope. Otherwise it loads the first song
+  in the scoped playlist. The remembered path is separate from active
+  playback state, so the empty scope remains a genuine no-song state.
 - **Scope-change reconciliation.** If the current song is excluded but
   eligible songs remain, playback transitions to an eligible song. An
   in-flight prepare whose target becomes excluded is invalidated before
