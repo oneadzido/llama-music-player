@@ -335,6 +335,15 @@ notification commits. Foreground promotion follows playback state, not
 the visibility of `MusicPlayer`, so an activity recreation does not
 interrupt a session that is still playing.
 
+A transition creates a new player, and a new player starts with
+default `PlaybackParams`. The heart therefore does not assume the
+new player inherits pitch and speed. `onPrepared()` attaches
+through a helper that preserves them across the session change,
+and the READY branch, which never reaches `onPlaybackStarted()`,
+applies them with `updatePlaybackParams()` instead of leaving the
+prepared player on defaults until a resume. The auto-start path
+still applies them through `onPlaybackStarted()`, as before.
+
 ### The lungs
 
 `PlaylistManager`.
@@ -435,6 +444,14 @@ getters read what setters wrote, regardless of any rounding the
 underlying effect applies. The band label above each slider reads its
 unit symbol from a resource, so a Russian device shows `Гц` and every
 other device shows `Hz`.
+
+Pitch and speed are user preferences, not per-track state. They
+live in the same persisted store as the bands, and they survive a
+session change for the same reason the bands do: attaching to a new
+audio session rebuilds the effects for that session, but must not
+rewrite what the user set. The attach therefore snapshots pitch and
+speed first and restores them when the attach changed them, so a
+later read returns the user's values, not defaults.
 
 `StorageObserver` is the listening. It registers a single content
 observer for the audio MediaStore URI. Audio additions, removals, and
@@ -600,10 +617,23 @@ list. The refresh still respects the genre-loading and scrolling
 suppression, and it adds no new evaluation to the service — the
 service already rebuilt; the activity only asks for the result.
 
+Hiding search follows the same rule. `hideSearch()` restores the
+full list, then focuses the current song with the same delayed,
+guarded focus the sort path uses, so the scroll runs after the
+adapter has laid out the restored list and is suppressed while the
+user is scrolling, tapping, or genre-loading.
+
 `EqualizerActivity` is the equalizer — ten bands and sixty presets,
 with every seek bar snapping to a step under a guard flag so a
 programmatic re-set does not re-enter the listener that performed the
 snap. The reset button reports *no change* when nothing has moved.
+
+Attaching to a new audio session preserves pitch and speed for
+the same reason it preserves the bands: they are user preferences,
+not per-track state. Every attach site goes through one helper
+that snapshots them before the attach and restores them when the
+attach changed them, so the refresh that follows a transition
+reads the preserved values into the SeekBars.
 
 `FolderManager` is the folder organ — speaking Storage Access
 Framework, taking a persistable permission, mapping the URI to a

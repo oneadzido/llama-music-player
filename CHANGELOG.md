@@ -5,6 +5,53 @@ All notable changes to Llama Music Player are documented in this file.
 Current technical specifications, installation, and usage are
 documented in the [README](README.md).
 
+## [1.5.7] - Nov 20, 2026
+
+### Overview
+
+Version 1.5.7 focuses the current song after hiding search, and
+preserves the equalizer pitch and speed across track transitions.
+
+### Fixed
+
+- **Current song focus after hiding search.** `PlaylistActivity`
+  now focuses the current song after hiding search, so the
+  restored full list scrolls to the song that is playing.
+  `hideSearch()` calls `performSearch("")` to restore the full
+  list, then posts the same delayed, guarded `focusCurrentSong()`
+  the sort path uses, so the scroll runs after the adapter has
+  laid out the restored list and is suppressed while the user is
+  scrolling, tapping, or genre-loading. Both callers, the Cancel
+  button and `onBackPressed()`, go through `hideSearch()`.
+
+- **Pitch and speed preserved across transitions.** Every
+  transition creates a new `MediaPlayer`, which starts with
+  default `PlaybackParams` (1.00x speed, 0 semitones). Pitch and
+  speed are user preferences, not per-track state, so they are
+  now carried across the session change. `MusicService`
+  `onPrepared()` attaches through the new
+  `attachEqualizerPreservingPlaybackParams()` helper, which
+  snapshots pitch and speed before `attachToAudioSession()` and
+  restores them when the attach changed them. The READY branch
+  (cold-start restore, pause-during-prepare) now calls
+  `updatePlaybackParams()` instead of returning with default
+  params until a later resume. `EqualizerActivity` attaches
+  through the new `attachPreservingPitchSpeed()` helper at all
+  three attach sites (`onCreate()`, `onResume()`,
+  `onAudioSessionChangedEvent()`), so the refresh that follows a
+  transition reads the preserved values into the SeekBars.
+
+### Preserved
+
+- No change to search filtering, sort, `focusCurrentSong()`
+  itself, or the double `performSearch("")` call in
+  `hideSearch()`.
+- No change to the intentional Reset button, which still writes
+  the default pitch and speed directly and does not go through
+  attach.
+- No change to scope matching, repeat, shuffle, favorite
+  persistence, or click debounce.
+
 ## [1.5.6] - Nov 19, 2026
 
 ### Overview

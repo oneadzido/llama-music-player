@@ -8,7 +8,7 @@ scoping, and sixteen languages.
 [![Android](https://img.shields.io/badge/Android-6.0%2B-brightgreen.svg)](https://developer.android.com)
 [![Privacy](https://img.shields.io/badge/Privacy-Policy-blue.svg)](PRIVACY.md)
 
-[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.5.6.apk)
+[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.5.7.apk)
 
 [![Build](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml/badge.svg)](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml)
 
@@ -16,7 +16,23 @@ scoping, and sixteen languages.
 
 ## Latest Release
 
-### v1.5.6
+### v1.5.7
+
+Version 1.5.7 focuses the current song after hiding search, and
+preserves the equalizer pitch and speed across track transitions.
+
+- Fixed: hiding search now scrolls the restored full list to the
+  current song, instead of leaving the list where the filtered
+  results had left it.
+- Fixed: pitch and speed no longer reset to defaults on Next,
+  Previous, track completion, or tapping a song; the set values
+  survive every transition, including cold-start restore.
+- Preserved: search filtering, sort, scope matching, repeat,
+  shuffle, favorite persistence, and click debounce behavior.
+  The intentional Reset button still returns pitch and speed to
+  defaults.
+
+### Previous release: v1.5.6
 
 Version 1.5.6 fixes a stale-target end-of-song deadlock after a
 playback rebuild while playing, and makes the playlist re-evaluate
@@ -32,19 +48,6 @@ its displayed list when a song is tapped.
   list.
 - Preserved: scope matching, repeat, shuffle, sort, search,
   favorite persistence, and click debounce behavior.
-
-### Previous release: v1.5.5
-
-Version 1.5.5 adds greenrobot attribution to the Credits dialog,
-migrates all license texts to `assets/licenses`, and fixes natural
-completion after a scope change back to All Songs.
-
-- Added: greenrobot credit with upstream copyright attribution.
-- Added: all license texts under `app/src/main/assets/licenses/`.
-- Fixed: playback now transitions at natural completion after a
-  scope change back to All Songs, for example from Favorites.
-- Preserved: existing jaudiotagger and FontAwesome credits and
-  license viewer behavior.
 
 ---
 
