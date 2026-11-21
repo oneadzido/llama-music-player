@@ -5,7 +5,7 @@ All notable changes to Llama Music Player are documented in this file.
 Current technical specifications, installation, and usage are
 documented in the [README](README.md).
 
-## [1.5.8] - Nov 21, 2026
+# [1.5.8] - Nov 21, 2026
 
 ### Overview
 
@@ -18,16 +18,15 @@ language dialogs already had: reselecting the already applied
 preset now returns without applying anything, and switching
 scope modes no longer wipes the checked boxes of the mode left
 behind. It also decides on screen rotation: the portrait lock is
-lifted, so the app follows the device. Several locales
-have labels longer than a portrait row comfortably fits.
-Lifting the lock exposed one overlap: in a short
-landscape window the player's artist group collapsed onto
-the seek bar, so the group now docks beside the transport
-controls. These failures were reported on TECNO Camon
-20 Pro (HiOS), where a theme, preset, or language picked from a
-dialog left the backgrounded surfaces, the equalizer controls,
-or the notification showing the previous values until something
-else forced a refresh.
+lifted, so the app follows the device. Several locales have
+labels longer than a portrait row comfortably fits. Lifting the
+lock exposed one overlap: in a short landscape window the
+player's artist group collapsed onto the seek bar, so the group
+now docks beside the transport controls. These failures were
+reported on TECNO Camon 20 Pro (HiOS), where a theme, preset, or
+language picked from a dialog left the backgrounded surfaces, the
+equalizer controls, or the notification showing the previous
+values until something else forced a refresh.
 
 ### Fixed
 
@@ -35,127 +34,124 @@ else forced a refresh.
   activity.** Every activity's `THEME_COLOR_CHANGED` handler
   recreated only when the activity was visible. A backgrounded
   activity hit its visibility guard and returned without
-  recording anything, so the event was dropped. The handler
-  now records the dropped event in `mThemeRecreationPending`
-  and the recreate runs when the activity returns: from
-  `onResume()` for the resumed-gated activities, from
-  `onStart()` for `MusicPlayer`, whose guard is the started
-  gate. The drain recreates and returns before the returning
-  lifecycle method does any other work, so the dying instance
-  does not repaint against the old theme. A theme change
-  while the activity is visible still recreates immediately,
-  as before.
+  recording anything, so the event was dropped. The handler now
+  records the dropped event in `mThemeRecreationPending` and the
+  recreate runs when the activity returns: from `onResume()` for
+  the resumed-gated activities, from `onStart()` for
+  `MusicPlayer`, whose guard is the started gate. The drain
+  recreates and returns before the returning lifecycle method
+  does any other work, so the dying instance does not repaint
+  against the old theme. A theme change while the activity is
+  visible still recreates immediately, as before.
 
 - **Preset change now refreshes the band controls.**
   `EqualizerActivity`'s preset callback applied the preset
-  through the manager and relied on the listener notification
-  to refresh the band SeekBars and the preset button. When
-  that notification was lost, the controls kept showing the
-  previous preset's bands even though the audio had changed.
-  The callback now refreshes from the manager's current state
-  immediately after applying: `updateBandControlsFromLevels()`
-  re-reads the band levels into the SeekBars and the preset
-  button re-reads the preset name. The dialog owns the
-  selection; the host owns the refresh.
+  through the manager and relied on the listener notification to
+  refresh the band SeekBars and the preset button. When that
+  notification was lost, the controls kept showing the previous
+  preset's bands even though the audio had changed. The callback
+  now refreshes from the manager's current state immediately
+  after applying: `updateBandControlsFromLevels()` re-reads the
+  band levels into the SeekBars and the preset button re-reads
+  the preset name. The dialog owns the selection; the host owns
+  the refresh.
 
 - **Notification rebuilds in the new theme and language
-  immediately.** `MusicService` had a theme subscriber that
-  did nothing and no language subscriber at all, and
+  immediately.** `MusicService` had a theme subscriber that did
+  nothing and no language subscriber at all, and
   `NotificationController`'s theme handler was a no-op whose
-  Javadoc promised a rebuild "on the next commit" — which
-  only happened on the next playback change. The service now
-  forces a `broadcastUpdate()` on both events, committing a
-  fresh snapshot against the newly persisted theme and locale
-  on the same turn. The controller's handler stays a no-op,
-  and its Javadoc now says why: committing from there as
-  well would post the same notification twice.
+  Javadoc promised a rebuild "on the next commit" ‚Äî which only
+  happened on the next playback change. The service now forces a
+  `broadcastUpdate()` on both events, committing a fresh snapshot
+  against the newly persisted theme and locale on the same turn.
+  The controller's handler stays a no-op, and its Javadoc now
+  says why: committing from there as well would post the same
+  notification twice.
 
-- **Reselecting the already-applied preset no longer
-  re-applies it.** `EqualizerActivity`'s preset listener
-  applied every selection, including a tap on the preset
-  the dialog opened with. The theme and language hosts in
-  `CreditsDialog` return early when the selection equals the
-  index the dialog opened with (`openedAtIndex`). The preset
-  listener has the same guard, first statement, before the
-  operational checks: reselecting the current preset closes
-  the dialog with its bounce and applies nothing. Selecting
-  a different preset applies as before, including the host
-  refresh.
+- **Reselecting the already-applied preset no longer re-applies
+  it.** `EqualizerActivity`'s preset listener applied every
+  selection, including a tap on the preset the dialog opened
+  with. The theme and language hosts in `CreditsDialog` return
+  early when the selection equals the index the dialog opened
+  with (`openedAtIndex`). The preset listener has the same guard,
+  first statement, before the operational checks: reselecting
+  the current preset closes the dialog with its bounce and
+  applies nothing. Selecting a different preset applies as
+  before, including the host refresh.
 
 - **Scope drafts survive a mode switch.**
-  `PlaybackScopeDialog.onModeTapped()` called
-  `clearAllFilters()` on every mode switch, wiping all four
-  filter kinds' draft sets. The mode switch now touches only
-  `mSelectedKind` and the expansion flag, so each kind's
-  draft survives while the dialog is open and returning to a
-  kind restores its checks. Nothing commits on a mode switch:
-  `buildScope()` reads only the selected kind's set, cancel
-  commits nothing, and APPLY still compares `buildScope()`
-  to the scope the dialog opened with. `clearAllFilters()`
-  had exactly one caller, so it is removed with the call.
+  `PlaybackScopeDialog.onModeTapped()` called `clearAllFilters()`
+  on every mode switch, wiping all four filter kinds' draft sets.
+  The mode switch now touches only `mSelectedKind` and the
+  expansion flag, so each kind's draft survives while the dialog
+  is open and returning to a kind restores its checks. Nothing
+  commits on a mode switch: `buildScope()` reads only the
+  selected kind's set, cancel commits nothing, and APPLY still
+  compares `buildScope()` to the scope the dialog opened with.
+  `clearAllFilters()` had exactly one caller, so it is removed
+  with the call.
 
 - **Artist group docks beside the transport controls in
-  landscape.** In a short landscape window the album art
-  is hidden, so the weight-1 song-info group collapsed to
-  zero height and its children spilled over the seek bar.
-  `MusicPlayer.applySongInfoLayout` now docks the group
-  beside the transport row when the art is hidden and the
-  orientation is landscape: the two views are re-parented
-  into a horizontal row — group first, then the controls
-  — sharing the row with 0.5 weight each. The transport
-  row keeps its four spacers, so it looks like its
-  portrait version. The group starts 16dp from the left
-  edge and the controls end 16dp from the right edge, so
-  the gap between the two sits at the center. Two
-  weight-1 spacers centre the seek bar between the header
-  and the docked row, so its top and bottom margins are
-  equal. The portrait toast lane is preserved: the
-  transport row's bottom padding — 64dp with the art
-  visible, 48dp with it hidden — plus the bottom buttons
-  row's 16dp top padding is the space between the
-  transport controls and the bottom buttons where toasts
-  show, and only the landscape dock zeroes the transport
-  part. Rotating back restores both views to their own
-  rows and the full lane.
-  The dock only applies in landscape: a short portrait
-  window is too narrow for the two side by side.
+  landscape.** In a short landscape window the album art is
+  hidden, so the weight-1 song-info group collapsed to zero
+  height and its children spilled over the seek bar.
+  `MusicPlayer.applySongInfoLayout` now docks the group beside
+  the transport row when the art is hidden and the orientation is
+  landscape: the two views are re-parented into a horizontal row
+  ‚Äî group first, then the controls ‚Äî sharing the row with 0.5
+  weight each. The transport row keeps its four spacers, so it
+  looks like its portrait version. The group starts 16dp from the
+  left edge and the controls end 16dp from the right edge, so the
+  gap between the two sits at the center. The seek-bar section
+  takes what is left above the docked row ‚Äî weight 1, its
+  content centred ‚Äî and the docked row hugs its content with a
+  48dp bottom margin: the toast lane. The toast lane is reserved
+  in both orientations: 48dp in split view and in landscape, plus
+  the bottom buttons row's 16dp top padding. In split view, the
+  48dp is the transport row's bottom padding; in landscape, it is
+  the docked row's bottom margin, and the transport row's bottom
+  padding stays zero so the lane is the margin, not padding. In
+  portrait with the art visible, the lane is the layout's 64dp
+  transport padding instead. The 16dp from the bottom buttons to
+  the edge is the bottom buttons row's bottom padding and is never
+  touched. Rotating back restores both views to their own rows
+  and the full lane. The dock only applies in landscape: a short
+  portrait window is too narrow for the two side by side.
 
 ### Decision
 
-- **Screen rotation is allowed.** The portrait value on all
-  five activities (`MusicPlayer`, `PlaylistActivity`,
-  `FolderManager`, `EqualizerActivity`, `MetadataEditor`) is
-  replaced with `unspecified`, the platform value for
-  auto-rotation. The system decides the orientation,
-  honouring the user's auto-rotate setting. The portrait
-  lock was the previous behaviour, not a defect — lifting
-  it is a decision. The shared configChanges set already
-  covers `orientation`, so rotating does not destroy the
-  activity and does not dismiss an open dialog: the
-  activity receives `onConfigurationChanged` and every view
-  re-measures against the new window. The landscape player
-  overlap this exposed is fixed above.
+- **Screen rotation is allowed.** The portrait value on all five
+  activities (`MusicPlayer`, `PlaylistActivity`, `FolderManager`,
+  `EqualizerActivity`, `MetadataEditor`) is replaced with
+  `unspecified`, the platform value for auto-rotation. The system
+  decides the orientation, honouring the user's auto-rotate
+  setting. The portrait lock was the previous behaviour, not a
+  defect ‚Äî lifting it is a decision. The shared configChanges set
+  already covers `orientation`, so rotating does not destroy the
+  activity and does not dismiss an open dialog: the activity
+  receives `onConfigurationChanged` and every view re-measures
+  against the new window. The landscape player overlap this
+  exposed is fixed above.
 
 ### Preserved
 
 - No change to scope matching, repeat, shuffle, sort, search
   filtering, favorite persistence, or click debounce.
-- No change to the intentional Reset button, which still
-  writes the default pitch and speed directly and does not
-  go through attach.
+- No change to the intentional Reset button, which still writes
+  the default pitch and speed directly and does not go through
+  attach.
 - Language changes still recreate each subscribed activity
-  immediately; `locale` is still deliberately absent from
-  the configChanges set, so a system language change still
-  recreates the activity and rebuilds the wrapped base
-  context.
-- `PresetDialog` still fires for every tap, including a
-  reselect; the guard is in the host listener, as it is for
-  theme and language.
+  immediately; `locale` is still deliberately absent from the
+  configChanges set, so a system language change still recreates
+  the activity and rebuilds the wrapped base context.
+- `PresetDialog` still fires for every tap, including a reselect;
+  the guard is in the host listener, as it is for theme and
+  language.
 - No change to ProGuard rules. The new `MusicService`
-  `onLanguageChangedEvent` is a `@Subscribe` method, kept by
-  the existing EventBus keep rule; the new
-  `mThemeRecreationPending` fields are kept by the existing
-  `com.ark.llama.**` wildcard and per-class keeps.
+  `onLanguageChangedEvent` is a `@Subscribe` method, kept by the
+  existing EventBus keep rule; the new `mThemeRecreationPending`
+  fields are kept by the existing `com.ark.llama.**` wildcard and
+  per-class keeps.
 
 ## [1.5.7] - Nov 20, 2026
 

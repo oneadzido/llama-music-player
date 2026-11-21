@@ -11,12 +11,11 @@ language dialogs already had: reselecting the already applied
 preset now returns without applying anything, and switching
 scope modes no longer wipes the checked boxes of the mode left
 behind. It also decides on screen rotation: the portrait lock is
-lifted, so the app follows the device. Several locales
-have labels longer than a portrait row comfortably fits.
-Lifting the lock exposed one overlap: in a short
-landscape window the player's artist group collapsed onto
-the seek bar, so the group now docks beside the transport
-controls.
+lifted, so the app follows the device. Several locales have
+labels longer than a portrait row comfortably fits. Lifting the
+lock exposed one overlap: in a short landscape window the
+player's artist group collapsed onto the seek bar, so the group
+now docks beside the transport controls.
 
 Llama Music Player itself remains licensed under the MIT License.
 
@@ -110,18 +109,22 @@ then the controls, sharing the row with 0.5 weight each.
 The transport row keeps its four spacers, so it looks like
 its portrait version. The group starts 16dp from the left
 edge and the controls end 16dp from the right edge, so the
-gap between the two sits at the center. Two weight-1
-spacers centre the seek bar between the header and the
-docked row, so its top and bottom margins are equal. The
-portrait toast lane is preserved: the transport row's
-bottom padding — 64dp with the art visible, 48dp with it
-hidden — plus the bottom buttons row's 16dp top padding
-is the space between the transport controls and the bottom
-buttons where toasts show, and only the landscape dock
-zeroes the transport part. Rotating back restores both
-views to their own rows and the full lane. The
-dock only applies in landscape: a short portrait window is
-too narrow for the two side by side.
+gap between the two sits at the center. The seek-bar section
+takes what is left above the docked row — weight 1, its
+content centred — and the docked row hugs its content with a
+48dp bottom margin: the toast lane. The toast lane is
+reserved in both orientations: 48dp in split view and in
+landscape, plus the bottom buttons row's 16dp top padding.
+In split view the 48dp is the transport row's bottom padding;
+in landscape it is the docked row's bottom margin, and the
+transport row's bottom padding stays zero so the lane is the
+margin, not padding. In portrait with the art visible the
+lane is the layout's 64dp transport padding instead. The
+16dp from the bottom buttons to the edge is the bottom
+buttons row's bottom padding and is never touched. Rotating
+back restores both views to their own rows. The dock only
+applies in landscape: a short portrait window is too narrow
+for the two side by side.
 
 ### Decision: screen rotation is allowed
 
