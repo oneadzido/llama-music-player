@@ -1,25 +1,18 @@
-# Llama Music Player v1.5.8
+# Llama Music Player v1.5.9
 
 **Release date:** November 21, 2026
 
-Version 1.5.8 fixes the dialog-refresh failures: a theme change
-picked while an activity is backgrounded, a preset whose band
-controls never refreshed, and a notification that kept the old
-theme and language until the next playback change. It also
-aligns two dialog returns with the behaviour the theme and
-language dialogs already had: reselecting the already applied
-preset now returns without applying anything, and switching
-scope modes no longer wipes the checked boxes of the mode left
-behind. It also decides on screen rotation: the portrait lock is
-lifted, so the app follows the device. Several locales have
-labels longer than a portrait row comfortably fits. Lifting the
-lock exposed one overlap: in a short landscape window the
-player's artist group collapsed onto the seek bar, so the group
-now docks beside the transport controls.
+Version 1.5.9 fixes three things found after 1.5.8 shipped: a
+cold-start auto-start that left the transport controls stale, a
+narrow landscape window that cramped the docked artist group
+and transport row, and an extra top gap above the artist group
+in the stacked portrait layout. It also renames the seek-bar
+progress drawable to say what it is: the enabled-state
+progress, `seekbar_progress_enabled`.
 
 Llama Music Player itself remains licensed under the MIT License.
 
-For the full change history, see the `[1.5.8]` entry in the
+For the full change history, see the `[1.5.9]` entry in the
 [CHANGELOG](CHANGELOG.md). For technical specifications, installation,
 and usage, see the [README](README.md).
 
@@ -27,136 +20,85 @@ and usage, see the [README](README.md).
 
 ## What's in this release
 
-### Fixed: theme change no longer dropped for a backgrounded activity
+### Fixed: cold-start auto-start now commits the UI
 
-Every activity's `THEME_COLOR_CHANGED` handler used to recreate
-only when the activity was visible. A backgrounded activity hit
-its visibility guard and returned without recording anything, so
-the event was dropped and the activity kept the theme it was
-constructed with until it was left and re-entered.
+When the app was playing before it exited, a cold start
+restores the playlist and resumes playback. The service
+committed nothing after the reconcile on that path, so the
+transport controls kept the pre-restore state until the next
+playback change forced a refresh.
 
-The handler now records the event in `mThemeRecreationPending`
-instead of dropping it, and the recreate runs when the activity
-returns: from `onResume()` for the resumed-gated activities,
-from `onStart()` for `MusicPlayer`, whose guard is the started
-gate. A theme change while the activity is visible still
-recreates immediately, as before.
+The cold-start branch in `MusicService.setPlaylist` now
+calls `broadcastUpdate()` after `reconcile()` when it is a
+cold start and the song is resuming, so every surface
+commits on the same turn the auto-start lands.
 
-### Fixed: preset change refreshes the band controls
+When the app was paused before it exited,
+`mPauseAfterPrepare` stays true and no commit fires: the
+player stays paused, as before.
 
-Picking a preset applied it through the manager but relied on
-the listener notification to refresh the band SeekBars and the
-preset button. When that notification was lost, the controls
-kept showing the previous preset's bands even though the audio
-had changed.
+### Fixed: narrow landscape uses the stacked portrait layout; short, undocked windows hide the seek bar
 
-The preset callback now refreshes from the manager's current
-state immediately after applying: the band levels are re-read
-into the SeekBars and the preset button re-reads the preset
-name. The dialog owns the selection; the host owns the refresh.
+Docking splits the window 0.5 / 0.5. In landscape
+split-screen the window is about 400dp wide, so the
+transport row got about 200dp against the 288dp it needs
+and the artist group kept its 72dp + 72dp inner padding,
+leaving about 56dp for the title: the title truncated to
+a fragment and the transport buttons squeezed together.
 
-### Fixed: notification rebuilds in the new theme and language immediately
+The dock now has a width gate: it applies only when the
+window is at least 600dp wide (`DOCK_MIN_WIDTH_DP`), on
+top of the existing art-hidden and landscape conditions.
+A narrow landscape window falls back to the stacked
+portrait layout instead, group on its own row and
+transport on its own row, each at full width — but a
+short, undocked window cannot fit the whole stacked
+layout either, so the seek-bar section is hidden there.
+That is the same evaluation in short portrait
+split-screen and in short, narrow landscape:
+`albumArtHidden && !dockSongInfo`. The
+choice is deliberate: the group is the glanceable part —
+what is playing, home, favourite — plus the transport
+controls, while scrubbing can wait until the window is
+full-size again. Hiding the group instead would leave
+controls for a song the user cannot identify, and would
+take home and favourite with it, since both live inside
+the group. The SeekBar keeps receiving progress updates
+while hidden, so returning to a full-size window shows
+the current position with no re-sync. Full landscape, at
+800dp and wider, still docks as before, with the seek
+bar visible.
 
-The service had a theme subscriber that did nothing and no
-language subscriber at all, so the notification kept the
-previous theme and locale until the next playback change
-forced a commit.
+### Fixed: artist group stays centered, without the extra top gap
 
-The service now forces a `broadcastUpdate()` on both events,
-which commits a fresh snapshot against the newly persisted
-theme and locale on the same turn. The notification rebuilds
-immediately. The controller's own theme handler stays a no-op
-on purpose: committing from there as well would post the same
-notification twice.
+The stacked layout used to pin the group to the top when
+the art was hidden and add the album-art wrapper's 16dp
+top padding. That pushed the group down from where
+centering would put it and read as an extra gap at the
+top.
 
-### Fixed: reselecting the current preset applies nothing
+The pin-to-top is removed. The group stays vertically
+centered in the space between the header and the seek
+bar, with its default top padding, in portrait and in a
+narrow landscape window that falls back to the stacked
+layout. The docked layout is unchanged: the docked row
+still hugs its content and the toast lane is still the
+row's 48dp bottom margin.
 
-The preset listener applied every selection it received,
-including a tap on the preset the dialog had opened with. The
-theme and language hosts already guard that case: each
-captures the index the dialog opened with and returns early on
-a reselect, while the tap is still acknowledged by the picker's
-close and the row's bounce.
+### Changed: seek-bar progress drawable renamed
 
-The preset listener now has the same guard. Reselecting the
-current preset closes the dialog and changes nothing.
-Selecting a different preset applies as before.
-
-### Fixed: scope mode switches preserve each kind's checked boxes
-
-Switching scope modes used to clear every kind's checked
-boxes. Checking artists, switching to genres, checking a
-genre, switching back to artists: the artist checks were gone.
-
-Each filter kind now keeps its own draft set while the dialog
-is open, and returning to a kind restores its checks exactly
-as they were left. Nothing commits on a mode switch — APPLY
-commits only the selected kind's set — and Cancel / dismiss
-throws the drafts away. Reopening starts from the applied
-scope.
-
-### Fixed: artist group docks beside the transport controls in landscape
-
-In a short landscape window the album art is hidden, so the
-weight-1 artist group collapsed to zero height and its
-children spilled over the seek bar — the home and heart
-buttons sliced in half by the seek bar.
-
-The group now docks beside the transport controls when the
-art is hidden and the orientation is landscape: the two
-views are re-parented into a horizontal row, group first,
-then the controls, sharing the row with 0.5 weight each.
-The transport row keeps its four spacers, so it looks like
-its portrait version. The group starts 16dp from the left
-edge and the controls end 16dp from the right edge, so the
-gap between the two sits at the center. The seek-bar section
-takes what is left above the docked row — weight 1, its
-content centred — and the docked row hugs its content with a
-48dp bottom margin: the toast lane. The toast lane is
-reserved in both orientations: 48dp in split view and in
-landscape, plus the bottom buttons row's 16dp top padding.
-In split view the 48dp is the transport row's bottom padding;
-in landscape it is the docked row's bottom margin, and the
-transport row's bottom padding stays zero so the lane is the
-margin, not padding. In portrait with the art visible the
-lane is the layout's 64dp transport padding instead. The
-16dp from the bottom buttons to the edge is the bottom
-buttons row's bottom padding and is never touched. Rotating
-back restores both views to their own rows. The dock only
-applies in landscape: a short portrait window is too narrow
-for the two side by side.
-
-### Decision: screen rotation is allowed
-
-The portrait value on all five activities — player,
-playlist, folder manager, equalizer, metadata editor —
-is replaced with `unspecified`, the platform value for
-auto-rotation. The system decides the orientation,
-honouring the user's auto-rotate setting. Rotating the
-device rotates the app.
-
-Nothing is lost on rotation: the shared configChanges set
-already covers orientation, so the activity is not destroyed
-and an open dialog is not dismissed. The layout re-applies
-for the new window — the equalizer switches to its compact
-split layout, the player shrinks the album art and docks
-the artist group beside the transport controls — and every
-other view re-measures.
+`seekbar_progress` is now `seekbar_progress_enabled`.
+The references in `activity_music_player.xml` and
+`EqualizerActivity` are updated to the new name. There is
+no visual change: the drawable itself is untouched, only
+its name says which state it draws.
 
 ### Existing behavior preserved
 
-The rotation decision itself needed no Java change: the
-groundwork was already in place. Lifting the lock exposed
-one landscape overlap in the player, fixed by docking the
-artist group beside the transport controls. Locale handling is
-untouched — the in-app language picker still recreates each
-activity, and a system language change still recreates it.
-The preset dialog still fires for every tap; the guard is in
-the host listener, as it is for theme and language. The
-intentional Reset button still returns pitch and speed to
-defaults. Language changes still recreate each subscribed
-activity immediately. No change to scope matching, repeat,
-shuffle, sort, search filtering, favorite persistence, or click
-debounce. No change to ProGuard rules: the new subscriber is
-kept by the existing EventBus rule and the new fields by the
-existing package wildcard.
+No change to scope matching, repeat, shuffle, sort, search
+filtering, favorite persistence, or click debounce. No
+change to the theme and language dialog behaviour from
+1.5.8, or to the notification commit rule: one commit per
+transition, through `broadcastUpdate()`. No change to
+ProGuard rules: the 1.5.9 changes add no new subscriber
+and no new kept field.

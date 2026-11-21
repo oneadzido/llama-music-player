@@ -8,7 +8,7 @@ scoping, and sixteen languages.
 [![Android](https://img.shields.io/badge/Android-6.0%2B-brightgreen.svg)](https://developer.android.com)
 [![Privacy](https://img.shields.io/badge/Privacy-Policy-blue.svg)](PRIVACY.md)
 
-[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.5.8.apk)
+[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.5.9.apk)
 
 [![Build](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml/badge.svg)](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml)
 
@@ -16,7 +16,40 @@ scoping, and sixteen languages.
 
 ## Latest Release
 
-### v1.5.8
+### v1.5.9
+
+Version 1.5.9 fixes three things found after 1.5.8 shipped: a
+cold-start auto-start that left the transport controls stale, a
+narrow landscape window that cramped the docked artist group
+and transport row, and an extra top gap above the artist group
+in the stacked portrait layout. It also renames the seek-bar
+progress drawable to `seekbar_progress_enabled`.
+
+- Fixed: cold-start auto-start now commits the UI. When the
+  app was playing before it exited, the restored playlist
+  resumes and every surface commits on the same turn. When
+  it was paused before it exited, it stays paused.
+- Fixed: a narrow landscape window, such as landscape
+  split-screen, no longer docks the artist group beside the
+  transport controls. Docking now needs a window at least
+  600dp wide; a narrower landscape window uses the stacked
+  portrait layout, group and transport each at full width.
+  A short, undocked window — short portrait split-screen
+  or short, narrow landscape — hides the seek bar: the
+  group is the glanceable part, scrubbing can wait. Full
+  landscape still docks, with the seek bar visible.
+- Fixed: the artist group in the stacked layout stays
+  vertically centered between the header and the seek bar,
+  without the extra top gap. The old pin-to-top and 16dp
+  top padding are removed.
+- Changed: the seek-bar progress drawable is renamed from
+  `seekbar_progress` to `seekbar_progress_enabled`. No
+  visual change.
+- Preserved: scope matching, repeat, shuffle, sort, search
+  filtering, favorite persistence, click debounce, and the
+  theme and language dialog behaviour from 1.5.8.
+
+### Previous release: v1.5.8
 
 Version 1.5.8 fixes the dialog-refresh failures: a theme change
 picked while an activity is backgrounded, a preset whose band
@@ -66,22 +99,6 @@ controls.
   shuffle, favorite persistence, click debounce, and the
   intentional Reset button, which still returns pitch and speed
   to defaults.
-
-### Previous release: v1.5.7
-
-Version 1.5.7 focuses the current song after hiding search, and
-preserves the equalizer pitch and speed across track transitions.
-
-- Fixed: hiding search now scrolls the restored full list to the
-  current song, instead of leaving the list where the filtered
-  results had left it.
-- Fixed: pitch and speed no longer reset to defaults on Next,
-  Previous, track completion, or tapping a song; the set values
-  survive every transition, including cold-start restore.
-- Preserved: search filtering, sort, scope matching, repeat,
-  shuffle, favorite persistence, and click debounce behavior.
-  The intentional Reset button still returns pitch and speed to
-  defaults.
 
 ---
 

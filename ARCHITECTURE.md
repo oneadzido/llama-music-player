@@ -728,8 +728,9 @@ window the player's album art is gone, the weight-1
 song-info group collapses to zero height, and its children
 spill over the seek bar, because the root does not clip
 children. `MusicPlayer.applySongInfoLayout` therefore docks
-the group beside the transport row when the art is hidden
-and the orientation is landscape: the two views are
+the group beside the transport row when the art is hidden,
+the orientation is landscape, and the window is at least
+600dp wide (`DOCK_MIN_WIDTH_DP`): the two views are
 re-parented into a horizontal row — group first, then the
 transport row — sharing the row with 0.5 weight each. The
 group keeps its normal padding and gravities, and the
@@ -752,8 +753,39 @@ stays zero so the lane is the margin, not padding. In portrait with
 the art visible, the lane is the layout's 64dp transport padding
 instead. The 16dp from the bottom buttons to the edge is the
 bottom buttons row's bottom padding and is never touched.
-The dock only applies in landscape: a short portrait window is
-too narrow for the two side by side.
+The dock only applies in wide landscape. A short portrait
+window is too narrow for the two side by side, and so is a
+narrow landscape window: landscape split-screen, at about
+400dp, would give the transport row about 200dp against the
+288dp it needs and leave the title about 56dp after the
+group's 72dp + 72dp inner padding. Such a window falls back
+to the stacked portrait layout instead, group on its own
+row and transport on its own row, each at full width — but
+a short, undocked window cannot fit the whole stacked
+layout either, so the seek-bar section is hidden there.
+That is the same evaluation in short portrait split-screen
+and in short, narrow landscape: `albumArtHidden &&
+!dockSongInfo`. The seek bar goes, not the group: the
+group is the glanceable part — what is playing, home,
+favourite — plus the transport controls, while scrubbing
+can wait until the window is full-size again. Hiding the
+group instead would leave controls for a song the user
+cannot identify, and would take home and favourite with
+it, since both live inside the group. The SeekBar keeps
+receiving progress updates while hidden, so returning to
+a full-size window shows the current position with no
+re-sync.
+In the stacked layout the group stays vertically centered
+in the space between the header and whatever follows it —
+the seek bar, or the transport row when the seek bar is
+hidden — with its default top padding and its default
+gravities. It is never
+pinned to the top, and no extra top padding is added: the
+old 16dp album-art offset pushed the centered group down
+and read as an extra gap at the top. The seek-bar
+progress drawable is `seekbar_progress_enabled`, the
+enabled-state progress; the name says which state it
+draws, the drawable itself is unchanged.
 
 ### The fingers
 
@@ -892,6 +924,12 @@ it. `doPause` bumps `mStartToken` at entry precisely so that a pause
 arriving mid-resume invalidates the resume's continuation.
 
 `broadcastUpdate` is the only path that commits the notification.
+A cold-start `setPlaylist` is a commit turn too: when the app
+was playing before it exited, the cold-start branch commits
+with `broadcastUpdate()` after `reconcile()`, so the transport
+controls land on the same turn the auto-start resumes. When
+the app was paused before it exited, no commit fires and the
+player stays paused.
 The pre-action commit that earlier releases performed in
 `onStartCommand`, and the `startForegroundSync` re-post that
 `onPlaybackStarted` and `onPlaybackResumed` issued after
