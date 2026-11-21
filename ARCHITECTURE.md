@@ -705,7 +705,14 @@ kind restores its checks exactly as they were left. Nothing
 commits on a mode switch — the committed scope is built from
 the selected kind's set alone, and Cancel / dismiss commits
 nothing. The drafts die with the dialog; reopening starts
-from the applied scope.
+from the applied scope. On open the dialog scrolls to the
+current scope when it is not already in view: the first
+checked filter of the current kind, or the kind's mode row
+when it has no checked values. The scroll runs again once
+the genre, artist and album lists finish loading, so a
+checked filter that did not exist at open still lands in
+view. A target already in view never scrolls, and the
+scroll is an instant jump, not an animation.
 
 Screen rotation is a decision, taken in the manifest
 alone: every activity declares

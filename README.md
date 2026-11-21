@@ -8,7 +8,7 @@ scoping, and sixteen languages.
 [![Android](https://img.shields.io/badge/Android-6.0%2B-brightgreen.svg)](https://developer.android.com)
 [![Privacy](https://img.shields.io/badge/Privacy-Policy-blue.svg)](PRIVACY.md)
 
-[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.5.9.apk)
+[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.6.0.apk)
 
 [![Build](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml/badge.svg)](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml)
 
@@ -16,7 +16,19 @@ scoping, and sixteen languages.
 
 ## Latest Release
 
-### v1.5.9
+### v1.6.0
+
+Version 1.6.0 does one thing: the playback scope dialog now
+opens on the current scope instead of at the top.
+
+- Fixed: the playback scope dialog now opens on the current
+  scope. When it is not already in view, the dialog scrolls
+  to the first checked filter of the current kind, or to
+  the kind's mode row when it has no checked values.
+- Preserved: the 1.5.9 fixes, scope matching, repeat, shuffle,
+  sort, search filtering, favorite persistence, click debounce.
+
+### Previous release: v1.5.9
 
 Version 1.5.9 fixes three things found after 1.5.8 shipped: a
 cold-start auto-start that left the transport controls stale, a
@@ -48,57 +60,6 @@ progress drawable to `seekbar_progress_enabled`.
 - Preserved: scope matching, repeat, shuffle, sort, search
   filtering, favorite persistence, click debounce, and the
   theme and language dialog behaviour from 1.5.8.
-
-### Previous release: v1.5.8
-
-Version 1.5.8 fixes the dialog-refresh failures: a theme change
-picked while an activity is backgrounded, a preset whose band
-controls never refreshed, and a notification that kept the old
-theme and language until the next playback change. It also
-aligns two dialog returns with the behaviour the theme and
-language dialogs already had: reselecting the already applied
-preset now returns without applying anything, and switching
-scope modes no longer wipes the checked boxes of the mode left
-behind. It also decides on screen rotation: the portrait lock is
-lifted, so the app follows the device. Several locales
-have labels longer than a portrait row comfortably fits.
-Lifting the lock exposed one overlap: in a short
-landscape window the player's artist group collapsed onto
-the seek bar, so the group now docks beside the transport
-controls.
-
-- Fixed: a theme change is no longer dropped for a backgrounded
-  activity. The recreate is deferred until the activity returns,
-  so every surface rebuilds against the new theme.
-- Fixed: picking a preset now refreshes the band SeekBars and the
-  preset button from the manager's current state, even when the
-  listener notification is lost.
-- Fixed: the playback notification rebuilds in the new theme and
-  language on the same turn as the change, instead of waiting for
-  the next playback change.
-- Fixed: reselecting the current preset closes the dialog and
-  changes nothing, instead of re-running the apply path.
-- Fixed: switching scope modes preserves each kind's checked
-  boxes. Returning to a mode restores its checks exactly as
-  they were left; APPLY still commits only the selected kind's
-  set, and Cancel throws the drafts away.
-- Fixed: in a short landscape window, the artist group no
-  longer collapses onto the seek bar. It docks beside the
-  transport controls — group first, then the controls,
-  sharing the row with 0.5 weight each, the transport row
-  keeping its portrait spacers — and the seek bar takes what
-  is left above the docked row. The toast lane between the
-  side-by-side row and the bottom buttons is reserved at 48dp,
-  the same as split view. It returns to its own row in portrait.
-- Decision: screen rotation is allowed. The portrait value
-  on all five activities is replaced with `unspecified`, the
-  platform value for auto-rotation; rotating the device
-  rotates the app, and an open dialog stays open and
-  re-measures instead of dismissing.
-- Preserved: search filtering, sort, scope matching, repeat,
-  shuffle, favorite persistence, click debounce, and the
-  intentional Reset button, which still returns pitch and speed
-  to defaults.
 
 ---
 
