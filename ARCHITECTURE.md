@@ -937,6 +937,14 @@ with `broadcastUpdate()` after `reconcile()`, so the transport
 controls land on the same turn the auto-start resumes. When
 the app was paused before it exited, no commit fires and the
 player stays paused.
+The paused restore is sticky. `mPauseAfterPrepare` is consumed
+by `onPrepared()`, so the cold-start branch also records the
+decision in `mStickyPause`, and `beginTransition()` re-arms the
+pause from it on every prepare: a second `setPlaylist` that
+re-prepares the song still lands paused. An explicit play
+action clears the hold, and a real transition to PLAYING
+clears it too, so the hold never outlives the restore it
+belongs to.
 The pre-action commit that earlier releases performed in
 `onStartCommand`, and the `startForegroundSync` re-post that
 `onPlaybackStarted` and `onPlaybackResumed` issued after
