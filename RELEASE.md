@@ -106,12 +106,16 @@ buttons sliced in half by the seek bar.
 The group now docks beside the transport controls when the
 art is hidden and the orientation is landscape: the two
 views are re-parented into a horizontal row, group first,
-then the controls, that takes the weight the group had. The
-group keeps its normal padding and gravities, and the
-transport row's bottom padding drops to zero so its buttons
-sit centred. Rotating back restores both views to their own
-rows. The dock only applies in landscape: a short portrait
-window is too narrow for the two side by side.
+then the controls, sharing the row with 0.5 weight each.
+The transport row keeps its four spacers, so it looks like
+its portrait version. The group starts 16dp from the left
+edge and the controls end 16dp from the right edge, so the
+gap between the two sits at the center. Two weight-1
+spacers centre the seek bar between the header and the
+docked row, so its top and bottom margins are equal.
+Rotating back restores both views to their own rows. The
+dock only applies in landscape: a short portrait window is
+too narrow for the two side by side.
 
 ### Decision: screen rotation is allowed
 

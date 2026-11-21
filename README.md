@@ -51,7 +51,10 @@ controls.
   set, and Cancel throws the drafts away.
 - Fixed: in a short landscape window, the artist group no
   longer collapses onto the seek bar. It docks beside the
-  transport controls — group first, then the controls — and
+  transport controls — group first, then the controls,
+  sharing the row with 0.5 weight each, the transport row
+  keeping its portrait spacers — and the seek bar sits
+  centred between the header and the docked row. It
   returns to its own row in portrait.
 - Decision: screen rotation is allowed. The portrait value
   on all five activities is replaced with `unspecified`, the

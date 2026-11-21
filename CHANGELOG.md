@@ -102,10 +102,15 @@ else forced a refresh.
   beside the transport row when the art is hidden and the
   orientation is landscape: the two views are re-parented
   into a horizontal row — group first, then the controls
-  — that takes the weight the group had. The group keeps
-  its normal padding and gravities, the transport row's
-  bottom padding drops to zero so its buttons sit centred,
-  and rotating back restores both views to their own rows.
+  — sharing the row with 0.5 weight each. The transport
+  row keeps its four spacers, so it looks like its
+  portrait version. The group starts 16dp from the left
+  edge and the controls end 16dp from the right edge, so
+  the gap between the two sits at the center. Two
+  weight-1 spacers centre the seek bar between the header
+  and the docked row, so its top and bottom margins are
+  equal, and rotating back restores both views to their
+  own rows.
   The dock only applies in landscape: a short portrait
   window is too narrow for the two side by side.
 

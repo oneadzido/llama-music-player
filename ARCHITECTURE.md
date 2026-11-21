@@ -731,12 +731,19 @@ children. `MusicPlayer.applySongInfoLayout` therefore docks
 the group beside the transport row when the art is hidden
 and the orientation is landscape: the two views are
 re-parented into a horizontal row — group first, then the
-transport row — that takes the weight the group had. The
-group keeps its normal padding and gravities, the transport
-row's bottom padding drops to zero so its buttons sit
-centred, and rotating back restores both views to their own
-rows. The dock only applies in landscape: a short portrait
-window is too narrow for the two side by side.
+transport row — sharing the row with 0.5 weight each. The
+group keeps its normal padding and gravities, and the
+transport row keeps its four spacers, so it looks like its
+portrait version. The group starts 16dp from the left edge
+and the controls end 16dp from the right edge, so the gap
+between the two sits at the center. Two weight-1 spacers
+centre the seek-bar section between the header and the
+docked row — one above it, one below it — and the docked
+row hugs its content just above the bottom buttons.
+Rotating back restores both views to their own rows and
+removes the spacers. The dock only applies in landscape: a
+short portrait window is too narrow for the two side by
+side.
 
 ### The fingers
 
