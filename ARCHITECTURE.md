@@ -557,8 +557,12 @@ themselves. The translator is the spinal cord every in-process
 signal travels along; the classes that read those signals are
 `@Subscribe` subscribers. A theme change reaches `ToastManager` as
 a `ThemeColorChangedEvent` and reaches `NotificationController` as
-the same event type; each subscriber answers by rebuilding its own
+the same event type. `ToastManager` answers by rebuilding its own
 surface from the persisted theme on the next commit.
+`NotificationController` takes no action on the event itself:
+`MusicService` forces the commit on the same turn (see The
+skin), so the notification is rebuilt from the persisted theme
+immediately rather than waiting for the next playback change.
 
 ### The skin
 
@@ -585,6 +589,18 @@ subscriber answers with the same `recreateActivity()`. The two
 stems share one delivery mechanism, one dismissal order, and one
 handler. The broadcast is a signal to rebuild, not an instruction
 to patch.
+
+A theme event that arrives while an activity is not visible is
+deferred, not dropped. The handler records it in
+`mThemeRecreationPending` and the recreate runs when the activity
+returns — from `onResume()` for the activities whose guard is
+the resumed gate, from `onStart()` for `MusicPlayer`, whose
+guard is the started gate. A backgrounded activity therefore
+still rebuilds against the new theme instead of keeping the
+theme it was constructed with. Language is not deferred: the
+language picker is hosted by a visible activity, so there is no
+backgrounded-activity drop to defer, and every subscriber
+recreates immediately.
 
 ### The organs the user touches
 
@@ -669,6 +685,43 @@ is no window in which one dialog has been rebuilt and another has
 not, because no dialog is rebuilt in place; all of them are
 dismissed, and the next open constructs a new dialog against the
 persisted theme or locale from the first frame.
+
+`PresetDialog` is the one dialog whose host does not wait for a
+notification. Picking a preset applies it through the manager,
+and the host then refreshes the band controls from the manager's
+current state on the same turn — the dialog owns the selection,
+the host owns the refresh, from the source of truth, rather
+than from a listener notification that may not arrive.
+Reselecting the preset the dialog opened with applies nothing,
+the same return the theme and language hosts give a reselect:
+the dialog closes with its bounce and the host returns before
+the operational checks. The guard lives in the host listener,
+not in the dialog, which still fires for every tap.
+
+`PlaybackScopeDialog` keeps one draft set per filter kind while
+it is open. A mode switch changes only the selected kind and
+the expansion flag; it never clears a set, so returning to a
+kind restores its checks exactly as they were left. Nothing
+commits on a mode switch — the committed scope is built from
+the selected kind's set alone, and Cancel / dismiss commits
+nothing. The drafts die with the dialog; reopening starts
+from the applied scope.
+
+Screen rotation is a decision, taken in the manifest
+alone: every activity declares
+`screenOrientation="unspecified"` — the platform value
+for auto-rotation, so the system decides the orientation
+honouring the user's auto-rotate setting
+— and `orientation` is in the shared configChanges set,
+so rotating neither destroys the activity nor dismisses
+an open dialog. The activities
+that own size-dependent layout re-apply it from
+`onConfigurationChanged` — the equalizer split layout, the
+folder-manager layout, the player album-art size — keyed
+off the new window height, and every dialog window is
+`MATCH_PARENT`, so it re-measures with the window. That is
+what makes rotation safe for long locale labels: the row
+simply gets wider.
 
 ### The fingers
 

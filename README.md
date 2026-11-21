@@ -8,7 +8,7 @@ scoping, and sixteen languages.
 [![Android](https://img.shields.io/badge/Android-6.0%2B-brightgreen.svg)](https://developer.android.com)
 [![Privacy](https://img.shields.io/badge/Privacy-Policy-blue.svg)](PRIVACY.md)
 
-[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.5.7.apk)
+[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.5.8.apk)
 
 [![Build](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml/badge.svg)](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml)
 
@@ -16,7 +16,46 @@ scoping, and sixteen languages.
 
 ## Latest Release
 
-### v1.5.7
+### v1.5.8
+
+Version 1.5.8 fixes the dialog-refresh failures: a theme change
+picked while an activity is backgrounded, a preset whose band
+controls never refreshed, and a notification that kept the old
+theme and language until the next playback change. It also
+aligns two dialog returns with the behaviour the theme and
+language dialogs already had: reselecting the already applied
+preset now returns without applying anything, and switching
+scope modes no longer wipes the checked boxes of the mode left
+behind. It also decides on screen rotation: the portrait lock is
+lifted, so the app follows the device. Several locales
+have labels longer than a portrait row comfortably fits.
+
+- Fixed: a theme change is no longer dropped for a backgrounded
+  activity. The recreate is deferred until the activity returns,
+  so every surface rebuilds against the new theme.
+- Fixed: picking a preset now refreshes the band SeekBars and the
+  preset button from the manager's current state, even when the
+  listener notification is lost.
+- Fixed: the playback notification rebuilds in the new theme and
+  language on the same turn as the change, instead of waiting for
+  the next playback change.
+- Fixed: reselecting the current preset closes the dialog and
+  changes nothing, instead of re-running the apply path.
+- Fixed: switching scope modes preserves each kind's checked
+  boxes. Returning to a mode restores its checks exactly as
+  they were left; APPLY still commits only the selected kind's
+  set, and Cancel throws the drafts away.
+- Decision: screen rotation is allowed. The portrait value
+  on all five activities is replaced with `unspecified`, the
+  platform value for auto-rotation; rotating the device
+  rotates the app, and an open dialog stays open and
+  re-measures instead of dismissing.
+- Preserved: search filtering, sort, scope matching, repeat,
+  shuffle, favorite persistence, click debounce, and the
+  intentional Reset button, which still returns pitch and speed
+  to defaults.
+
+### Previous release: v1.5.7
 
 Version 1.5.7 focuses the current song after hiding search, and
 preserves the equalizer pitch and speed across track transitions.
@@ -31,23 +70,6 @@ preserves the equalizer pitch and speed across track transitions.
   shuffle, favorite persistence, and click debounce behavior.
   The intentional Reset button still returns pitch and speed to
   defaults.
-
-### Previous release: v1.5.6
-
-Version 1.5.6 fixes a stale-target end-of-song deadlock after a
-playback rebuild while playing, and makes the playlist re-evaluate
-its displayed list when a song is tapped.
-
-- Fixed: playback no longer stalls silent at end-of-song in the
-  `PLAYING` state after a scope, favorite, sort, or playlist
-  rebuild while playing; a stale target no longer suppresses
-  natural completion.
-- Fixed: tapping a song in the playlist now refreshes the displayed
-  list before highlighting, so songs that no longer belong are
-  evicted and the tapped song is highlighted only from the fresh
-  list.
-- Preserved: scope matching, repeat, shuffle, sort, search,
-  favorite persistence, and click debounce behavior.
 
 ---
 
@@ -100,7 +122,9 @@ Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
 - **Playback scope:** Restrict the player to favorites, loose tracks,
   or a chosen set of folders, genres, artists, or albums. The dialog
   shows a live count of the songs the selection would yield, computed
-  with the same matcher the service uses. A filter mode with no values
+  with the same matcher the service uses. Switching modes keeps each
+  mode's checked boxes as a draft while the dialog is open; APPLY
+  commits only the selected mode's set. A filter mode with no values
   checked is a scope that matches nothing: the count reads zero, the
   mode and its list stay in place, and the selection is not rewritten
   into All Songs. APPLY is enabled when the selection differs from the
@@ -254,6 +278,8 @@ Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
 - **32 theme colours.** Selecting one rebuilds every surface — every
   activity, every open dialog, and the toast overlay — against the
   persisted color, on every device. No view is repainted in place.
+  An activity that is backgrounded when the theme is picked still
+  rebuilds when it returns; the event is deferred, not dropped.
 - **Split-screen layout:** The album art resizes, shrinks, or hides
   with the window height; every screen adjusts its own content so
   the controls always fit.

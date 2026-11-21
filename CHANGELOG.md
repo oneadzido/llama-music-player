@@ -5,6 +5,127 @@ All notable changes to Llama Music Player are documented in this file.
 Current technical specifications, installation, and usage are
 documented in the [README](README.md).
 
+## [1.5.8] - Nov 21, 2026
+
+### Overview
+
+Version 1.5.8 fixes the dialog-refresh failures: a theme change
+picked while an activity is backgrounded, a preset whose band
+controls never refreshed, and a notification that kept the old
+theme and language until the next playback change. It also
+aligns two dialog returns with the behaviour the theme and
+language dialogs already had: reselecting the already applied
+preset now returns without applying anything, and switching
+scope modes no longer wipes the checked boxes of the mode left
+behind. It also decides on screen rotation: the portrait lock is
+lifted, so the app follows the device. Several locales
+have labels longer than a portrait row comfortably fits. These failures were reported on TECNO Camon
+20 Pro (HiOS), where a theme, preset, or language picked from a
+dialog left the backgrounded surfaces, the equalizer controls,
+or the notification showing the previous values until something
+else forced a refresh.
+
+### Fixed
+
+- **Theme change no longer dropped for a backgrounded
+  activity.** Every activity's `THEME_COLOR_CHANGED` handler
+  recreated only when the activity was visible. A backgrounded
+  activity hit its visibility guard and returned without
+  recording anything, so the event was dropped. The handler
+  now records the dropped event in `mThemeRecreationPending`
+  and the recreate runs when the activity returns: from
+  `onResume()` for the resumed-gated activities, from
+  `onStart()` for `MusicPlayer`, whose guard is the started
+  gate. The drain recreates and returns before the returning
+  lifecycle method does any other work, so the dying instance
+  does not repaint against the old theme. A theme change
+  while the activity is visible still recreates immediately,
+  as before.
+
+- **Preset change now refreshes the band controls.**
+  `EqualizerActivity`'s preset callback applied the preset
+  through the manager and relied on the listener notification
+  to refresh the band SeekBars and the preset button. When
+  that notification was lost, the controls kept showing the
+  previous preset's bands even though the audio had changed.
+  The callback now refreshes from the manager's current state
+  immediately after applying: `updateBandControlsFromLevels()`
+  re-reads the band levels into the SeekBars and the preset
+  button re-reads the preset name. The dialog owns the
+  selection; the host owns the refresh.
+
+- **Notification rebuilds in the new theme and language
+  immediately.** `MusicService` had a theme subscriber that
+  did nothing and no language subscriber at all, and
+  `NotificationController`'s theme handler was a no-op whose
+  Javadoc promised a rebuild "on the next commit" — which
+  only happened on the next playback change. The service now
+  forces a `broadcastUpdate()` on both events, committing a
+  fresh snapshot against the newly persisted theme and locale
+  on the same turn. The controller's handler stays a no-op,
+  and its Javadoc now says why: committing from there as
+  well would post the same notification twice.
+
+- **Reselecting the already-applied preset no longer
+  re-applies it.** `EqualizerActivity`'s preset listener
+  applied every selection, including a tap on the preset
+  the dialog opened with. The theme and language hosts in
+  `CreditsDialog` return early when the selection equals the
+  index the dialog opened with (`openedAtIndex`). The preset
+  listener has the same guard, first statement, before the
+  operational checks: reselecting the current preset closes
+  the dialog with its bounce and applies nothing. Selecting
+  a different preset applies as before, including the host
+  refresh.
+
+- **Scope drafts survive a mode switch.**
+  `PlaybackScopeDialog.onModeTapped()` called
+  `clearAllFilters()` on every mode switch, wiping all four
+  filter kinds' draft sets. The mode switch now touches only
+  `mSelectedKind` and the expansion flag, so each kind's
+  draft survives while the dialog is open and returning to a
+  kind restores its checks. Nothing commits on a mode switch:
+  `buildScope()` reads only the selected kind's set, cancel
+  commits nothing, and APPLY still compares `buildScope()`
+  to the scope the dialog opened with. `clearAllFilters()`
+  had exactly one caller, so it is removed with the call.
+
+### Decision
+
+- **Screen rotation is allowed.** The portrait value on all
+  five activities (`MusicPlayer`, `PlaylistActivity`,
+  `FolderManager`, `EqualizerActivity`, `MetadataEditor`) is
+  replaced with `unspecified`, the platform value for
+  auto-rotation. The system decides the orientation,
+  honouring the user's auto-rotate setting. The portrait
+  lock was the previous behaviour, not a defect — lifting
+  it is a decision. The shared configChanges set already
+  covers `orientation`, so rotating does not destroy the
+  activity and does not dismiss an open dialog: the
+  activity receives `onConfigurationChanged` and every view
+  re-measures against the new window.
+
+### Preserved
+
+- No change to scope matching, repeat, shuffle, sort, search
+  filtering, favorite persistence, or click debounce.
+- No change to the intentional Reset button, which still
+  writes the default pitch and speed directly and does not
+  go through attach.
+- Language changes still recreate each subscribed activity
+  immediately; `locale` is still deliberately absent from
+  the configChanges set, so a system language change still
+  recreates the activity and rebuilds the wrapped base
+  context.
+- `PresetDialog` still fires for every tap, including a
+  reselect; the guard is in the host listener, as it is for
+  theme and language.
+- No change to ProGuard rules. The new `MusicService`
+  `onLanguageChangedEvent` is a `@Subscribe` method, kept by
+  the existing EventBus keep rule; the new
+  `mThemeRecreationPending` fields are kept by the existing
+  `com.ark.llama.**` wildcard and per-class keeps.
+
 ## [1.5.7] - Nov 20, 2026
 
 ### Overview
