@@ -54,8 +54,10 @@ controls.
   transport controls — group first, then the controls,
   sharing the row with 0.5 weight each, the transport row
   keeping its portrait spacers — and the seek bar sits
-  centred between the header and the docked row. It
-  returns to its own row in portrait.
+  centred between the header and the docked row. The
+  portrait toast lane between the transport controls and
+  the bottom buttons is preserved. It returns to its own
+  row in portrait.
 - Decision: screen rotation is allowed. The portrait value
   on all five activities is replaced with `unspecified`, the
   platform value for auto-rotation; rotating the device

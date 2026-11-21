@@ -109,8 +109,14 @@ else forced a refresh.
   the gap between the two sits at the center. Two
   weight-1 spacers centre the seek bar between the header
   and the docked row, so its top and bottom margins are
-  equal, and rotating back restores both views to their
-  own rows.
+  equal. The portrait toast lane is preserved: the
+  transport row's bottom padding — 64dp with the art
+  visible, 48dp with it hidden — plus the bottom buttons
+  row's 16dp top padding is the space between the
+  transport controls and the bottom buttons where toasts
+  show, and only the landscape dock zeroes the transport
+  part. Rotating back restores both views to their own
+  rows and the full lane.
   The dock only applies in landscape: a short portrait
   window is too narrow for the two side by side.
 

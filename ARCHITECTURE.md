@@ -741,9 +741,15 @@ centre the seek-bar section between the header and the
 docked row — one above it, one below it — and the docked
 row hugs its content just above the bottom buttons.
 Rotating back restores both views to their own rows and
-removes the spacers. The dock only applies in landscape: a
-short portrait window is too narrow for the two side by
-side.
+removes the spacers. The portrait toast lane is preserved:
+the transport row's bottom padding — 64dp with the art
+visible, 48dp with it hidden — plus the bottom buttons
+row's 16dp top padding is the space between the transport
+controls and the bottom buttons where toasts show. Only
+the landscape dock zeroes the transport part; rotating
+back restores the full lane. The dock only applies in
+landscape: a short portrait window is too narrow for the
+two side by side.
 
 ### The fingers
 
