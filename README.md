@@ -29,6 +29,10 @@ scope modes no longer wipes the checked boxes of the mode left
 behind. It also decides on screen rotation: the portrait lock is
 lifted, so the app follows the device. Several locales
 have labels longer than a portrait row comfortably fits.
+Lifting the lock exposed one overlap: in a short
+landscape window the player's artist group collapsed onto
+the seek bar, so the group now docks beside the transport
+controls.
 
 - Fixed: a theme change is no longer dropped for a backgrounded
   activity. The recreate is deferred until the activity returns,
@@ -45,6 +49,10 @@ have labels longer than a portrait row comfortably fits.
   boxes. Returning to a mode restores its checks exactly as
   they were left; APPLY still commits only the selected kind's
   set, and Cancel throws the drafts away.
+- Fixed: in a short landscape window, the artist group no
+  longer collapses onto the seek bar. It docks beside the
+  transport controls — group first, then the controls — and
+  returns to its own row in portrait.
 - Decision: screen rotation is allowed. The portrait value
   on all five activities is replaced with `unspecified`, the
   platform value for auto-rotation; rotating the device

@@ -723,6 +723,21 @@ off the new window height, and every dialog window is
 what makes rotation safe for long locale labels: the row
 simply gets wider.
 
+Lifting the lock exposed one overlap: in a short landscape
+window the player's album art is gone, the weight-1
+song-info group collapses to zero height, and its children
+spill over the seek bar, because the root does not clip
+children. `MusicPlayer.applySongInfoLayout` therefore docks
+the group beside the transport row when the art is hidden
+and the orientation is landscape: the two views are
+re-parented into a horizontal row — group first, then the
+transport row — that takes the weight the group had. The
+group keeps its normal padding and gravities, the transport
+row's bottom padding drops to zero so its buttons sit
+centred, and rotating back restores both views to their own
+rows. The dock only applies in landscape: a short portrait
+window is too narrow for the two side by side.
+
 ### The fingers
 
 `PlaylistAdapter`, `FolderAdapter`.

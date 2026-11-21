@@ -19,7 +19,11 @@ preset now returns without applying anything, and switching
 scope modes no longer wipes the checked boxes of the mode left
 behind. It also decides on screen rotation: the portrait lock is
 lifted, so the app follows the device. Several locales
-have labels longer than a portrait row comfortably fits. These failures were reported on TECNO Camon
+have labels longer than a portrait row comfortably fits.
+Lifting the lock exposed one overlap: in a short
+landscape window the player's artist group collapsed onto
+the seek bar, so the group now docks beside the transport
+controls. These failures were reported on TECNO Camon
 20 Pro (HiOS), where a theme, preset, or language picked from a
 dialog left the backgrounded surfaces, the equalizer controls,
 or the notification showing the previous values until something
@@ -90,6 +94,21 @@ else forced a refresh.
   to the scope the dialog opened with. `clearAllFilters()`
   had exactly one caller, so it is removed with the call.
 
+- **Artist group docks beside the transport controls in
+  landscape.** In a short landscape window the album art
+  is hidden, so the weight-1 song-info group collapsed to
+  zero height and its children spilled over the seek bar.
+  `MusicPlayer.applySongInfoLayout` now docks the group
+  beside the transport row when the art is hidden and the
+  orientation is landscape: the two views are re-parented
+  into a horizontal row — group first, then the controls
+  — that takes the weight the group had. The group keeps
+  its normal padding and gravities, the transport row's
+  bottom padding drops to zero so its buttons sit centred,
+  and rotating back restores both views to their own rows.
+  The dock only applies in landscape: a short portrait
+  window is too narrow for the two side by side.
+
 ### Decision
 
 - **Screen rotation is allowed.** The portrait value on all
@@ -103,7 +122,8 @@ else forced a refresh.
   covers `orientation`, so rotating does not destroy the
   activity and does not dismiss an open dialog: the
   activity receives `onConfigurationChanged` and every view
-  re-measures against the new window.
+  re-measures against the new window. The landscape player
+  overlap this exposed is fixed above.
 
 ### Preserved
 

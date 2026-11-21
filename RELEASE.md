@@ -13,6 +13,10 @@ scope modes no longer wipes the checked boxes of the mode left
 behind. It also decides on screen rotation: the portrait lock is
 lifted, so the app follows the device. Several locales
 have labels longer than a portrait row comfortably fits.
+Lifting the lock exposed one overlap: in a short
+landscape window the player's artist group collapsed onto
+the seek bar, so the group now docks beside the transport
+controls.
 
 Llama Music Player itself remains licensed under the MIT License.
 
@@ -92,6 +96,23 @@ commits only the selected kind's set — and Cancel / dismiss
 throws the drafts away. Reopening starts from the applied
 scope.
 
+### Fixed: artist group docks beside the transport controls in landscape
+
+In a short landscape window the album art is hidden, so the
+weight-1 artist group collapsed to zero height and its
+children spilled over the seek bar — the home and heart
+buttons sliced in half by the seek bar.
+
+The group now docks beside the transport controls when the
+art is hidden and the orientation is landscape: the two
+views are re-parented into a horizontal row, group first,
+then the controls, that takes the weight the group had. The
+group keeps its normal padding and gravities, and the
+transport row's bottom padding drops to zero so its buttons
+sit centred. Rotating back restores both views to their own
+rows. The dock only applies in landscape: a short portrait
+window is too narrow for the two side by side.
+
 ### Decision: screen rotation is allowed
 
 The portrait value on all five activities — player,
@@ -105,13 +126,16 @@ Nothing is lost on rotation: the shared configChanges set
 already covers orientation, so the activity is not destroyed
 and an open dialog is not dismissed. The layout re-applies
 for the new window — the equalizer switches to its compact
-split layout, the player shrinks the album art — and every
+split layout, the player shrinks the album art and docks
+the artist group beside the transport controls — and every
 other view re-measures.
 
 ### Existing behavior preserved
 
-No Java file changes were needed for rotation: the
-groundwork was already in place. Locale handling is
+The rotation decision itself needed no Java change: the
+groundwork was already in place. Lifting the lock exposed
+one landscape overlap in the player, fixed by docking the
+artist group beside the transport controls. Locale handling is
 untouched — the in-app language picker still recreates each
 activity, and a system language change still recreates it.
 The preset dialog still fires for every tap; the guard is in
