@@ -523,7 +523,15 @@ controller reapplies the previous snapshot so both surfaces continue
 to describe the same committed state. Posting the notification and
 promoting the service to the foreground are separate operations, and
 a sticky service restart reconstructs a paused notification from the
-persisted playback state. While the service is reconciling a prepare
+persisted playback state and re-seeds the playlist behind it:
+the full library is loaded first, then exactly one playlist call
+installs it - or just the last song when the load fails or does
+not contain it - and the last song is prepared to `READY`,
+without starting playback, so the notification's Play, Next,
+and Previous buttons work without the activity opening, and the playlist
+is not replaced while a restore prepare is in flight. A
+restart that finds a playlist already seeded does not re-seed
+it or overwrite the live notification with a paused snapshot. While the service is reconciling a prepare
 failure or player error, its pending-transition state prevents the
 notification's cancel path from removing the visible playback surface.
 
@@ -937,14 +945,6 @@ with `broadcastUpdate()` after `reconcile()`, so the transport
 controls land on the same turn the auto-start resumes. When
 the app was paused before it exited, no commit fires and the
 player stays paused.
-The paused restore is sticky. `mPauseAfterPrepare` is consumed
-by `onPrepared()`, so the cold-start branch also records the
-decision in `mStickyPause`, and `beginTransition()` re-arms the
-pause from it on every prepare: a second `setPlaylist` that
-re-prepares the song still lands paused. An explicit play
-action clears the hold, and a real transition to PLAYING
-clears it too, so the hold never outlives the restore it
-belongs to.
 The pre-action commit that earlier releases performed in
 `onStartCommand`, and the `startForegroundSync` re-post that
 `onPlaybackStarted` and `onPlaybackResumed` issued after

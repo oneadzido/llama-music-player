@@ -18,16 +18,22 @@ scoping, and sixteen languages.
 
 ### v1.6.1
 
-Version 1.6.1 does one thing: a cold-start restore of a paused
-session no longer auto-plays when a second `setPlaylist`
-re-prepares the song.
+Version 1.6.1 does two things, in this order. First, it
+restores the v1.5.6 MusicService, because of the auto
+playback resume bug: it surfaced in v1.5.7 and was noticed
+in 1.6.0, while focus was on new features. Then, it fixes
+a separate concern: the notification's Play button works
+after a sticky restart, without opening the player.
 
-- Fixed: a paused cold-start restore stays paused across
-  re-prepares. The paused decision now survives a second
-  `setPlaylist` — the library load completing, a sort
-  change — instead of being lost when the song is
-  re-prepared. An explicit play action still clears the
-  hold: tapping a song, Next, Previous, or the play button.
+- Fixed: the auto playback resume bug, by restoring the
+  v1.5.6 MusicService as the base. Playback no longer
+  auto-resumes when it should stay paused.
+- Fixed: after the system kills the process, the sticky
+  restart now re-seeds the playlist behind the notification.
+  It loads the full library first, then prepares the last
+  song to `READY`, without starting playback, so Play
+  resumes the last song at its saved position and Next and
+  Previous walk the full library.
 - Preserved: the 1.6.0 fix, the 1.5.9 fixes, scope matching,
   repeat, shuffle, sort, search filtering, favorite
   persistence, click debounce.
@@ -80,189 +86,91 @@ Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
 - **Sixteen languages:** English, Español, Français, Deutsch,
   Italiano, Português, Русский, 中文, 日本語, 한국어, हिन्दी,
   العربية, Türkçe, Bahasa Indonesia, Nederlands, Polski. The picker
-  lives in the Credits dialog. Selecting a language posts a
-  `LanguageChangedEvent` through `BroadcastTranslator`; every
-  subscribed activity answers with `recreate()`, which re-runs
-  `attachBaseContext` and rebuilds the UI in the new locale. The
-  process is not restarted.
+  lives in the Credits dialog.
 - **Favorites:** Double-tap the album art, tap the heart beside the
-  transport controls, or tap a playlist row's heart. The player's
-  heart is a 48dp control button. The playlist row uses a 36dp
-  control button with a 20sp heart glyph, matching the folder
-  manager's compact control treatment.
-  Playlist heart taps are staged in memory and committed in one batch
-  when the playlist screen pauses.
+  transport controls, or tap a playlist row's heart.
 - **Playback scope:** Restrict the player to favorites, loose tracks,
   or a chosen set of folders, genres, artists, or albums. The dialog
-  shows a live count of the songs the selection would yield, computed
-  with the same matcher the service uses. Switching modes keeps each
-  mode's checked boxes as a draft while the dialog is open; APPLY
-  commits only the selected mode's set. A filter mode with no values
-  checked is a scope that matches nothing: the count reads zero, the
-  mode and its list stay in place, and the selection is not rewritten
-  into All Songs. APPLY is enabled when the selection differs from the
-  scope the dialog opened with, so an empty selection from a different
-  starting scope can be committed and re-applying the current scope
-  cannot. The playing song and any pending next stay in the queue
-  regardless of scope. The dialog's title uses logical layout margins
-  to guarantee exactly 8dp of space from the CANCEL and APPLY buttons
-  in every locale.
+  shows a live count of the songs the selection would yield. The
+  playing song stays in the queue regardless of scope.
 - **Scope-aware playback navigation:** Manual Next and Previous,
-  automatic song completion, prepare-failure recovery, player-error
-  recovery, and playback-stall recovery all choose destinations from
-  the active scope, not from the grace-period-extended current playlist.
-  Carousel-neighbour previews and shuffle history use the same scoped
-  candidates. A current or pending song retained outside a newly applied
-  scope can finish its in-flight role, but cannot become a later
-  navigation destination. A scope change mid-song advances into the new
-  scope on completion under repeat off and shuffle, and wraps to the
-  new scope's first song under repeat all. A scope that
-  contains no songs — All Songs on an empty library, Favorites with
-  none marked, or a specific-artists scope with no artists checked —
-  pauses at the end of the current song rather than looping the
-  previous one.
+  automatic song completion, and recovery from a prepare failure,
+  player error, or playback stall all stay inside the active scope.
+  A scope change mid-song takes effect when the current song ends.
+  A scope with no songs pauses at the end of the current song
+  rather than looping the previous one.
 - **Resilient playback notification:** The playback notification
   survives a missing `POST_NOTIFICATIONS` grant on Android 13+, a
-  sticky restart after a process kill, and the brief `IDLE` window
-  during a prepare failure's recovery.
+  sticky restart after a process kill, and a prepare failure's
+  recovery. After a sticky restart its Play button works without
+  opening the player, and it stays paused until you tap Play.
 - **Resume after a phone call:** A call, a navigation prompt, or
-  any other audio-focus interruption is recorded once, and playback
-  resumes when focus returns. Focus acquisition is retried for up to
-  six seconds, so the resume lands on devices where the telephony
-  stack releases focus late. A user action during the interruption —
-  a tap, a next, a stop, a volume change to zero — clears the record
-  and the automatic resume does not fire.
+  any other audio-focus interruption pauses playback, and playback
+  resumes when focus returns. A tap, a next, a stop, or a volume
+  change to zero during the interruption cancels the automatic
+  resume.
 - **A backgrounded volume key does not steal focus:** A hardware
   volume press while the player is backgrounded and another app is
-  playing does not take audio focus back. The volume-raise path
-  requires the service to already hold focus; an interruption record
-  without focus is a record of an app that still owns the stream, and
-  the volume key does not act on it. The same rule covers the
-  Bluetooth headset's volume remap and the media-session play
-  callback.
+  playing does not take audio focus back.
 - **Audible resume from every surface:** A resume from the playback
   notification's play action, the lockscreen and media-session play
-  callback, a headset media key, or an external intent delivers sound
-  at music stream volume zero. The service raises the stream to three
-  steps above zero on the same main-thread turn that starts the
-  player. On devices whose music stream range is one or two steps,
-  the write clamps to the device maximum. The player screen's
-  centre-up swipe also resumes audibly when the activity is active.
+  callback, a headset media key, or an external intent is always
+  audible, even when the music volume was at zero.
 - **Foreground-aware player-screen resumption:** Volume-triggered
-  and centre-swipe playback resumption from the player screen require
-  the activity to be resumed and foreground-interactive. This keeps
-  activity-originated resume actions from firing while the player is
-  backgrounded or after the user returns to the home screen. It does
-  not stop music that is already playing in the background, and it
-  does not disable playback actions initiated through supported
-  external controls.
-- **Precise music-volume observation:** The volume observer compares
-  the actual music-stream volume with its previously observed value
-  before applying the maximum-volume resume check. Unrelated
-  system-settings notifications therefore do not trigger unnecessary
-  playback-resume checks.
+  and centre-swipe resumption from the player screen only work
+  while the player screen is in the foreground. Music already
+  playing in the background is unaffected.
 - **Notification continuity through an interruption:** The
-  playback notification stays a foreground notification while an
-  interruption is in progress and playback is resumable, so the
-  shade entry, the lockscreen controls, and the media session
-  survive a phone call and resume with the playback.
+  playback notification, the shade entry, the lockscreen controls,
+  and the media session survive a phone call and resume with the
+  playback.
 - **Automatic ducking:** A short interruption lowers the music's own
-  output volume for its duration instead of pausing. The system stream
-  volume is not touched.
-- **Home button:** The main player screen's home button uses a Home
-  icon and returns the app to the Android home screen on a deliberate
-  two-tap gesture, leaving the music playing in the background. The
-  first tap turns the button the theme colour and shows a toast;
-  the second tap within one second turns it the pending colour and
-  the app moves to the background half a second later, so the
-  confirmation is a colour the user sees. A tap on any other button
-  during either window cancels the return and restores the Home
-  control to its inactive colour.
+  output volume for its duration instead of pausing. The system
+  stream volume is not touched.
+- **Home button:** The main player screen's home button returns the
+  app to the Android home screen on a deliberate two-tap gesture,
+  leaving the music playing in the background. The first tap shows
+  a toast; the second tap within one second moves the app to the
+  background.
 - **Centre swipe:** Swipe up on the centre of the album art to resume
-  a paused song, or down to pause a playing one. The gesture requires
-  twice the touch slop of travel to distinguish it from digitizer
-  wobble, and commits on release rather than on each move, so a
-  single drag toggles at most once. A swipe up at music-stream volume
-  zero resumes the song through `MusicService.resume()`; the service
-  raises the stream to three steps above zero on the same main-thread
-  turn, so the resume is audible rather than silent. Player-screen
-  resume is accepted only while the activity is resumed and
-  foreground-interactive.
+  a paused song, or down to pause a playing one.
 - **Album-art carousel:** Swipe left or right across the album art,
   or tap the transport buttons, to move between songs. Files opened
   from other apps transition through a cross-fade.
 - **Volume gesture:** Swipe up or down along the album-art edge to
   change the music volume.
 - **Volume-aware playback:** Music pauses at volume 0 and resumes
-  when the volume is raised through the active player screen. The
-  player-screen resume check is gated by the activity's resumed,
-  foreground-interactive state; background playback is unaffected.
+  when the volume is raised through the active player screen.
 - **Live search:** A search bar at the top of the playlist filters
   on every keystroke, case-insensitively, across title, artist, album,
   and genre. The header shows the visible count over the total while a
-  query is active, and the sort button is hidden so a re-sort cannot
-  disturb the filtered order. Clearing the query or pressing back
+  query is active. Clearing the query or pressing back
   restores the full list.
 - **Playlist and scope fast-scroll:** Drag vertically along the
   leftmost or rightmost edge of a long list to scroll proportionally.
-  The playlist and the playback-scope dialog share the same
-  implementation, so the edge width, engagement threshold, and
-  scroll rate are identical on both surfaces.
 - **Sort progress feedback:** Cycling the sort mode shows the
-  dim-and-spinner overlay, hidden only once the reordered list has
-  settled and drawn.
+  dim-and-spinner overlay until the reordered list has settled
+  and drawn.
 - **Library-load feedback:** A persistent overlay appears while the
   library loads on launch.
-- **Full-width toasts:** Toast messages span the full display width
-  minus the app's overlay gutter — the standard 16dp inset every
-  floating surface uses — on each side. A message longer than the
-  previous 320dp cap but shorter than the display's usable width
-  renders in full; a message that genuinely exceeds that span
-  ellipsizes at the edge. The text inside the toast sits with an 8dp
-  horizontal padding, so a compact floating label reads as a label
-  rather than as a padded content card.
-- **Growing progress messages:** A persistent overlay re-reads its
-  available width from the window on every render, so a progress
-  message that starts short and grows is only ellipsized when its
-  composed content actually exceeds the current window's usable
-  width. The overlay composes its visible text once, inside
-  `ToastManager.composeOverlayText(title, body)`, from the two
-  strings the operation's owner supplies. The middle dot between
-  the verb and the count is the composition site's separator, not
-  the caller's.
-- **Library-notification titles and bodies as two strings:** The
-  library notification renders its verb phrase and its count into
-  two separate slots. `ToastManager` composes the in-app overlay's
-  visible text once from those two strings, joined with a middle dot;
-  the notification mirror receives the two strings separately and
-  renders each into its own line. The composition site is
-  `ToastManager.composeOverlayText`; the notification's two slots
-  are written by
-  `NotificationController.buildLibraryNotification(title, body)`.
-- **Metadata editor:** Edit ID3 tags, lyrics, and album art. A write
-  lands on the file the user is editing, whatever the entry path, and
-  the post-write re-read is verification only.
+- **Metadata editor:** Edit ID3 tags, lyrics, and album art.
 - **Folder management:** SAF folder import; removing a folder leaves
   every other folder's songs and every loose track alone. Each
   imported folder carries a badge identifying its storage medium.
 - **10 sort modes:** Title A-Z, Title Z-A, Artist A-Z, Artist Z-A,
   Album A-Z, Album Z-A, Genre A-Z, Genre Z-A, Date (Newest First),
   Date (Oldest First).
-- **32 theme colours.** Selecting one rebuilds every surface — every
-  activity, every open dialog, and the toast overlay — against the
-  persisted color, on every device. No view is repainted in place.
-  An activity that is backgrounded when the theme is picked still
-  rebuilds when it returns; the event is deferred, not dropped.
+- **32 theme colours.** Selecting one rebuilds every surface
+  against the persisted colour. An activity that is backgrounded
+  when the theme is picked still rebuilds when it returns.
 - **Split-screen layout:** The album art resizes, shrinks, or hides
   with the window height; every screen adjusts its own content so
   the controls always fit.
-- **Bluetooth support:** Headset controls, with the pause on
+- **Bluetooth support:** Headset controls, with pause on
   disconnect scoped to the case it describes. A disconnect pauses
-  playback only when the headset was the active output, no other
-  interruption is already handling the pause, and playback was
-  running. A link flap that restores the route within 400 ms
-  suppresses the pause, and a user action during the window cancels
-  it.
+  playback only when the headset was the active output and
+  playback was running. A brief link flap that restores the route
+  does not pause playback.
 - **Background playback:** Persistent notification with album art.
 - **Lock-screen controls:** `MediaSession` integration.
 

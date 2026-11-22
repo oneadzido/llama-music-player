@@ -5,31 +5,60 @@ All notable changes to Llama Music Player are documented in this file.
 Current technical specifications, installation, and usage are
 documented in the [README](README.md).
 
-# [1.6.1] - Nov 21, 2026
+# [1.6.1] - Nov 22, 2026
 
 ### Overview
 
-Version 1.6.1 does one thing: a cold-start restore of a paused
-session no longer auto-plays when a second `setPlaylist`
-re-prepares the song.
+Version 1.6.1 does two things, in this order. First, it
+restores the v1.5.6 `MusicService`, because of the auto
+playback resume bug: it surfaced in v1.5.7 and was noticed
+in 1.6.0, while focus was on new features. Then, it fixes
+a separate concern: the notification's Play button works
+after a sticky restart, without opening the player.
 
 ### Fixed
 
-- **Paused cold-start restore stays paused across re-prepares.**
-  When the app was paused before it exited, a cold start
-  restores the playlist and holds the song paused. That
-  decision lived only in `mPauseAfterPrepare`, which
-  `onPrepared()` consumes, so a second `setPlaylist` that
-  changed the target — the library load completing, a sort
-  change — re-prepared the song with auto-start re-armed and
-  it started playing on its own. The cold-start branch now
-  also records the decision in `mStickyPause`, and
-  `beginTransition()` re-arms the pause from it on every
-  prepare, so the re-prepared song still lands paused. An
-  explicit play action clears the hold: tapping a song,
-  Next, Previous, or the play button, and a real transition
-  to PLAYING. A playing restore is unaffected: it was never
-  held, and it still resumes.
+- **Auto playback resume bug fixed by restoration.**
+  The v1.5.6 `MusicService` is restored as the base: the auto
+  playback resume bug surfaced in v1.5.7 and was noticed in
+  1.6.0, while focus was on new features. Playback no longer
+  auto-resumes when it should stay paused.
+
+- **Notification Play works after a sticky restart.**
+  After the system killed the process, the sticky restart
+  rebuilt only the notification: `restoreNotificationFromPersistedState`
+  committed a paused snapshot of the last song, but never
+  rebuilt the playlist behind it. The service stayed at `IDLE`
+  with an empty playlist, so the notification's Play button
+  took the `IDLE` branch, saw an empty playlist, and did
+  nothing, and Next and Previous bailed out on the empty
+  scoped playlist. Play worked again only once the player
+  was opened and the activity called `setPlaylist`. The
+  restore now re-seeds the playlist behind the notification.
+  It loads the full library first, then makes exactly one
+  `setPlaylist()` call: the full library when it contains the
+  last song, a single-song list for the last song when the
+  load fails, comes back empty, or does not contain it. That
+  one call goes through the normal `setPlaylist` cold-start
+  path, so the saved position is restored and `onPrepared`
+  lands in `READY` instead of `PLAYING`, and no playlist is
+  replaced while a restore prepare is in flight. Playback still does not start on its
+  own, even when the app was playing before it was killed:
+  the paused prepare is forced before the restore's one
+  `setPlaylist()` call, because the cold-start path only
+  sets `mPauseAfterPrepare` when playback was not active
+  before the kill. First restorer wins: if the activity's
+  cold start reaches `setPlaylist()` before the restore's
+  load lands, the load callback returns and the activity's
+  resume-if-it-was-playing rule applies; if the restore
+  lands first, opening the player attaches to the paused
+  restore instead of re-running the cold-start resume, and
+  Play is one tap. A duplicate sticky restart does not
+  re-seed and does not overwrite a live notification with a
+  paused snapshot. A last song whose file is gone keeps its
+  notification but is not prepared. Song resolution gains
+  the `CharacterMapper` fallback the Bluetooth-resume path
+  already had.
 
 ### Preserved
 
@@ -41,7 +70,8 @@ re-prepares the song.
   drawable rename.
 - No change to scope matching, repeat, shuffle, sort, search
   filtering, favorite persistence, or click debounce.
-- No change to ProGuard rules.
+- No change to ProGuard rules. The 1.6.1 change adds no new
+  subscriber and no new kept field.
 
 # [1.6.0] - Nov 21, 2026
 
