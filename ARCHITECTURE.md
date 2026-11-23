@@ -338,11 +338,12 @@ interrupt a session that is still playing.
 A transition creates a new player, and a new player starts with
 default `PlaybackParams`. The heart therefore does not assume the
 new player inherits pitch and speed. `onPrepared()` attaches
-through a helper that preserves them across the session change,
-and the READY branch, which never reaches `onPlaybackStarted()`,
-applies them with `updatePlaybackParams()` instead of leaving the
-prepared player on defaults until a resume. The auto-start path
-still applies them through `onPlaybackStarted()`, as before.
+through `EqualizerManager.attachToAudioSession()`, which snapshots
+and restores the current equalizer state across the session change,
+and playback parameters are applied on the player thread before
+`start()` and in the READY branch, which never reaches
+`onPlaybackStarted()`, instead of leaving the prepared player on
+defaults until a resume.
 
 ### The lungs
 
@@ -449,9 +450,10 @@ Pitch and speed are user preferences, not per-track state. They
 live in the same persisted store as the bands, and they survive a
 session change for the same reason the bands do: attaching to a new
 audio session rebuilds the effects for that session, but must not
-rewrite what the user set. The attach therefore snapshots pitch and
-speed first and restores them when the attach changed them, so a
-later read returns the user's values, not defaults.
+rewrite what the user set. `attachToAudioSession()` therefore
+snapshots and restores the current preset, band levels, bass boost,
+surround, pitch, and speed, so a later read returns the user's
+values, not defaults.
 
 `StorageObserver` is the listening. It registers a single content
 observer for the audio MediaStore URI. Audio additions, removals, and
@@ -610,6 +612,11 @@ language picker is hosted by a visible activity, so there is no
 backgrounded-activity drop to defer, and every subscriber
 recreates immediately.
 
+The selected locale is reapplied after activity resume and
+configuration changes, and timer digits are formatted with an
+explicit formatter for the selected locale, so a resumed or rotated
+activity does not fall back to the system locale.
+
 ### The organs the user touches
 
 `PlaylistActivity`, `EqualizerActivity`, `FolderManager`.
@@ -652,11 +659,11 @@ with every seek bar snapping to a step under a guard flag so a
 programmatic re-set does not re-enter the listener that performed the
 snap. The reset button reports *no change* when nothing has moved.
 
-Attaching to a new audio session preserves pitch and speed for
-the same reason it preserves the bands: they are user preferences,
-not per-track state. Every attach site goes through one helper
-that snapshots them before the attach and restores them when the
-attach changed them, so the refresh that follows a transition
+Attaching to a new audio session preserves the current equalizer
+state for the same reason it preserves the bands: preset, band
+levels, bass boost, surround, pitch, and speed are user preferences,
+not per-track state. `EqualizerManager.attachToAudioSession()`
+snapshots and restores them, so the refresh that follows a transition
 reads the preserved values into the SeekBars.
 
 `FolderManager` is the folder organ — speaking Storage Access
@@ -669,7 +676,7 @@ does not bind `MusicService`.
 
 ### The face
 
-`CreditsDialog`, `LanguageDialog`, `PresetDialog`, `ThemeDialog`.
+`CreditsDialog`, `LanguageDialog`, `PresetDialog`, `ThemeDialog`, `PlaybackScopeDialog`.
 
 The face is what tells the user what the app is. `CreditsDialog` is
 the front of it. Its version header carries the VERSION label, the
@@ -682,6 +689,13 @@ with its natural width, the title in the middle with a weight of 1,
 and a trailing placeholder that reserves no width. The title is the
 only element that can yield, so a long translation truncates with an
 ellipsis rather than running under a button beside it.
+
+All five dialogs share one window-context rule: the dialog window
+is attached to the original Activity context, while dialog views
+are built from the locale-wrapped context, wrapped in the app locale
+before view creation. A locale wrapper is not an Activity and
+carries no window token, so a dialog built on it has no valid
+window.
 
 A theme change made from `CreditsDialog`'s picker closes every dialog
 on the screen — the picker, the `ThemeDialog` it opened, and the
@@ -939,12 +953,12 @@ it. `doPause` bumps `mStartToken` at entry precisely so that a pause
 arriving mid-resume invalidates the resume's continuation.
 
 `broadcastUpdate` is the only path that commits the notification.
-A cold-start `setPlaylist` is a commit turn too: when the app
-was playing before it exited, the cold-start branch commits
-with `broadcastUpdate()` after `reconcile()`, so the transport
-controls land on the same turn the auto-start resumes. When
-the app was paused before it exited, no commit fires and the
-player stays paused.
+A cold-start `setPlaylist` is a commit turn too: the ordinary
+cold-start branch prepares the last track and position into `READY`
+without autoplay, regardless of whether playback was active before
+the process died, and commits with `broadcastUpdate()` after
+`reconcile()`, so the transport controls land on the same turn.
+Only explicit pending-song launches may autoplay.
 The pre-action commit that earlier releases performed in
 `onStartCommand`, and the `startForegroundSync` re-post that
 `onPlaybackStarted` and `onPlaybackResumed` issued after
