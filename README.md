@@ -8,13 +8,55 @@ scoping, and sixteen languages.
 [![Android](https://img.shields.io/badge/Android-6.0%2B-brightgreen.svg)](https://developer.android.com)
 [![Privacy](https://img.shields.io/badge/Privacy-Policy-blue.svg)](PRIVACY.md)
 
-[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.6.4.apk)
+[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.6.5.apk)
 
 [![Build](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml/badge.svg)](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml)
 
 ---
 
-## Latest Release: v1.6.4
+## Latest Release: v1.6.5
+
+Version 1.6.5 keeps the seek bar visible in a short undocked
+player window. The song-info group and the seek-bar section
+share the space between the top bar and the transport row
+equally, instead of the seek-bar section being hidden there.
+
+- **The song-info group and the seek-bar section share the
+  short undocked window.** In `MusicPlayer.applyAlbumArtSize`,
+  `shareSpace` is `albumArtHidden && !dockSongInfo`. That
+  value is passed to `applySongInfoLayout(albumArtHidden,
+  dockSongInfo, shareSpace)`, the one writer for this layout.
+  When `shareSpace` is true, `mSongInfoGroup` and
+  `mSeekBarSection` each take 0dp height with weight 1, with
+  an 8dp gap between them — `SONG_INFO_SEEK_BAR_GAP_DP`
+  as the seek-bar section's top margin — and each keeps its
+  content centred in its half. The pair as a group fills the
+  space between the top bar and the transport row.
+- **Full-size and docked layouts are unchanged.** In a
+  full-size window the group takes the leftover space with
+  weight 1 and the seek-bar section hugs its content below
+  it. In a short, wide landscape window the group still docks
+  beside the transport row through `setSongInfoDocked`, and
+  the seek-bar section takes what is left above it.
+
+## Preserved
+
+- No change to the 1.6.4 resync: `mThemeRecreationPending`,
+  `onLanguageChangedEvent`, `syncDisplayFromService`,
+  `MusicService.requestPlayerResync()`,
+  `MusicService.setActivityInForeground(boolean)`, and
+  `UPDATE_PLAYER` are unchanged. `MusicService` stays at
+  1.6.4.
+- No change to the toast lane: 48dp
+  (`TRANSPORT_ROW_SPLIT_BOTTOM_DP`) in split view and in
+  landscape, plus the bottom buttons row's 16dp top padding.
+- No change to the 1.6.4 button widths: top-bar buttons stay
+  floored at 84dp, header and language buttons stay floored
+  at 68dp, with no padding change.
+- No change to ProGuard rules. The 1.6.5 change adds no new
+  subscriber and no new kept field.
+
+## Previous Release: v1.6.4
 
 Version 1.6.4 makes the player, equalizer, and editor update
 instantly instead of waiting for a recreate or the next playback
@@ -97,16 +139,6 @@ language buttons from 76dp to 68dp.
 - No change to ProGuard rules. The 1.6.4 changes add no new subscriber
   and no new kept field.
 
-## Previous Release: v1.6.3
-
-Version 1.6.3 does one thing. It gives the top-bar and header buttons a
-minimum width, so short labels in short languages no longer look too short
-next to the dialog buttons. Top-bar buttons get 84dp, header and language
-buttons get 76dp, with no padding change.
-
-- Fixed: top-bar buttons floored at 84dp, header and language buttons floored at 76dp, with no padding change.
-- Preserved: the 1.6.2 fixes, scope matching, repeat, shuffle, sort, search filtering, favorite persistence, click debounce.
-
 ---
 
 ## Origin Story
@@ -144,8 +176,8 @@ Read the full origin story here: [ORIGIN_STORY.md](ORIGIN_STORY.md)
   Italiano, Português, Русский, 中文, 日本語, 한국어, हिन्दी,
   العربية, Türkçe, Bahasa Indonesia, Nederlands, Polski. The picker
   lives in the Credits dialog.
-- **Favorites:** Double-tap the album art, tap the heart beside the
-  transport controls, or tap a playlist row's heart.
+- **Favorites:** Double-tap the album art, tap the heart in the
+  song-info group on the player's screen, or tap a playlist row's heart.
 - **Playback scope:** Restrict the player to favorites, loose tracks,
   or a chosen set of folders, genres, artists, or albums. The dialog
   shows a live count of the songs the selection would yield. The

@@ -118,17 +118,19 @@ private Song getDisplaySong() {
 ```
 
 During a transition, the display song is the target. Otherwise it is
-the current song. The carousel, the player UI, the art prefetch, the
-notification, and the media session all read this method directly.
-During a transition the display song is the target, so all five
-surfaces begin advancing toward the incoming song on the same
-main-thread turn a transition begins, and all five land on the
-incoming song on the same frame the transition commits.
-`snapshotForNotification()` calls `getDisplaySong()` unconditionally,
-with no branch on state, so the notification renders exactly the
-song the player screen renders for the same generation. There is one
-expression of the display-song rule and one answer to "which song is
-the app showing" for every consumer.
+the current song. The direct readers are `snapshotForNotification()`,
+the notification art prefetch, `getWindowSnapshot()`, and
+`broadcastUpdate()`: `snapshotForNotification()` calls `getDisplaySong()`
+unconditionally, with no branch on state, so the notification renders
+exactly the song the player screen renders for the same generation.
+The carousel reads the window, the player UI reads the broadcast
+plus the window and the current song, and the media session reads
+the snapshot through `ServiceStateSource`. There is one expression
+of the display-song rule and one answer to "which song is the app
+showing" for every consumer. During a transition the display song is
+the target, so all five surfaces begin advancing toward the incoming
+song on the same main-thread turn a transition begins, and all five
+land on the incoming song on the same frame the transition commits.
 
 The guards are the method's contract. The playlist can be empty
 during a library reset. `mTargetIndex` can point past the end of
@@ -792,7 +794,7 @@ content and carries a 48dp bottom margin: the toast lane,
 reserved between the side-by-side row and the bottom buttons.
 The seek-bar section takes what is left — weight 1, its content
 centred — because the side-by-side row, the toast lane, the
-bottom buttons and the 16dp to the edge are fixed. Rotating
+bottom buttons and the 16dp to the edge stay in place. Rotating
 back restores both views to their own rows, with their original
 indices and layout params. The toast lane is reserved in both
 orientations: 48dp in split view and in landscape, plus the bottom
@@ -810,28 +812,38 @@ narrow landscape window: landscape split-screen, at about
 288dp it needs and leave the title about 56dp after the
 group's 72dp + 72dp inner padding. Such a window falls back
 to the stacked portrait layout instead, group on its own
-row and transport on its own row, each at full width — but
-a short, undocked window cannot fit the whole stacked
-layout either, so the seek-bar section is hidden there.
-That is the same evaluation in short portrait split-screen
-and in short, narrow landscape: `albumArtHidden &&
-!dockSongInfo`. The seek bar goes, not the group: the
-group is the glanceable part — what is playing, home,
-favourite — plus the transport controls, while scrubbing
-can wait until the window is full-size again. Hiding the
-group instead would leave controls for a song the user
-cannot identify, and would take home and favourite with
-it, since both live inside the group. The SeekBar keeps
-receiving progress updates while hidden, so returning to
-a full-size window shows the current position with no
-re-sync.
-In the stacked layout the group stays vertically centered
-in the space between the header and whatever follows it —
-the seek bar, or the transport row when the seek bar is
-hidden — with its default top padding and its default
-gravities. It is never
+row and transport on its own row, each at full width.
+In a short, undocked window the group and the seek-bar
+section share the space between the top bar and the
+transport row equally. That is the same evaluation in
+short portrait split-screen and in short, narrow
+landscape: `shareSpace` is `albumArtHidden &&
+!dockSongInfo` in `MusicPlayer.applyAlbumArtSize`, passed
+to `applySongInfoLayout(albumArtHidden, dockSongInfo,
+shareSpace)`, the one writer for this layout. When
+`shareSpace` is true, `mSongInfoGroup` and
+`mSeekBarSection` each take 0dp height with weight 1,
+with an 8dp gap between them —
+`SONG_INFO_SEEK_BAR_GAP_DP` as the seek-bar section's
+top margin — and each keeps its content centred in its
+half: the group through its centred title/artist column,
+the seek-bar section through `Gravity.CENTER_VERTICAL`.
+The pair as a group fills the space between the top bar
+and the transport row, group on top and seek bar below
+it. In a full-size window the group takes the leftover
+space with weight 1 and the seek-bar section hugs its
+content below it: `WRAP_CONTENT` height, weight 0, top
+margin 0, gravity `mDefaultSeekBarSectionGravity`.
+The group is never hidden instead, because it carries
+what is playing plus home and favourite. Hiding the
+group would leave controls for a song the user cannot
+identify, and would take home and favourite with it,
+since both live inside the group.
+In the shared layout each half stays vertically centered
+in its own half, with the group's default top padding
+and its default gravities. It is never
 pinned to the top, and no extra top padding is added: the
-old 16dp album-art offset pushed the centered group down
+16dp album-art offset pushed the centered group down
 and read as an extra gap at the top. The seek-bar
 progress drawable is `seekbar_progress_enabled`, the
 enabled-state progress; the name says which state it
@@ -980,25 +992,19 @@ without autoplay, regardless of whether playback was active before
 the process died, and commits with `broadcastUpdate()` after
 `reconcile()`, so the transport controls land on the same turn.
 Only explicit pending-song launches may autoplay.
-The pre-action commit that earlier releases performed in
-`onStartCommand`, and the `startForegroundSync` re-post that
-`onPlaybackStarted` and `onPlaybackResumed` issued after
-`broadcastUpdate`, have both been removed. Either showed a state the
-user had already left, and on some devices the two posts interleaved
-and produced a brief flash of the pre-tap icon after the post-tap
-one. A transport tap now produces exactly one notification commit,
-fired by `broadcastUpdate` when the state machine has reached the
-new state.
+A transport tap produces exactly one notification commit, fired by
+`broadcastUpdate` when the state machine has reached the new state.
 
 A player that returns to the foreground resyncs the same way.
 `UPDATE_PLAYER` is posted, not sticky, so a player that was
 destroyed or backgrounded while a change broadcast fired misses it
-entirely. The service therefore re-broadcasts the full snapshot
-when the player goes from background to foreground, with
-`requestPlayerResync()` as a backup for a rebind where the flag did
-not flip, and the player pulls a full snapshot on bind and on
-resume. The carousel, song info, transport controls, and seek bar
-refresh without a recreate.
+entirely. The player pulls a full snapshot on bind and on resume
+with `syncDisplayFromService()`, and asks the service to re-broadcast
+the full snapshot with `requestPlayerResync()`. Recording the
+foreground flag in `setActivityInForeground()` does not itself
+re-broadcast; the flag only gates volume-triggered playback. The
+carousel, song info, transport controls, and seek bar refresh without
+a recreate.
 
 ### Decisions made on the user's behalf
 
@@ -1044,9 +1050,10 @@ way, through the same pending flag.
 ### Document the why
 
 Every method carries a javadoc that explains not only *what* it does
-but *why it exists*. The service class documentation includes a
-section called *Volume Semantics* and another called *Audio Focus
-Semantics*, and each reads like a decision that was made once and
+but *why it exists*. The service class documentation includes
+sections called *Audio-Focus Interruptions*, *Bluetooth Disconnect*,
+*The Playback Window*, *BroadcastTranslator Subscribers*, and
+*Thread Safety*, and each reads like a decision that was made once and
 defended forever. The `MetadataWriter` exposes a `WriteResult.Status`
 enum with eight values, each one a distinct outcome the writer can
 produce, and the caller is expected to branch on the value, not on the

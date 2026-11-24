@@ -1,91 +1,77 @@
-# Llama Music Player v1.6.4
+# Llama Music Player v1.6.5
 
 **Release date:** November 24, 2026
 
 ## Overview
 
-Version 1.6.4 makes the player, equalizer, and editor update
-instantly instead of waiting for a recreate or the next playback
-state save, and makes long text truncate instead of scrolling
-away. It fixes the case, seen on TECNO / HiOS, where equalizer
-pitch and speed, the carousel, and the song info only refreshed
-after an activity recreate. It also tightens the header and
-language buttons from 76dp to 68dp.
+Version 1.6.5 keeps the seek bar visible in a short undocked
+player window. The song-info group and the seek-bar section
+share the space between the top bar and the transport row
+equally, instead of the seek-bar section being hidden there.
+It is the same window the 1.6.4 entry described — short
+portrait split-screen, and short, narrow landscape — with
+the same evaluation, now used for sharing rather than for
+hiding.
 
-## Fixed
+## Changed
 
-- **Equalizer pitch and speed now reach the service whether or not
-  it is playing.** `EqualizerActivity` dropped the `isPlaying()` gates
-  (pitch, speed, and reset: five sites). A drag made while paused, in
-  `READY`, or in `PREPARING` used to write the preference and never
-  tell the service, so nothing changed until the next playback state
-  save. The service already applies parameters in `READY` and before
-  `start()`; now the equalizer actually sends them.
-- **The player resyncs when it returns to the foreground.** The
-  service re-broadcasts the full playback snapshot when the player
-  goes from background to foreground, with `requestPlayerResync()` as
-  a backup for a rebind where the flag did not flip, and the player
-  pulls a full snapshot on bind and on resume. The carousel, song
-  info, transport controls, and seek bar refresh without a recreate.
-  `UPDATE_PLAYER` is posted, not sticky, so a player that was
-  destroyed or backgrounded while a change broadcast fired used to
-  miss it entirely.
-- **Language recreate is deferred in `MusicPlayer`, like theme.**
-  `onLanguageChangedEvent` parks the recreate in
-  `mThemeRecreationPending` when the activity is not started, and
-  `onStart()` runs it on return. Recreating a backgrounded activity
-  can be deferred or dropped by aggressive OEMs, and the recreate can
-  race the picker's teardown. Both actions are just a recreate, so
-  they share one pending flag. Other activities still recreate
-  immediately on a language change.
-- **The Playlist search hint truncates with an ellipsis.** The hint
-  only ellipsizes while horizontal scrolling is off, so the field now
-  toggles: empty means hint showing, ellipsize on, scrolling off;
-  typing means ellipsize off, scrolling on, so a long query scrolls
-  instead of being cut off.
-- **Metadata fields truncate in view mode and scroll in edit mode.**
-  `setFieldsEnabled` now calls `applyFieldTruncation` for every field.
-  In view mode the field truncates with "...": ellipsize on,
-  horizontal scrolling off, the parent scroll wrapper disabled, and
-  the field capped to the wrapper's measured width, which is what
-  makes the ellipsis actually appear inside the wrapper's
-  unspecified-width measure pass. In edit mode the field scrolls
-  again. File info is never edited, so it is always truncated.
-- **The seek bar in a short portrait window hides only when the layout
-  genuinely cannot fit it.** A short, undocked window cannot fit
-  header + group + seek bar + transport + bottom buttons, so the seek
-  bar is the row that goes; the group stays, because it is the
-  glanceable part. Everywhere else the seek bar stays visible. The
-  group stays vertically centered in the space between the header and
-  whatever follows it, with no extra top padding. The SeekBar keeps
-  receiving progress updates while hidden, so returning to a
-  full-size window shows the current position with no re-sync.
-- **Header and language buttons move from 76dp to 68dp.** The Sort
-  button in Playlist, the Scope button in Folder Manager, and the
-  language button in the Credits dialog are 28dp high with 12sp text.
-  Their minimum width drops from 76dp to 68dp, with no padding
-  change. 76dp left too much empty width on buttons only 28dp high;
-  68dp keeps short labels from collapsing without the extra width.
+- **The song-info group and the seek-bar section share the
+  short undocked window.** In `MusicPlayer.applyAlbumArtSize`,
+  `shareSpace` is `albumArtHidden && !dockSongInfo`, the
+  same evaluation the 1.6.4 entry used for hiding. That
+  value is passed to `applySongInfoLayout(albumArtHidden,
+  dockSongInfo, shareSpace)`, the one writer for this
+  layout. When `shareSpace` is true, `mSongInfoGroup` and
+  `mSeekBarSection` each take 0dp height with weight 1,
+  with an 8dp gap between them — `SONG_INFO_SEEK_BAR_GAP_DP`
+  as the seek-bar section's top margin — and each keeps its
+  content centred in its half: the group through its centred
+  title/artist column, the seek-bar section through
+  `Gravity.CENTER_VERTICAL`. The pair as a group fills the
+  space between the top bar and the transport row, group on
+  top and seek bar below it.
+- **The new constant matches the existing shape.**
+  `SONG_INFO_SEEK_BAR_GAP_DP = 8` sits with
+  `SPLIT_SCREEN_FULL_HEIGHT_DP`, `SPLIT_SCREEN_MIN_HEIGHT_DP`,
+  `DOCK_MIN_WIDTH_DP`, `ALBUM_ART_FULL_DP`,
+  `ALBUM_ART_SHRUNK_DP`, and `TRANSPORT_ROW_SPLIT_BOTTOM_DP`:
+  upper-snake case with a `_DP` suffix, one constant per
+  layout fact. The same names carry across the layout,
+  the activity, and these docs: `mSongInfoGroup`,
+  `mSeekBarSection`, `mTransportRow`, `applySongInfoLayout`,
+  `applyAlbumArtSize`, `setSongInfoDocked`.
+- **Full-size and docked layouts are unchanged.** In a
+  full-size window the group takes the leftover space with
+  weight 1 and the seek-bar section hugs its content below
+  it: `WRAP_CONTENT` height, weight 0, top margin 0,
+  gravity `mDefaultSeekBarSectionGravity`. In a short, wide
+  landscape window the group still docks beside the transport
+  row through `setSongInfoDocked`: the two share the docked
+  row with 0.5 weight each, and the seek-bar section takes
+  what is left above it with weight 1. The dock condition
+  is unchanged: art hidden, orientation landscape, and
+  window width at least `DOCK_MIN_WIDTH_DP` (600dp).
 
 ## Preserved
 
-- No change to the 1.6.3 top-bar buttons: they stay floored at 84dp,
-  with no padding change.
-- No change to the 1.6.2 fixes: cold start still restores paused to
-  READY, dialog window context and locale lifecycle still stay fixed,
-  and equalizer and playback parameters still stay preserved across
-  audio-session rebuilds.
-- No change to scope matching, repeat, shuffle, sort, search filtering,
-  favorite persistence, or click debounce.
-- No change to fill-screen buttons: Preset and Reset in Equalizer and
-  Import Folder in Folder Manager stay match_parent, and the Music
-  Player bottom buttons stay 0dp with weight. Their width comes from
-  layout, not from minWidth.
-- No change to icon buttons: the Music Player transport buttons and the
-  Playlist Clear button stay at their fixed sizes with minWidth 0dp.
-- No change to button padding, height, text size, or click behavior.
-- No change to ProGuard rules. The 1.6.4 changes add no new subscriber
-  and no new kept field.
+- No change to the 1.6.4 resync: `mThemeRecreationPending`,
+  `onLanguageChangedEvent`, `syncDisplayFromService`,
+  `MusicService.requestPlayerResync()`,
+  `MusicService.setActivityInForeground(boolean)`, and
+  `UPDATE_PLAYER` are unchanged. `MusicService` stays at
+  1.6.4.
+- No change to the toast lane: 48dp
+  (`TRANSPORT_ROW_SPLIT_BOTTOM_DP`) in split view and in
+  landscape, plus the bottom buttons row's 16dp top padding.
+  In portrait with the art visible the lane is the layout's
+  64dp transport padding instead.
+- No change to the 1.6.4 button widths: top-bar buttons stay
+  floored at 84dp, header and language buttons stay floored
+  at 68dp, with no padding change.
+- No change to scope matching, repeat, shuffle, sort, search
+  filtering, favorite persistence, or click debounce.
+- No change to ProGuard rules. The 1.6.5 change adds no new
+  subscriber and no new kept field.
 
 For the full change history, see the [CHANGELOG](CHANGELOG.md). For
 technical specifications, installation, and usage, see the [README](README.md).
