@@ -496,7 +496,12 @@ step fails after the backup, the original is restored. The result of
 the write is an eight-value status enum, and one method on it answers
 the only question a caller should have to ask. `StorageAccessHelper`
 is the grip — holding the permissions that let the hands reach the
-files.
+files. In VIEW MODE the fields truncate with an ellipsis: ellipsize
+on, horizontal scrolling off, the parent scroll wrapper disabled,
+and the field capped to the wrapper's measured width, which is what
+makes the ellipsis appear inside the wrapper's unspecified-width
+measure pass. In EDIT MODE the fields scroll again. File info is
+never edited, so it is always truncated.
 
 ### The voice
 
@@ -607,10 +612,15 @@ returns — from `onResume()` for the activities whose guard is
 the resumed gate, from `onStart()` for `MusicPlayer`, whose
 guard is the started gate. A backgrounded activity therefore
 still rebuilds against the new theme instead of keeping the
-theme it was constructed with. Language is not deferred: the
-language picker is hosted by a visible activity, so there is no
-backgrounded-activity drop to defer, and every subscriber
-recreates immediately.
+theme it was constructed with. Language is deferred in
+`MusicPlayer` the same way: its language handler parks the
+recreate in the same `mThemeRecreationPending` flag when the
+activity is not started, and `onStart()` runs it on return.
+Recreating a backgrounded activity can be deferred or dropped
+by aggressive OEMs, and the recreate can race the picker's
+teardown. Both actions are just a recreate, so they share one
+pending flag. Every other activity still recreates immediately
+on a language change.
 
 The selected locale is reapplied after activity resume and
 configuration changes, and timer digits are formatted with an
@@ -652,12 +662,23 @@ Hiding search follows the same rule. `hideSearch()` restores the
 full list, then focuses the current song with the same delayed,
 guarded focus the sort path uses, so the scroll runs after the
 adapter has laid out the restored list and is suppressed while the
-user is scrolling, tapping, or genre-loading.
+user is scrolling, tapping, or genre-loading. The search hint
+truncates with an ellipsis: the hint only ellipsizes while
+horizontal scrolling is off, so the field toggles — empty means
+hint showing, ellipsize on, scrolling off; typing means ellipsize
+off, scrolling on, so a long query scrolls instead of being cut
+off.
 
 `EqualizerActivity` is the equalizer — ten bands and sixty presets,
 with every seek bar snapping to a step under a guard flag so a
 programmatic re-set does not re-enter the listener that performed the
 snap. The reset button reports *no change* when nothing has moved.
+A pitch or speed drag notifies the service whether or not it is
+playing: the old `isPlaying()` gates meant a drag made while paused
+wrote the preference and never told the service, so nothing
+changed until the next playback state save. The service already
+applies parameters in `READY` and before `start()`; the equalizer
+now actually sends them.
 
 Attaching to a new audio session preserves the current equalizer
 state for the same reason it preserves the bands: preset, band
@@ -969,6 +990,16 @@ one. A transport tap now produces exactly one notification commit,
 fired by `broadcastUpdate` when the state machine has reached the
 new state.
 
+A player that returns to the foreground resyncs the same way.
+`UPDATE_PLAYER` is posted, not sticky, so a player that was
+destroyed or backgrounded while a change broadcast fired misses it
+entirely. The service therefore re-broadcasts the full snapshot
+when the player goes from background to foreground, with
+`requestPlayerResync()` as a backup for a rebind where the flag did
+not flip, and the player pulls a full snapshot on bind and on
+resume. The carousel, song info, transport controls, and seek bar
+refresh without a recreate.
+
 ### Decisions made on the user's behalf
 
 The app makes a handful of decisions on the user's behalf. It makes
@@ -998,13 +1029,17 @@ When another app takes the output away entirely, the service pauses
 and remembers that it paused itself for a reason that will end. When
 focus returns, the music resumes.
 
-When the user chooses a theme, every activity recreates on the turn
-the dialog dismisses. Not on the next launch. A theme change made
-from a dialog closes every dialog on the screen on the same
-broadcast, so no surface survives the change un-rebuilt.
+When the user chooses a theme, every visible activity recreates on
+the turn the dialog dismisses. Not on the next launch. A theme change
+made from a dialog closes every dialog on the screen on the same
+broadcast, so no surface survives the change un-rebuilt. A
+backgrounded `MusicPlayer` recreates when it returns instead: its
+handler parks the recreate and `onStart()` runs it.
 
-When the user chooses a language, every activity rebuilds around it on
-the turn the dialog dismisses. Not on the next launch.
+When the user chooses a language, every visible activity rebuilds
+around it on the turn the dialog dismisses. Not on the next launch.
+A backgrounded `MusicPlayer` rebuilds when it returns, the same
+way, through the same pending flag.
 
 ### Document the why
 
