@@ -834,6 +834,23 @@ it. In a full-size window the group takes the leftover
 space with weight 1 and the seek-bar section hugs its
 content below it: `WRAP_CONTENT` height, weight 0, top
 margin 0, gravity `mDefaultSeekBarSectionGravity`.
+The timer row below the SeekBar (`mTimeRow`,
+`R.id.timeRow`, holding the current time and the
+total duration) shows only when the seek-bar section can
+show it in full. In a full-size window it always shows.
+In a short window where the section is given a fixed
+share — shared or docked — `updateTimeVisibility`
+compares the section height with what the row needs: the
+SeekBar height, the row's 8dp top margin, the row's
+height, and the section's top and bottom padding. When
+the section is shorter, the row is hidden (`GONE`) and
+the SeekBar stays, centred in its share. When space
+returns, the row returns. The check runs after
+`applySongInfoLayout` and again whenever the section's
+height changes, so dragging the split-screen divider
+re-evaluates it. There is no orientation rule and no
+hard-coded height threshold: the decision is a measurement
+of what fits. A half-cut timer never shows.
 The group is never hidden instead, because it carries
 what is playing plus home and favourite. Hiding the
 group would leave controls for a song the user cannot
