@@ -172,6 +172,14 @@ the fresh-row branch of the insert; every other metadata write goes
 through `SongDatabase.updateSongMetadata(Song)`, which deliberately
 omits that column, so a scan cannot clobber a user's favorites.
 
+`MusicService.mFullPlaylist` is the source of truth for playlist order.
+A sort operation must reorder this list before calling `rebuildPlaylists()`,
+because the scoped and current playback queues are derived from it.
+Sorting only `mCurrentPlaylist` is not sufficient: rebuilding the queues
+recreates them from `mFullPlaylist` and discards that local ordering.
+The service preserves the current and pending songs by path while
+rebuilding the derived queues.
+
 Metadata editor announcements are consumed independently by
 `MusicService`, `MusicPlayer`, and `PlaylistActivity`. The service applies
 announced fields to matching entries in its full and current playlists.
@@ -341,11 +349,22 @@ A transition creates a new player, and a new player starts with
 default `PlaybackParams`. The heart therefore does not assume the
 new player inherits pitch and speed. `onPrepared()` attaches
 through `EqualizerManager.attachToAudioSession()`, which snapshots
-and restores the current equalizer state across the session change,
-and playback parameters are applied on the player thread before
-`start()` and in the READY branch, which never reaches
-`onPlaybackStarted()`, instead of leaving the prepared player on
-defaults until a resume.
+and restores the current equalizer state across the session change.
+The service completes that attachment before publishing
+`AUDIO_SESSION_CHANGED`; activities observe the attached manager and
+never create or replace effects for a service-owned session. Playback
+parameters are applied on the player thread before `start()` and in
+the READY branch, which never reaches `onPlaybackStarted()`, instead
+of leaving the prepared player on defaults until a resume. When the
+equalizer screen is bound, pitch/speed edits call the service directly;
+the in-process event remains a fallback during binding.
+
+The player screen treats song identity/timing and album art as separate
+projections of the same service snapshot. Title, artist, and seek-bar
+range/position are committed immediately when `UPDATE_PLAYER` arrives;
+the carousel independently adopts the window and decodes/animates art.
+A slow OEM image decode or animation therefore cannot delay the visible
+song labels or timing controls.
 
 ### The lungs
 
@@ -643,6 +662,16 @@ the batch. The header reads `SORT MODE [TITLE A-Z]` or
 `SORTIEREN [TITEL A-Z]` or `СОРТИРОВКА [НАЗВАНИЕ А-Я]`, because the
 label after the bracket comes from a resource and the space between
 the two halves of the phrase is supplied by a Java-side constant.
+
+
+Playlist sort selection is a service-owned playback fact, not merely an
+Activity presentation change. When bound, `PlaylistActivity` calls
+`MusicService.applyPlaylistSortMode()` directly. The service persists the
+selected mode, sorts the authoritative playlist on its background executor,
+rebuilds scoped playlists, remaps the current and pending target positions by
+song path, clears shuffle history, and publishes the resulting state. The
+`UPDATE_SORT_MODE` event remains a compatibility fallback while the Activity
+is not bound; both paths delegate to the same service method.
 
 A tap on a playlist row does not highlight from the stale displayed
 list. The tap sends `PLAY_SONG`, then the activity refreshes first —
