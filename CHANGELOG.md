@@ -26,7 +26,7 @@ and artist stay legible in a short window.
   settings change or the screen reconnects to playback.
 - The timer row no longer gets cut off in a short player window. It hides
   when there is insufficient space and returns when the window grows.
-- The SeekBar and timer row now sit centred in their half of the player
+- The SeekBar and timer row sit centred in their half of the player
   layout instead of being pinned to the top. The stacked layout declares
   its share model in the XML: the song-info group and the seek-bar
   section each take 0dp height with weight 1, a 16dp gap separates them
@@ -38,17 +38,17 @@ and artist stay legible in a short window.
 - The timer row hides in short split-screen landscape windows where it
   would otherwise be clipped by the bottom of the screen. The fit check
   compares the predicted timer bottom against the activity's visible
-  window boundary, not only against the seek-bar section's own height.
-  Full-size landscape and portrait keep the timer visible; short
-  split-screen landscape hides it.
+  window boundary using absolute screen coordinates, not only against
+  the seek-bar section's own height. Full-size landscape and portrait
+  keep the timer visible; short split-screen landscape hides it.
 - The timer row's top margin is zeroed on the same turn the row is
   hidden, so a hidden timer leaves no empty gap below the SeekBar and
   the SeekBar stays centred in its share.
 - The title and artist stay legible and vertically clear of the
-  container edges in a short shared half. The inner content of the
-  song-info group holds a 64dp minimum height, so the title, artist,
-  and the 48dp Home/Favorite buttons stay fully visible with clear
-  space above and below in every undocked case.
+  container edges in a short shared half. The song-info group holds an
+  80dp minimum height, so the title, artist, and the 48dp Home/Favorite
+  buttons stay fully visible with clear space above and below in every
+  undocked case.
 
 ### Preserved
 
