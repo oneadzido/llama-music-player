@@ -19,6 +19,10 @@ adapts to resized windows, showing the timer only when it fits.
   settings change or the screen reconnects to playback.
 - The timer row no longer gets cut off in a short player window. It hides
   when there is insufficient space and returns when the window grows.
+- The SeekBar and timer row now sit centred in their half of the player
+  layout instead of being pinned to the top, in every undocked case:
+  full-size portrait, short portrait split screen, and short, narrow
+  landscape split screen.
 
 ## Preserved
 
