@@ -44,10 +44,11 @@ and artist stay legible in a short window.
 - The timer row's top margin is zeroed on the same turn the row is
   hidden, so a hidden timer leaves no empty gap below the SeekBar and
   the SeekBar stays centred in its share.
-- The song-info group keeps its title and artist legible in a short
-  shared half. The title/artist column is vertically centred in its
-  parent, so both lines are fully visible with clear space above and
-  below in every undocked case.
+- The title and artist stay legible and vertically clear of the
+  container edges in a short shared half. The inner content of the
+  song-info group holds a 64dp minimum height, so the title, artist,
+  and the 48dp Home/Favorite buttons stay fully visible with clear
+  space above and below in every undocked case.
 
 ### Preserved
 
