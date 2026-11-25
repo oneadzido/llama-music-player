@@ -11,7 +11,9 @@ documented in the [README](README.md).
 
 Version 1.6.6 improves playlist sorting and keeps the Music Player and
 Equalizer screens responsive to playback changes. It also improves the
-player layout in resized windows so the timer is shown only when it fits.
+player layout in resized windows so the timer is shown only when it fits,
+the seek bar and timer row read as centred in their half, and the title
+and artist stay legible in a short window.
 
 ### Fixed
 
@@ -29,9 +31,15 @@ player layout in resized windows so the timer is shown only when it fits.
   its share model in the XML: the song-info group and the seek-bar
   section each take 0dp height with weight 1, a 16dp gap separates them
   (`SONG_INFO_SEEK_BAR_GAP_DP` as the seek-bar section's top margin),
-  and the seek-bar section carries centre-vertical gravity. The behaviour
-  holds in every undocked case: full-size portrait, short portrait split
-  screen, and short, narrow landscape split screen.
+  and the seek-bar section holds the SeekBar and timer row in an inner
+  container with centre gravity. The behaviour holds in every undocked
+  case: full-size portrait, short portrait split screen, and short,
+  narrow landscape split screen.
+- The song-info group carries a 96dp minimum height, so the title and
+  artist stay legible when the group shares the space in a short window.
+- The timer row's top margin is zeroed on the same turn the row is
+  hidden, so a hidden timer leaves no empty gap below the SeekBar and
+  the SeekBar stays centred in its share.
 
 ### Preserved
 
