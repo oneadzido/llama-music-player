@@ -795,14 +795,13 @@ for auto-rotation, so the system decides the orientation
 honouring the user's auto-rotate setting
 — and `orientation` is in the shared configChanges set,
 so rotating neither destroys the activity nor dismisses
-an open dialog. The activities
-that own size-dependent layout re-apply it from
-`onConfigurationChanged` — the equalizer split layout, the
-folder-manager layout, the player album-art size — keyed
-off the new window height, and every dialog window is
-`MATCH_PARENT`, so it re-measures with the window. That is
-what makes rotation safe for long locale labels: the row
-simply gets wider.
+an open dialog. The activities that own size-dependent
+layout re-apply it from `onConfigurationChanged`
+— the equalizer split layout, the folder-manager layout,
+the player album-art size — keyed off the new window height,
+and every dialog window is `MATCH_PARENT`, so it re-measures
+with the window. That is what makes rotation safe for long
+locale labels: the row simply gets wider.
 
 Lifting the lock exposed one overlap: in a short landscape
 window the player's album art is gone, the weight-1
@@ -821,6 +820,7 @@ and the controls end 16dp from the right edge, so the gap
 between the two sits at the center. The docked row hugs its
 content and carries a 48dp bottom margin: the toast lane,
 reserved between the side-by-side row and the bottom buttons.
+
 The seek-bar section takes what is left — weight 1, its content
 centred — because the side-by-side row, the toast lane, the
 bottom buttons and the 16dp to the edge stay in place. Rotating
@@ -834,6 +834,7 @@ stays zero so the lane is the margin, not padding. In portrait with
 the art visible, the lane is the layout's 64dp transport padding
 instead. The 16dp from the bottom buttons to the edge is the
 bottom buttons row's bottom padding and is never touched.
+
 The dock only applies in wide landscape. A short portrait
 window is too narrow for the two side by side, and so is a
 narrow landscape window: landscape split-screen, at about
@@ -852,14 +853,15 @@ to `applySongInfoLayout(albumArtHidden, dockSongInfo,
 shareSpace)`, the one writer for this layout. When
 `shareSpace` is true, `mSongInfoGroup` and
 `mSeekBarSection` each take 0dp height with weight 1,
-with an 8dp gap between them —
+with a 12dp gap between them —
 `SONG_INFO_SEEK_BAR_GAP_DP` as the seek-bar section's
 top margin — and each keeps its content centred in its
 half: the group through its centred title/artist column,
 the seek-bar section through `Gravity.CENTER_VERTICAL`.
 The pair as a group fills the space between the top bar
-and the transport row, group on top and seek bar below
-it. In a full-size window the group takes the leftover
+and the transport row, group on top and seek bar below it.
+
+In a full-size window the group takes the leftover
 space with weight 1 and the seek-bar section hugs its
 content below it: `WRAP_CONTENT` height, weight 0, top
 margin 0, gravity `mDefaultSeekBarSectionGravity`.
@@ -880,6 +882,7 @@ height changes, so dragging the split-screen divider
 re-evaluates it. There is no orientation rule and no
 hard-coded height threshold: the decision is a measurement
 of what fits. A half-cut timer never shows.
+
 The group is never hidden instead, because it carries
 what is playing plus home and favourite. Hiding the
 group would leave controls for a song the user cannot
