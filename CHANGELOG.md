@@ -5,7 +5,7 @@ All notable changes to Llama Music Player are documented in this file.
 Current technical specifications, installation, and usage are
 documented in the [README](README.md).
 
-## [1.6.6] - Nov 25, 2026
+## [1.6.6] - Nov 26, 2026
 
 ### Overview
 
@@ -44,11 +44,12 @@ and artist stay legible in a short window.
 - The timer row's top margin is zeroed on the same turn the row is
   hidden, so a hidden timer leaves no empty gap below the SeekBar and
   the SeekBar stays centred in its share.
-- The title and artist stay legible and vertically clear of the
-  container edges in a short shared half. The song-info group holds an
-  80dp minimum height, so the title, artist, and the 48dp Home/Favorite
-  buttons stay fully visible with clear space above and below in every
-  undocked case.
+- The title and artist column is a fixed 48dp-high stack, matching the
+  48dp Home/Favorite buttons so all three remain aligned as one control
+  group in portrait and landscape. The song-info container retains its 80dp
+  minimum in normal layouts and uses a 48dp minimum in short shared-space
+  split-screen, avoiding the previous oversized minimum while keeping the
+  title and artist together.
 
 ### Preserved
 
