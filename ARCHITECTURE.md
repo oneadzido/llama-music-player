@@ -388,12 +388,23 @@ During `PREPARING`, an invalidated target follows the existing
 cancel/re-prepare and generation reconciliation path. `PAUSED` and
 `READY` retain their state and seek/pause latches while a replacement
 is resolved. Repeat-one remains the existing `mRepeatMode == 2`
-path when the current song survives; repeat-all and shuffle continue
-through their existing selection rules for ordinary automatic
-completion. Manual Next may use the captured successor when its base
-song has fallen outside the scope; manual Previous and explicit song
-selection keep their established transport/history paths and clear the
-stale handoff chain.
+path only while the current song is still a member of the new scope.
+This is the boundary between the grace period and playback eligibility:
+a song already playing when a scope change excludes it may finish, but
+its temporary presence in `mCurrentPlaylist` does not authorize another
+play. When that excluded song completes, `onCompletion()` must not take
+the repeat-one restart branch. It resolves a destination from the active
+`mScopedPlaylist`, preferring the captured old-list successor chain and
+falling back to the first song in the new scope when no successor
+survives. If the new scope is empty, playback goes idle. In short,
+repeat-one repeats an eligible current song; it does not extend the
+grace period or override scope membership.
+
+Repeat-all and shuffle continue through their existing selection rules
+for ordinary automatic completion. Manual Next may use the captured
+successor when its base song has fallen outside the scope; manual
+Previous and explicit song selection keep their established
+transport/history paths and clear the stale handoff chain.
 
 `PlaylistActivity` treats row positions as disposable across a
 refresh. `onUpdatePlayerEvent()` rejects older generations, updates

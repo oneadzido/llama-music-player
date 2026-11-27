@@ -9,12 +9,14 @@ seek-bar section to 12dp, declared once in
 `MusicPlayer.SONG_INFO_SEEK_BAR_GAP_DP` and applied as the
 seek-bar section's top margin. The layout XML, the Java constant,
 and the player documentation all state the same 12dp value.
-
 Playlist display updates and service playback are also kept in sync
 across song transitions and playback-scope changes. The service
 remains the authority for playback state, while the playlist screen
 refreshes after the existing transition debounce and resolves the
-current song again against the rebuilt display list.
+current song again against the rebuilt display list. A song excluded
+by a scope change may finish under the grace period, but it cannot
+be selected for another play; Repeat One repeats it only if it
+remains in the active scope.
 
 ## Fixed
 
@@ -59,5 +61,9 @@ current song again against the rebuilt display list.
   Next and Previous, and explicit song selection retain their
   existing service transition and history paths. Scope reconciliation
   does not introduce a parallel playback state machine.
+- A song kept temporarily in the working playlist by the grace period is
+  not eligible for another play after it leaves the active scope. Repeat One
+  therefore does not restart an out-of-scope song; playback hands off at
+  completion.
 
 For the complete release history, see [CHANGELOG.md](CHANGELOG.md).
