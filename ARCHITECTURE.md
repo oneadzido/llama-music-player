@@ -379,29 +379,35 @@ song labels or timing controls.
 
 ### Full library reset and scope state
 
-A full library reset must discard playback-scope state in the same service
-step that resets the library. The `LIBRARY_RESET` handler removes the three
-scope preferences (`playback_scope_json`, `playback_scope_resume_path`, and
-`playback_scope_empty_state`), resets `mPlaybackScope` to
-`PlaybackScope.ALL_SONGS`, empties `mFullPlaylist`, `mScopedPlaylist`, and
-`mCurrentPlaylist`, and clears `mScopeHandoffCandidates` before calling
-`stopCompletely()`.
+A full library reset is an ordered playback teardown followed by a scope and
+library-state reset. The `LIBRARY_RESET` handler first invalidates pending
+playback work by advancing the start token and transition generation. It then
+queues `releaseMediaPlayer()` on the player thread and continues the reset on
+the main thread only after that stop/reset/release operation completes.
 
-This ordering is intentional: `stopCompletely()` uses the existing idle
-transition, which clears current and target indices and broadcasts service
-state. Clearing scope first ensures that the broadcast cannot expose the
-previous scope after the library has been emptied. The UI's existing reset
-listeners then receive the empty state instead of needing to infer a scope
-reset later. Both library-only and factory reset paths use this reset
-handling because both clear the library. No additional method is needed.
+Before changing scope preferences or playlist fields, the service calls
+`NotificationController.clearPlaybackNotification()`. This is a teardown,
+not a foreground demotion: the controller calls `stopForeground(true)` and
+cancels the playback notification. That removes both the visible notification
+and the service's foreground association while the old song state is still
+intact. The controller's generation barrier also rejects queued commits from
+the invalidated playback generation.
 
-The idle transition also owns playback-notification teardown. Its already-idle
-early-return path still calls `NotificationController.clearPlaybackNotification()`
-when the service has no loaded playlist or current/target song, so an old
-notification cannot survive a reset merely because the state machine was
-already empty. This is an explicit empty-state cleanup; it does not treat a
-temporary missing notification snapshot during track preparation as a reason
-to cancel the notification.
+Only after the player and notification have been torn down does the handler
+remove the three scope preferences (`playback_scope_json`,
+`playback_scope_resume_path`, and `playback_scope_empty_state`), reset
+`mPlaybackScope` to `PlaybackScope.ALL_SONGS`, empty `mFullPlaylist`,
+`mScopedPlaylist`, and `mCurrentPlaylist`, and clear
+`mScopeHandoffCandidates`. It then calls the existing `stopCompletely()`
+path to finish the idle transition, clear current and target indices, and
+broadcast the empty service state. Both library-only and factory reset paths
+use this handling because both clear the library. No new method is needed.
+
+The idle transition also owns notification cleanup for other empty-service
+paths. Its already-idle early-return path still calls
+`NotificationController.clearPlaybackNotification()` when the service has no
+loaded playlist or current/target song. Temporary missing notification
+snapshots during track preparation are not treated as a teardown request.
 
 When the app task is removed, `MusicService.onTaskRemoved()` saves the existing
 state and checks the same empty-service condition: `IDLE`, no current playlist,

@@ -20,13 +20,14 @@ data from surviving into a newly selected scope.
 - The service clears its full, scoped, and current playlists, resets the
   scope to `ALL_SONGS`, and empties `mScopeHandoffCandidates` before
   transitioning playback to idle.
-- The idle transition clears current and target indices and tears down the
-  playback notification, including when the service is already idle with
-  nothing loaded. The existing state broadcast informs the UI of the empty
-  state.
-- Notification teardown records the service's current transition generation,
-  so an already-queued update from the song that was playing before reset
-  cannot recreate its stale notification.
+- Before scope and library state are cleared, the service invalidates pending
+  playback work, stops and releases the active player on its owning thread,
+  and removes the playback foreground notification.
+- Notification teardown explicitly ends foreground-service status and cancels
+  the playback notification. The service then clears scope state and performs
+  the idle transition, whose state broadcast informs the UI of the empty state.
+- The transition-generation barrier rejects queued updates from the song that
+  was playing before reset, preventing its notification from reappearing.
 
 ### Preserved
 
