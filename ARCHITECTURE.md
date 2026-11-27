@@ -384,6 +384,22 @@ listeners then receive the empty state instead of needing to infer a scope
 reset later. Both library-only and factory reset paths use this reset
 handling because both clear the library. No additional method is needed.
 
+The idle transition also owns playback-notification teardown. Its already-idle
+early-return path still calls `NotificationController.clearPlaybackNotification()`
+when the service has no loaded playlist or current/target song, so an old
+notification cannot survive a reset merely because the state machine was
+already empty. This is an explicit empty-state cleanup; it does not treat a
+temporary missing notification snapshot during track preparation as a reason
+to cancel the notification.
+
+When the app task is removed, `MusicService.onTaskRemoved()` saves the existing
+state and checks the same empty-service condition: `IDLE`, no current playlist,
+and both current and target indices at `-1`. Only then does it run the idle
+transition and call `stopSelf()`. A loaded song, including paused playback,
+keeps the service and its notification. This covers normal task removal; it
+does not imply that Android force-stop or abrupt process termination invokes
+`onTaskRemoved()`.
+
 ### Scope handoff and playlist refresh
 
 A scope change is a playlist rebuild, not a new playback command.

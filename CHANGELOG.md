@@ -20,8 +20,10 @@ data from surviving into a newly selected scope.
 - The service clears its full, scoped, and current playlists, resets the
   scope to `ALL_SONGS`, and empties `mScopeHandoffCandidates` before
   transitioning playback to idle.
-- The existing idle transition clears current and target indices, and the
-  existing state broadcast informs the UI of the empty state.
+- The idle transition clears current and target indices and tears down the
+  playback notification, including when the service is already idle with
+  nothing loaded. The existing state broadcast informs the UI of the empty
+  state.
 
 ### Preserved
 
