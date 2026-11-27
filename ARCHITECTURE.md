@@ -366,6 +366,24 @@ the carousel independently adopts the window and decodes/animates art.
 A slow OEM image decode or animation therefore cannot delay the visible
 song labels or timing controls.
 
+### Full library reset and scope state
+
+A full library reset must discard playback-scope state in the same service
+step that resets the library. The `LIBRARY_RESET` handler removes the three
+scope preferences (`playback_scope_json`, `playback_scope_resume_path`, and
+`playback_scope_empty_state`), resets `mPlaybackScope` to
+`PlaybackScope.ALL_SONGS`, empties `mFullPlaylist`, `mScopedPlaylist`, and
+`mCurrentPlaylist`, and clears `mScopeHandoffCandidates` before calling
+`stopCompletely()`.
+
+This ordering is intentional: `stopCompletely()` uses the existing idle
+transition, which clears current and target indices and broadcasts service
+state. Clearing scope first ensures that the broadcast cannot expose the
+previous scope after the library has been emptied. The UI's existing reset
+listeners then receive the empty state instead of needing to infer a scope
+reset later. Both library-only and factory reset paths use this reset
+handling because both clear the library. No additional method is needed.
+
 ### Scope handoff and playlist refresh
 
 A scope change is a playlist rebuild, not a new playback command.

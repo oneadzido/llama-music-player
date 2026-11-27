@@ -5,6 +5,31 @@ All notable changes to Llama Music Player are documented in this file.
 Current technical specifications, installation, and usage are
 documented in the [README](README.md).
 
+## [1.6.8] - Nov 27, 2026
+
+### Overview
+
+Version 1.6.8 makes a full library reset clear playback-scope preferences
+and in-memory scope state together with the library, preventing stale scope
+data from surviving into a newly selected scope.
+
+### Fixed
+
+- Full library reset removes `playback_scope_json`,
+  `playback_scope_resume_path`, and `playback_scope_empty_state`.
+- The service clears its full, scoped, and current playlists, resets the
+  scope to `ALL_SONGS`, and empties `mScopeHandoffCandidates` before
+  transitioning playback to idle.
+- The existing idle transition clears current and target indices, and the
+  existing state broadcast informs the UI of the empty state.
+
+### Preserved
+
+- The reset uses the existing `LIBRARY_RESET` handling path and existing
+  stop/idle transition methods; no new methods were added.
+- Both library-only and factory reset paths clear scope state because both
+  reset the library.
+
 ## [1.6.7] - Nov 26, 2026
 
 ### Overview
