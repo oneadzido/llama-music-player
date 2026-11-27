@@ -1,21 +1,21 @@
-# Llama Music Player v1.6.9
+# Llama Music Player v1.7.0
 
 **Release date:** November 27, 2026
 
 ## Overview
 
-Version 1.6.9 removes the playback notification and stops the service when the app task is dismissed while playback is not actively running.
-A loaded song in PAUSED or READY state is saved for later restoration but no longer leaves a stale notification in the notification area.
+Version 1.7.0 localizes the metadata-loading progress count using the active app locale. The existing loading message and ToastManager overlay composition remain unchanged, so the localized message continues to appear before the localized progress fraction, separated by the existing middle dot.
 
 ## Fixed
 
-- `MusicService.onTaskRemoved()` now keeps the service only when playback is actively running, including a `PREPARING` transition committed to start.
-- When the task is removed in `PAUSED` or `READY`, the service clears the playback notification and stops itself instead of leaving an orphaned notification in the notification area.
-- The full player state and player state are saved before teardown so the loaded song remains available for restoration when the app is opened again.
+- The genre-loading progress fraction now formats both values with the active app locale, using the same `NumberFormat` pattern already used for localized time and metadata values.
+- Digit grouping remains disabled, preserving the compact `current/total` fraction.
+- The progress fraction remains the overlay body; `ToastManager` continues composing the localized title and body with its existing middle-dot separator.
 
 ## Preserved
 
-- Active background playback and its notification remain available when the app task is dismissed.
-- The existing saved-state restoration path is retained; the task-removal handling does not discard the loaded song by forcing a library or playlist reset.
+- The existing `ToastManager` title/body composition and Android text-rendering path.
+- Genre selection, metadata extraction, progress throttling, cancellation, heartbeat, and completion handling.
+- The existing loading-message translations and custom-message override.
 
 For the complete release history, see [CHANGELOG.md](CHANGELOG.md).
