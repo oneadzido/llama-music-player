@@ -24,6 +24,9 @@ data from surviving into a newly selected scope.
   playback notification, including when the service is already idle with
   nothing loaded. The existing state broadcast informs the UI of the empty
   state.
+- Notification teardown records the service's current transition generation,
+  so an already-queued update from the song that was playing before reset
+  cannot recreate its stale notification.
 
 ### Preserved
 

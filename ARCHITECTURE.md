@@ -149,6 +149,17 @@ its last drawn title and artist. The surface clears only when the
 state machine itself transitions to `IDLE`, which the controller
 checks through `ServiceStateSource.isIdle()`.
 
+A full library reset is different from a temporary null snapshot: the
+service transitions to `IDLE` and the controller cancels the playback
+notification. Teardown also advances the controller's committed-generation
+barrier to the service's current generation. This matters because a
+notification commit from the song that was playing can already be queued
+on the main thread when reset occurs. Without the barrier, clearing the
+rendered snapshot alone would let that older commit pass generation
+filtering and recreate the stale notification. The barrier rejects that
+pre-reset commit while preserving the hold rule for temporary null
+snapshots during ordinary track preparation.
+
 The consequence of the rule is visible in the app. Tap Next, and the
 carousel begins sliding toward the incoming song's art and the
 notification begins describing the incoming song on the same frame.
