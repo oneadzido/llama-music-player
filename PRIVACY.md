@@ -1,6 +1,6 @@
 # Privacy Policy for Llama Music Player
 
-**Last Updated:** November 19, 2026
+**Last Updated:** November 27, 2026
 
 ---
 
@@ -43,7 +43,7 @@ The sixteen languages the app ships are resource folders bundled in the APK.
 No translation service, API key, or network call is involved.
 Selecting a language changes the display strings on your device; it does not tell anyone anything about you.
 
-The app's own components communicate with each other through in-process events delivered by greenrobot.
+The app's own components communicate with each other through in-process events delivered by greenrobot EventBus.
 These events carry the same information a broadcast receiver would have carried - a song title, a playback position, a UI state - and they never leave the app's process.
 No event is sent over the network, and no event is logged to a remote service.
 
@@ -76,10 +76,10 @@ The app uses three open-source libraries:
 
 - **jaudiotagger** - for reading and writing ID3 metadata tags
 - **FontAwesome** - for vector icon rendering
-- **greenrobot** - for delivering in-process events between the app's own components
+- **greenrobot EventBus** - for delivering in-process events between the app's own components
 
 All three libraries operate entirely on your device and do not transmit any data.
-greenrobot dispatches events in memory, inside the app's own process; it has no network capability and is not configured to use one.
+greenrobot EventBus dispatches events in memory, inside the app's own process; it has no network capability and is not configured to use one.
 
 ---
 
