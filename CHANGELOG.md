@@ -2,146 +2,108 @@
 
 All notable changes to Llama Music Player are documented in this file.
 
-Current technical specifications, installation, and usage are
-documented in the [README](README.md).
+Current technical specifications, installation, and usage are documented in the [README](README.md).
+
+## [1.6.9] - Nov 27, 2026
+
+### Overview
+
+Version 1.6.9 removes the playback notification and stops the service when the app task is dismissed while playback is not actively running.
+A loaded song in PAUSED or READY state is saved for later restoration but no longer leaves a stale notification in the notification area.
+
+### Fixed
+
+- `MusicService.onTaskRemoved()` keeps the service only while playback is actively running, including a `PREPARING` transition committed to start.
+- In `PAUSED` or `READY`, task removal clears the playback notification and stops the service, preventing a stale notification from remaining after the app is closed from Recents.
+- Player state is saved before teardown so the loaded song remains available for restoration when the app is opened again.
+
+### Preserved
+
+- Active background playback and its notification.
+- The existing saved-state restoration path for a loaded song.
 
 ## [1.6.8] - Nov 27, 2026
 
 ### Overview
 
-Version 1.6.8 makes a full library reset clear playback-scope preferences
-and in-memory scope state together with the library, preventing stale scope
-data from surviving into a newly selected scope.
+Version 1.6.8 makes a full library reset clear playback-scope preferences and in-memory scope state together with the library, preventing stale scope data from surviving into a newly selected scope.
+It also removes stale playback notifications when the app task is dismissed without active playback.
 
 ### Fixed
 
-- Full library reset removes `playback_scope_json`,
-  `playback_scope_resume_path`, and `playback_scope_empty_state`.
-- The service clears its full, scoped, and current playlists, resets the
-  scope to `ALL_SONGS`, and empties `mScopeHandoffCandidates` before
-  transitioning playback to idle.
-- Before scope and library state are cleared, the service invalidates pending
-  playback work, stops and releases the active player on its owning thread,
-  and removes the playback foreground notification.
-- Notification teardown explicitly ends foreground-service status and cancels
-  the playback notification. The service then clears scope state and performs
-  the idle transition, whose state broadcast informs the UI of the empty state.
-- The transition-generation barrier rejects queued updates from the song that
-  was playing before reset, preventing its notification from reappearing.
-- The Music Player applies a complete no-song timing state after reset:
-  the disabled SeekBar returns to zero, and elapsed time and duration return
-  to `00:00`. The periodic time updater does not repaint stale timing while
-  the service playlist is empty.
+- Full library reset removes `playback_scope_json`, `playback_scope_resume_path`, and `playback_scope_empty_state`.
+- The service clears its full, scoped, and current playlists, resets the scope to `ALL_SONGS`, and empties `mScopeHandoffCandidates` before transitioning playback to idle.
+- Before scope and library state are cleared, the service invalidates pending playback work, stops and releases the active player on its owning thread, and removes the playback foreground notification.
+- Notification teardown explicitly ends foreground-service status and cancels the playback notification.
+  The service then clears scope state and performs the idle transition, whose state broadcast informs the UI of the empty state.
+- The transition-generation barrier rejects queued updates from the song that was playing before reset, preventing its notification from reappearing.
+- The Music Player applies a complete no-song timing state after reset: the disabled SeekBar returns to zero, and elapsed time and duration return to `00:00`.
+  The periodic time updater does not repaint stale timing while the service playlist is empty.
+- When the app task is removed, `onTaskRemoved()` keeps the service only for active playback (including a `PREPARING` transition committed to start).
+  In `PAUSED` or `READY`, it explicitly clears the playback notification and stops the service while retaining the saved player state for a later restore.
 
 ### Preserved
 
-- The reset uses the existing `LIBRARY_RESET` handling path and existing
-  stop/idle transition methods; no new methods were added.
-- Both library-only and factory reset paths clear scope state because both
-  reset the library.
+- The reset uses the existing `LIBRARY_RESET` handling path and existing stop/idle transition methods; no new methods were added.
+- Both library-only and factory reset paths clear scope state because both reset the library.
 
 ## [1.6.7] - Nov 26, 2026
 
 ### Overview
 
-Version 1.6.7 sets the gap between the song-info group and the
-seek-bar section to 12dp, declared once in
-`MusicPlayer.SONG_INFO_SEEK_BAR_GAP_DP` and applied as the
-seek-bar section's top margin. The layout XML, the Java constant,
-and the player documentation all state the same 12dp value.
+Version 1.6.7 sets the gap between the song-info group and the seek-bar section to 12dp, declared once in `MusicPlayer.SONG_INFO_SEEK_BAR_GAP_DP` and applied as the seek-bar section's top margin.
+The layout XML, the Java constant, and the player documentation all state the same 12dp value.
 
-Playlist display updates and service playback are also kept in sync
-across song transitions and playback-scope changes. The service
-remains the authority for playback state, while the playlist screen
-refreshes after the existing transition debounce and resolves the
-current song again against the rebuilt display list.
+Playlist display updates and service playback are also kept in sync across song transitions and playback-scope changes.
+The service remains the authority for playback state, while the playlist screen refreshes after the existing transition debounce and resolves the current song again against the rebuilt display list.
 
 ### Fixed
 
-- The song-info group and the seek-bar section share the space
-  between the top bar and the transport row equally: each takes
-  0dp height with weight 1, and a 12dp gap separates them
-  (`SONG_INFO_SEEK_BAR_GAP_DP` as the seek-bar section's top
-  margin). The seek-bar section holds the SeekBar and timer row
-  in an inner container with centre gravity, so the pair reads
-  as centred in the section's half regardless of the timer row's
-  visibility. The behaviour holds in every undocked case:
-  full-size portrait, short portrait split screen, and short,
-  narrow landscape split screen.
-- Undocking restores the seek-bar section's saved layout params,
-  so the XML baseline, including the 12dp gap, returns with the
-  section.
-- Playlist updates reject stale generations and use the existing
-  500ms transition debounce. After rebuilding the display list, the
-  current song path is resolved again before its row is highlighted or
-  scrolled; a missing immediate lookup does not trigger an early rebuild.
-- Scope changes capture successor paths from the old scoped playlist
-  before rebuilding. If the current song is excluded, the first surviving
-  successor is selected; if none survives, a non-empty new scope starts
-  at its first song. Playback goes idle only when the new scope is empty.
+- The song-info group and the seek-bar section share the space between the top bar and the transport row equally: each takes 0dp height with weight 1, and a 12dp gap separates them (`SONG_INFO_SEEK_BAR_GAP_DP` as the seek-bar section's top margin).
+  The seek-bar section holds the SeekBar and timer row in an inner container with centre gravity, so the pair reads as centred in the section's half regardless of the timer row's visibility.
+  The behaviour holds in every undocked case: full-size portrait, short portrait split screen, and short, narrow landscape split screen.
+- Undocking restores the seek-bar section's saved layout params, so the XML baseline, including the 12dp gap, returns with the section.
+- Playlist updates reject stale generations and use the existing 500ms transition debounce.
+  After rebuilding the display list, the current song path is resolved again before its row is highlighted or scrolled; a missing immediate lookup does not trigger an early rebuild.
+- Scope changes capture successor paths from the old scoped playlist before rebuilding.
+  If the current song is excluded, the first surviving successor is selected; if none survives, a non-empty new scope starts at its first song.
+  Playback goes idle only when the new scope is empty.
 
 ### Preserved
 
 - All ten playlist sort options and existing playback controls.
 - Equalizer sound processing, presets, and saved settings.
 - Album-art loading and carousel transitions.
-- Full-size album-art presentation and the side-by-side
-  full-landscape layout.
-- The established short-window layout and landscape docking
-  behaviour.
-- The timer row's fit rules: shown when it fits, hidden when it
-  does not, with its top margin zeroed on the same turn it is
-  hidden.
-- Automatic completion, repeat-one, repeat-all, shuffle, user Next and
-  Previous, and explicit song selection retain their existing service
-  transition and history paths. Scope reconciliation does not introduce
-  a parallel playback state machine.
+- Full-size album-art presentation and the side-by-side full-landscape layout.
+- The established short-window layout and landscape docking behaviour.
+- The timer row's fit rules: shown when it fits, hidden when it does not, with its top margin zeroed on the same turn it is hidden.
+- Automatic completion, repeat-one, repeat-all, shuffle, user Next and Previous, and explicit song selection retain their existing service transition and history paths.
+  Scope reconciliation does not introduce a parallel playback state machine.
 
 ## [1.6.6] - Nov 26, 2026
 
 ### Overview
 
-Version 1.6.6 improves playlist sorting and keeps the Music Player and
-Equalizer screens responsive to playback changes. It also improves the
-player layout in resized windows so the timer is shown only when it fits,
-the seek bar and timer row read as centred in their half, and the title
-and artist stay legible in a short window.
+Version 1.6.6 improves playlist sorting and keeps the Music Player and Equalizer screens responsive to playback changes.
+It also improves the player layout in resized windows so the timer is shown only when it fits, the seek bar and timer row read as centred in their half, and the title and artist stay legible in a short window.
 
 ### Fixed
 
-- Playlist sorting now consistently follows the selected order during
-  playback, including when the active playlist is refreshed.
+- Playlist sorting now consistently follows the selected order during playback, including when the active playlist is refreshed.
 - The current and next tracks remain correctly selected after a sort.
-- Song title, artist, and playback position update without waiting for
-  album-art transitions to finish.
-- Equalizer controls refresh their displayed values promptly when playback
-  settings change or the screen reconnects to playback.
-- The timer row no longer gets cut off in a short player window. It hides
-  when there is insufficient space and returns when the window grows.
-- The SeekBar and timer row sit centred in their half of the player
-  layout instead of being pinned to the top. The stacked layout declares
-  its share model in the XML: the song-info group and the seek-bar
-  section each take 0dp height with weight 1, a 16dp gap separates them
-  (`SONG_INFO_SEEK_BAR_GAP_DP` as the seek-bar section's top margin),
-  and the seek-bar section holds the SeekBar and timer row in an inner
-  container with centre gravity. The behaviour holds in every undocked
-  case: full-size portrait, short portrait split screen, and short,
-  narrow landscape split screen.
-- The timer row hides in short split-screen landscape windows where it
-  would otherwise be clipped by the bottom of the screen. The fit check
-  compares the predicted timer bottom against the activity's visible
-  window boundary using absolute screen coordinates, not only against
-  the seek-bar section's own height. Full-size landscape and portrait
-  keep the timer visible; short split-screen landscape hides it.
-- The timer row's top margin is zeroed on the same turn the row is
-  hidden, so a hidden timer leaves no empty gap below the SeekBar and
-  the SeekBar stays centred in its share.
-- The title and artist column is a fixed 48dp-high stack, matching the
-  48dp Home/Favorite buttons so all three remain aligned as one control
-  group in portrait and landscape. The song-info container retains its 80dp
-  minimum in normal layouts and uses a 48dp minimum in short shared-space
-  split-screen, avoiding the previous oversized minimum while keeping the
-  title and artist together.
+- Song title, artist, and playback position update without waiting for album-art transitions to finish.
+- Equalizer controls refresh their displayed values promptly when playback settings change or the screen reconnects to playback.
+- The timer row no longer gets cut off in a short player window.
+  It hides when there is insufficient space and returns when the window grows.
+- The SeekBar and timer row sit centred in their half of the player layout instead of being pinned to the top.
+  The stacked layout declares its share model in the XML: the song-info group and the seek-bar section each take 0dp height with weight 1, a 16dp gap separates them (`SONG_INFO_SEEK_BAR_GAP_DP` as the seek-bar section's top margin), and the seek-bar section holds the SeekBar and timer row in an inner container with centre gravity.
+  The behaviour holds in every undocked case: full-size portrait, short portrait split screen, and short, narrow landscape split screen.
+- The timer row hides in short split-screen landscape windows where it would otherwise be clipped by the bottom of the screen.
+  The fit check compares the predicted timer bottom against the activity's visible window boundary using absolute screen coordinates, not only against the seek-bar section's own height.
+  Full-size landscape and portrait keep the timer visible; short split-screen landscape hides it.
+- The timer row's top margin is zeroed on the same turn the row is hidden, so a hidden timer leaves no empty gap below the SeekBar and the SeekBar stays centred in its share.
+- The title and artist column is a fixed 48dp-high stack, matching the 48dp Home/Favorite buttons so all three remain aligned as one control group in portrait and landscape.
+  The song-info container retains its 80dp minimum in normal layouts and uses a 48dp minimum in short shared-space split-screen, avoiding the previous oversized minimum while keeping the title and artist together.
 
 ### Preserved
 
@@ -173,630 +135,360 @@ The timer row appears only when the complete row fits.
 
 ### Overview
 
-Version 1.6.4 makes the player, equalizer, and editor update
-instantly instead of waiting for a recreate or the next playback
-state save, and makes long text truncate instead of scrolling
-away. It fixes the case, seen on TECNO / HiOS, where equalizer
-pitch and speed, the carousel, and the song info only refreshed
-after an activity recreate. It also tightens the header and
-language buttons from 76dp to 68dp.
+Version 1.6.4 makes the player, equalizer, and editor update instantly instead of waiting for a recreate or the next playback state save, and makes long text truncate instead of scrolling away.
+It fixes the case, seen on TECNO / HiOS, where equalizer pitch and speed, the carousel, and the song info only refreshed after an activity recreate.
+It also tightens the header and language buttons from 76dp to 68dp.
 
 ### Fixed
 
-- **Equalizer pitch and speed now reach the service whether or not
-  it is playing.** `EqualizerActivity` dropped the `isPlaying()` gates
-  (pitch, speed, and reset: five sites). A drag made while paused, in
-  `READY`, or in `PREPARING` used to write the preference and never
-  tell the service, so nothing changed until the next playback state
-  save. The service already applies parameters in `READY` and before
-  `start()`; now the equalizer actually sends them.
-- **The player resyncs when it returns to the foreground.** The
-  service re-broadcasts the full playback snapshot when the player
-  goes from background to foreground, with `requestPlayerResync()` as
-  a backup for a rebind where the flag did not flip, and the player
-  pulls a full snapshot on bind and on resume. The carousel, song
-  info, transport controls, and seek bar refresh without a recreate.
-  `UPDATE_PLAYER` is posted, not sticky, so a player that was
-  destroyed or backgrounded while a change broadcast fired used to
-  miss it entirely.
+- **Equalizer pitch and speed now reach the service whether or not it is playing.**
+  `EqualizerActivity` dropped the `isPlaying()` gates (pitch, speed, and reset: five sites).
+  A drag made while paused, in `READY`, or in `PREPARING` used to write the preference and never tell the service, so nothing changed until the next playback state save.
+  The service already applies parameters in `READY` and before `start()`; now the equalizer actually sends them.
+- **The player resyncs when it returns to the foreground.**
+  The service re-broadcasts the full playback snapshot when the player goes from background to foreground, with `requestPlayerResync()` as a backup for a rebind where the flag did not flip, and the player pulls a full snapshot on bind and on resume.
+  The carousel, song info, transport controls, and seek bar refresh without a recreate.
+  `UPDATE_PLAYER` is posted, not sticky, so a player that was destroyed or backgrounded while a change broadcast fired used to miss it entirely.
 - **Language recreate is deferred in `MusicPlayer`, like theme.**
-  `onLanguageChangedEvent` parks the recreate in
-  `mThemeRecreationPending` when the activity is not started, and
-  `onStart()` runs it on return. Recreating a backgrounded activity
-  can be deferred or dropped by aggressive OEMs, and the recreate can
-  race the picker's teardown. Both actions are just a recreate, so
-  they share one pending flag. Other activities still recreate
-  immediately on a language change.
-- **The Playlist search hint truncates with an ellipsis.** The hint
-  only ellipsizes while horizontal scrolling is off, so the field now
-  toggles: empty means hint showing, ellipsize on, scrolling off;
-  typing means ellipsize off, scrolling on, so a long query scrolls
-  instead of being cut off.
+  `onLanguageChangedEvent` parks the recreate in `mThemeRecreationPending` when the activity is not started, and `onStart()` runs it on return.
+  Recreating a backgrounded activity can be deferred or dropped by aggressive OEMs, and the recreate can race the picker's teardown.
+  Both actions are just a recreate, so they share one pending flag.
+  Other activities still recreate immediately on a language change.
+- **The Playlist search hint truncates with an ellipsis.**
+  The hint only ellipsizes while horizontal scrolling is off, so the field now toggles: empty means hint showing, ellipsize on, scrolling off; typing means ellipsize off, scrolling on, so a long query scrolls instead of being cut off.
 - **Metadata fields truncate in view mode and scroll in edit mode.**
   `setFieldsEnabled` now calls `applyFieldTruncation` for every field.
-  In view mode the field truncates with "...": ellipsize on,
-  horizontal scrolling off, the parent scroll wrapper disabled, and
-  the field capped to the wrapper's measured width, which is what
-  makes the ellipsis actually appear inside the wrapper's
-  unspecified-width measure pass. In edit mode the field scrolls
-  again. File info is never edited, so it is always truncated.
-- **The seek bar in a short portrait window hides only when the layout
-  genuinely cannot fit it.** A short, undocked window cannot fit
-  header + group + seek bar + transport + bottom buttons, so the seek
-  bar is the row that goes; the group stays, because it is the
-  glanceable part. Everywhere else the seek bar stays visible. The
-  group stays vertically centered in the space between the header and
-  whatever follows it, with no extra top padding. The SeekBar keeps
-  receiving progress updates while hidden, so returning to a
-  full-size window shows the current position with no re-sync.
-- **Header and language buttons move from 76dp to 68dp.** The Sort
-  button in Playlist, the Scope button in Folder Manager, and the
-  language button in the Credits dialog are 28dp high with 12sp text.
-  Their minimum width drops from 76dp to 68dp, with no padding
-  change. 76dp left too much empty width on buttons only 28dp high;
-  68dp keeps short labels from collapsing without the extra width.
+  In view mode the field truncates with "...": ellipsize on, horizontal scrolling off, the parent scroll wrapper disabled, and the field capped to the wrapper's measured width, which is what makes the ellipsis actually appear inside the wrapper's unspecified-width measure pass.
+  In edit mode the field scrolls again.
+  File info is never edited, so it is always truncated.
+- **The seek bar in a short portrait window hides only when the layout genuinely cannot fit it.**
+  A short, undocked window cannot fit header + group + seek bar + transport + bottom buttons, so the seek bar is the row that goes; the group stays, because it is the glanceable part.
+  Everywhere else the seek bar stays visible.
+  The group stays vertically centered in the space between the header and whatever follows it, with no extra top padding.
+  The SeekBar keeps receiving progress updates while hidden, so returning to a full-size window shows the current position with no re-sync.
+- **Header and language buttons move from 76dp to 68dp.**
+  The Sort button in Playlist, the Scope button in Folder Manager, and the language button in the Credits dialog are 28dp high with 12sp text.
+  Their minimum width drops from 76dp to 68dp, with no padding change.
+  76dp left too much empty width on buttons only 28dp high; 68dp keeps short labels from collapsing without the extra width.
 
 ### Preserved
 
-- No change to the 1.6.3 top-bar buttons: they stay floored at 84dp,
-  with no padding change.
-- No change to the 1.6.2 fixes: cold start still restores paused to
-  READY, dialog window context and locale lifecycle still stay fixed,
-  and equalizer and playback parameters still stay preserved across
-  audio-session rebuilds.
-- No change to scope matching, repeat, shuffle, sort, search filtering,
-  favorite persistence, or click debounce.
-- No change to fill-screen buttons: Preset and Reset in Equalizer and
-  Import Folder in Folder Manager stay match_parent, and the Music
-  Player bottom buttons stay 0dp with weight. Their width comes from
-  layout, not from minWidth.
-- No change to icon buttons: the Music Player transport buttons and the
-  Playlist Clear button stay at their fixed sizes with minWidth 0dp.
+- No change to the 1.6.3 top-bar buttons: they stay floored at 84dp, with no padding change.
+- No change to the 1.6.2 fixes: cold start still restores paused to READY, dialog window context and locale lifecycle still stay fixed, and equalizer and playback parameters still stay preserved across audio-session rebuilds.
+- No change to scope matching, repeat, shuffle, sort, search filtering, favorite persistence, or click debounce.
+- No change to fill-screen buttons: Preset and Reset in Equalizer and Import Folder in Folder Manager stay match_parent, and the Music Player bottom buttons stay 0dp with weight.
+  Their width comes from layout, not from minWidth.
+- No change to icon buttons: the Music Player transport buttons and the Playlist Clear button stay at their fixed sizes with minWidth 0dp.
 - No change to button padding, height, text size, or click behavior.
-- No change to ProGuard rules. The 1.6.4 changes add no new subscriber
-  and no new kept field.
+- No change to ProGuard rules.
+  The 1.6.4 changes add no new subscriber and no new kept field.
 
 ## [1.6.3] - Nov 23, 2026
 
 ### Overview
 
-Version 1.6.3 does one thing. It gives the top-bar and header buttons a
-minimum width, so short labels in short languages no longer look too short
-next to the dialog buttons. Top-bar buttons get 84dp, header and language
-buttons get 76dp, with no padding change.
+Version 1.6.3 does one thing.
+It gives the top-bar and header buttons a minimum width, so short labels in short languages no longer look too short next to the dialog buttons.
+Top-bar buttons get 84dp, header and language buttons get 76dp, with no padding change.
 
 ### Fixed
 
-- **Top-bar buttons get a minimum width of 84dp.** The Cancel, Enable, Update,
-  Modify, and Search buttons in Equalizer, Folder Manager, Metadata Editor,
-  and Playlist are 36dp high with 14sp text and wrap_content width. Their
-  width is now floored at 84dp, matching the dialog buttons, with no padding
-  change.
-- **Header buttons get a minimum width of 76dp.** The Sort button in Playlist
-  and the Scope button in Folder Manager are 28dp high with 12sp text and
-  wrap_content width. Their width is now floored at 76dp, with no padding
-  change.
-- **Language button gets a minimum width of 76dp.** The language button in the
-  Credits dialog is 28dp high with 12sp text. It is built in code, so it now
-  calls setMinWidth(dpToPx(76)) in createLanguageButton(), with no padding
-  change. Short names such as EN no longer collapse to about 40dp.
+- **Top-bar buttons get a minimum width of 84dp.**
+  The Cancel, Enable, Update, Modify, and Search buttons in Equalizer, Folder Manager, Metadata Editor, and Playlist are 36dp high with 14sp text and wrap_content width.
+  Their width is now floored at 84dp, matching the dialog buttons, with no padding change.
+- **Header buttons get a minimum width of 76dp.**
+  The Sort button in Playlist and the Scope button in Folder Manager are 28dp high with 12sp text and wrap_content width.
+  Their width is now floored at 76dp, with no padding change.
+- **Language button gets a minimum width of 76dp.**
+  The language button in the Credits dialog is 28dp high with 12sp text.
+  It is built in code, so it now calls setMinWidth(dpToPx(76)) in createLanguageButton(), with no padding change.
+  Short names such as EN no longer collapse to about 40dp.
 
 ### Preserved
 
-- No change to the 1.6.2 fixes: cold start still restores paused to READY,
-  dialog window context and locale lifecycle still stay fixed, and equalizer
-  and playback parameters still stay preserved across audio-session rebuilds.
-- No change to scope matching, repeat, shuffle, sort, search filtering,
-  favorite persistence, or click debounce.
-- No change to fill-screen buttons: Preset and Reset in Equalizer and Import
-  Folder in Folder Manager stay match_parent, and the Music Player bottom
-  buttons stay 0dp with weight. Their width comes from layout, not from
-  minWidth.
-- No change to icon buttons: the Music Player transport buttons and the
-  Playlist Clear button stay at their fixed sizes with minWidth 0dp.
-- No change to button padding, height, text size, or click behavior. Only
-  minimum width changed, only for top-bar, header, and language buttons.
-- No change to ProGuard rules. The 1.6.3 changes add no new subscriber and no
-  new kept field.
+- No change to the 1.6.2 fixes: cold start still restores paused to READY, dialog window context and locale lifecycle still stay fixed, and equalizer and playback parameters still stay preserved across audio-session rebuilds.
+- No change to scope matching, repeat, shuffle, sort, search filtering, favorite persistence, or click debounce.
+- No change to fill-screen buttons: Preset and Reset in Equalizer and Import Folder in Folder Manager stay match_parent, and the Music Player bottom buttons stay 0dp with weight.
+  Their width comes from layout, not from minWidth.
+- No change to icon buttons: the Music Player transport buttons and the Playlist Clear button stay at their fixed sizes with minWidth 0dp.
+- No change to button padding, height, text size, or click behavior.
+  Only minimum width changed, only for top-bar, header, and language buttons.
+- No change to ProGuard rules.
+  The 1.6.3 changes add no new subscriber and no new kept field.
 
 ## [1.6.2] - Nov 23, 2026
 
 ### Overview
 
-Version 1.6.2 does three things, in this order. First, it makes cold start
-always restore paused: the last track and position are prepared into `READY`
-without autoplay, regardless of the previous session's playing flag. Second,
-it fixes the shared dialog window context and the locale lifecycle: all five
-dialogs get the original Activity context for their window and the
-locale-wrapped context for their views, and the selected locale and timer
-digits are reapplied after resume and configuration changes. Third, it
-preserves the equalizer and playback parameters across audio-session rebuilds:
-the attach snapshots and restores the full equalizer state, and playback
-parameters are applied before start and in `READY`.
+Version 1.6.2 does three things, in this order.
+First, it makes cold start always restore paused: the last track and position are prepared into `READY` without autoplay, regardless of the previous session's playing flag.
+Second, it fixes the shared dialog window context and the locale lifecycle: all five dialogs get the original Activity context for their window and the locale-wrapped context for their views, and the selected locale and timer digits are reapplied after resume and configuration changes.
+Third, it preserves the equalizer and playback parameters across audio-session rebuilds: the attach snapshots and restores the full equalizer state, and playback parameters are applied before start and in `READY`.
 
 ### Fixed
 
-- **Cold app launch always restores paused.** The normal activity
-  playlist-load path no longer consults the previous session's
-  `wasPlayingBeforeRestart` flag to decide whether to autoplay. A cold launch
-  prepares the last track/position and enters `READY`; only explicit
-  pending-song launches are allowed to autoplay.
-- **Dialog window context.** All five custom dialogs pass the original
-  Activity context to the `Dialog` window, while dialog views are built from
-  the locale-wrapped context. Dialog contexts are wrapped in the app locale
-  before view creation. This corrects the shared superclass-context pattern
-  implicated in the reported app-wide dialog crashes.
-- **Locale and timer digits.** The selected app locale is reapplied after
-  activity resume and configuration changes; timer digits use an explicit
-  locale formatter for the selected locale.
-- **Equalizer preserved on attach.** `EqualizerManager.attachToAudioSession()`
-  snapshots and restores the current equalizer preset, band levels, bass
-  boost, surround, pitch, and speed when attaching effects to a new audio
-  session.
-- **Playback parameters.** Playback parameters are applied on the player
-  thread before auto-start and when the prepared player lands in `READY`.
+- **Cold app launch always restores paused.**
+  The normal activity playlist-load path no longer consults the previous session's `wasPlayingBeforeRestart` flag to decide whether to autoplay.
+  A cold launch prepares the last track/position and enters `READY`; only explicit pending-song launches are allowed to autoplay.
+- **Dialog window context.**
+  All five custom dialogs pass the original Activity context to the `Dialog` window, while dialog views are built from the locale-wrapped context.
+  Dialog contexts are wrapped in the app locale before view creation.
+  This corrects the shared superclass-context pattern implicated in the reported app-wide dialog crashes.
+- **Locale and timer digits.**
+  The selected app locale is reapplied after activity resume and configuration changes; timer digits use an explicit locale formatter for the selected locale.
+- **Equalizer preserved on attach.**
+  `EqualizerManager.attachToAudioSession()` snapshots and restores the current equalizer preset, band levels, bass boost, surround, pitch, and speed when attaching effects to a new audio session.
+- **Playback parameters.**
+  Playback parameters are applied on the player thread before auto-start and when the prepared player lands in `READY`.
 
 ### Preserved
 
-- No change to the 1.6.1 fixes: playback still does not auto-resume when it
-  should stay paused, and a sticky restart still re-seeds the playlist behind
-  the notification and prepares the last song to `READY` without starting
-  playback.
-- No change to scope matching, repeat, shuffle, sort, search
-  filtering, favorite persistence, or click debounce.
-- No change to ProGuard rules. The 1.6.2 changes add no new subscriber and no
-  new kept field.
+- No change to the 1.6.1 fixes: playback still does not auto-resume when it should stay paused, and a sticky restart still re-seeds the playlist behind the notification and prepares the last song to `READY` without starting playback.
+- No change to scope matching, repeat, shuffle, sort, search filtering, favorite persistence, or click debounce.
+- No change to ProGuard rules.
+  The 1.6.2 changes add no new subscriber and no new kept field.
 
 ## [1.6.1] - Nov 22, 2026
 
 ### Overview
 
-Version 1.6.1 does two things, in this order. First, it
-restores the v1.5.6 `MusicService`, because of the auto
-playback resume bug: it surfaced in v1.5.7 and was noticed
-in 1.6.0, while focus was on new features. Then, it fixes
-a separate concern: the notification's Play button works
-after a sticky restart, without opening the player.
+Version 1.6.1 does two things, in this order.
+First, it restores the v1.5.6 `MusicService`, because of the auto playback resume bug: it surfaced in v1.5.7 and was noticed in 1.6.0, while focus was on new features.
+Then, it fixes a separate concern: the notification's Play button works after a sticky restart, without opening the player.
 
 ### Fixed
 
 - **Auto playback resume bug fixed by restoration.**
-  The v1.5.6 `MusicService` is restored as the base: the auto
-  playback resume bug surfaced in v1.5.7 and was noticed in
-  1.6.0, while focus was on new features. Playback no longer
-  auto-resumes when it should stay paused.
+  The v1.5.6 `MusicService` is restored as the base: the auto playback resume bug surfaced in v1.5.7 and was noticed in 1.6.0, while focus was on new features.
+  Playback no longer auto-resumes when it should stay paused.
 
 - **Notification Play works after a sticky restart.**
-  After the system killed the process, the sticky restart
-  rebuilt only the notification: `restoreNotificationFromPersistedState`
-  committed a paused snapshot of the last song, but never
-  rebuilt the playlist behind it. The service stayed at `IDLE`
-  with an empty playlist, so the notification's Play button
-  took the `IDLE` branch, saw an empty playlist, and did
-  nothing, and Next and Previous bailed out on the empty
-  scoped playlist. Play worked again only once the player
-  was opened and the activity called `setPlaylist`. The
-  restore now re-seeds the playlist behind the notification.
-  It loads the full library first, then makes exactly one
-  `setPlaylist()` call: the full library when it contains the
-  last song, a single-song list for the last song when the
-  load fails, comes back empty, or does not contain it. That
-  one call goes through the normal `setPlaylist` cold-start
-  path, so the saved position is restored and `onPrepared`
-  lands in `READY` instead of `PLAYING`, and no playlist is
-  replaced while a restore prepare is in flight. Playback still does not start on its
-  own, even when the app was playing before it was killed:
-  the paused prepare is forced before the restore's one
-  `setPlaylist()` call, because the cold-start path only
-  sets `mPauseAfterPrepare` when playback was not active
-  before the kill. First restorer wins: if the activity's
-  cold start reaches `setPlaylist()` before the restore's
-  load lands, the load callback returns and the activity's
-  resume-if-it-was-playing rule applies; if the restore
-  lands first, opening the player attaches to the paused
-  restore instead of re-running the cold-start resume, and
-  Play is one tap. A duplicate sticky restart does not
-  re-seed and does not overwrite a live notification with a
-  paused snapshot. A last song whose file is gone keeps its
-  notification but is not prepared. Song resolution gains
-  the `CharacterMapper` fallback the Bluetooth-resume path
-  already had.
+  After the system killed the process, the sticky restart rebuilt only the notification: `restoreNotificationFromPersistedState` committed a paused snapshot of the last song, but never rebuilt the playlist behind it.
+  The service stayed at `IDLE` with an empty playlist, so the notification's Play button took the `IDLE` branch, saw an empty playlist, and did nothing, and Next and Previous bailed out on the empty scoped playlist.
+  Play worked again only once the player was opened and the activity called `setPlaylist`.
+  The restore now re-seeds the playlist behind the notification.
+  It loads the full library first, then makes exactly one `setPlaylist()` call: the full library when it contains the last song, a single-song list for the last song when the load fails, comes back empty, or does not contain it.
+  That one call goes through the normal `setPlaylist` cold-start path, so the saved position is restored and `onPrepared` lands in `READY` instead of `PLAYING`, and no playlist is replaced while a restore prepare is in flight.
+  Playback still does not start on its own, even when the app was playing before it was killed: the paused prepare is forced before the restore's one `setPlaylist()` call, because the cold-start path only sets `mPauseAfterPrepare` when playback was not active before the kill.
+  First restorer wins: if the activity's cold start reaches `setPlaylist()` before the restore's load lands, the load callback returns and the activity's resume-if-it-was-playing rule applies; if the restore lands first, opening the player attaches to the paused restore instead of re-running the cold-start resume, and Play is one tap.
+  A duplicate sticky restart does not re-seed and does not overwrite a live notification with a paused snapshot.
+  A last song whose file is gone keeps its notification but is not prepared.
+  Song resolution gains the `CharacterMapper` fallback the Bluetooth-resume path already had.
 
 ### Preserved
 
-- No change to the 1.6.0 fix: the playback scope dialog
-  still opens on the current scope.
-- No change to the 1.5.9 fixes: the cold-start auto-start
-  commit, the narrow-landscape docking gate and seek-bar
-  hide, the artist-group centering, or the seek-bar
-  drawable rename.
-- No change to scope matching, repeat, shuffle, sort, search
-  filtering, favorite persistence, or click debounce.
-- No change to ProGuard rules. The 1.6.1 change adds no new
-  subscriber and no new kept field.
+- No change to the 1.6.0 fix: the playback scope dialog still opens on the current scope.
+- No change to the 1.5.9 fixes: the cold-start auto-start commit, the narrow-landscape docking gate and seek-bar hide, the artist-group centering, or the seek-bar drawable rename.
+- No change to scope matching, repeat, shuffle, sort, search filtering, favorite persistence, or click debounce.
+- No change to ProGuard rules.
+  The 1.6.1 change adds no new subscriber and no new kept field.
 
 ## [1.6.0] - Nov 21, 2026
 
 ### Overview
 
-Version 1.6.0 does one thing: the playback scope dialog now
-opens on the current scope instead of at the top.
+Version 1.6.0 does one thing: the playback scope dialog now opens on the current scope instead of at the top.
 
 ### Fixed
 
 - **Playback scope dialog scrolls to the current scope.**
-  The dialog opened at the top, so a current scope low in
-  the list — a late mode such as Albums, or a checked filter
-  deep in a long genre, artist or album list — was off-screen
-  and the user had to hunt for it. On open the dialog now
-  scrolls to the current scope when it is not already in
-  view: the first checked filter of the current kind, or
-  the kind's mode row when it has no checked values. The
-  scroll runs twice, on purpose: once at open, which covers
-  folders and the mode rows, and again once the genre,
-  artist and album lists finish loading, which refines it
-  to the checked filter. A target already in view never
-  scrolls, and the scroll is an instant jump, not an
-  animation, so the dialog opens on the selection.
+  The dialog opened at the top, so a current scope low in the list — a late mode such as Albums, or a checked filter deep in a long genre, artist or album list — was off-screen and the user had to hunt for it.
+  On open the dialog now scrolls to the current scope when it is not already in view: the first checked filter of the current kind, or the kind's mode row when it has no checked values.
+  The scroll runs twice, on purpose: once at open, which covers folders and the mode rows, and again once the genre, artist and album lists finish loading, which refines it to the checked filter.
+  A target already in view never scrolls, and the scroll is an instant jump, not an animation, so the dialog opens on the selection.
 
 ### Preserved
 
-- No change to the 1.5.9 fixes: the cold-start auto-start
-  commit, the narrow-landscape docking gate and seek-bar
-  hide, the artist-group centering, or the seek-bar
-  drawable rename.
-- No change to scope matching, repeat, shuffle, sort, search
-  filtering, favorite persistence, or click debounce.
-- No change to ProGuard rules. The 1.6.0 change adds no new
-  subscriber and no new kept field.
+- No change to the 1.5.9 fixes: the cold-start auto-start commit, the narrow-landscape docking gate and seek-bar hide, the artist-group centering, or the seek-bar drawable rename.
+- No change to scope matching, repeat, shuffle, sort, search filtering, favorite persistence, or click debounce.
+- No change to ProGuard rules.
+  The 1.6.0 change adds no new subscriber and no new kept field.
 
 ## [1.5.9] - Nov 21, 2026
 
 ### Overview
 
-Version 1.5.9 fixes three things found after 1.5.8 shipped: a
-cold-start auto-start that left the transport controls stale, a
-narrow landscape window that cramped the docked artist group and
-transport row, and an extra top gap above the artist group in
-the stacked portrait layout. It also renames the seek-bar
-progress drawable to say what it is: the enabled-state
-progress, `seekbar_progress_enabled`.
+Version 1.5.9 fixes three things found after 1.5.8 shipped: a cold-start auto-start that left the transport controls stale, a narrow landscape window that cramped the docked artist group and transport row, and an extra top gap above the artist group in the stacked portrait layout.
+It also renames the seek-bar progress drawable to say what it is: the enabled-state progress, `seekbar_progress_enabled`.
 
 ### Fixed
 
-- **Cold-start auto-start now commits the UI.** When the app
-  was playing before it exited, a cold start restores the
-  playlist and resumes playback, but `MusicService.setPlaylist`
-  committed nothing after the reconcile on that path, so the
-  transport controls kept the pre-restore state until the
-  next playback change. The cold-start branch now calls
-  `broadcastUpdate()` after `reconcile()` when it is a cold
-  start and the song is resuming (`coldStart &&
-  !mPauseAfterPrepare`), so every surface commits on the
-  same turn the auto-start lands. When the app was paused
-  before it exited, `mPauseAfterPrepare` stays true and no
-  commit fires: the player stays paused, as before.
+- **Cold-start auto-start now commits the UI.**
+  When the app was playing before it exited, a cold start restores the playlist and resumes playback, but `MusicService.setPlaylist` committed nothing after the reconcile on that path, so the transport controls kept the pre-restore state until the next playback change.
+  The cold-start branch now calls `broadcastUpdate()` after `reconcile()` when it is a cold start and the song is resuming (`coldStart && !mPauseAfterPrepare`), so every surface commits on the same turn the auto-start lands.
+  When the app was paused before it exited, `mPauseAfterPrepare` stays true and no commit fires: the player stays paused, as before.
 
-- **Narrow landscape no longer docks the artist group, and
-  short, undocked windows hide the seek bar.** Docking
-  splits the window 0.5 / 0.5. In landscape split-screen
-  the window is about 400dp wide, so the transport row got
-  about 200dp against the 288dp it needs and the artist
-  group kept its 72dp + 72dp inner padding, leaving about
-  56dp for the title: the title truncated to a fragment
-  and the transport buttons squeezed together. The dock
-  now has a width gate: it applies only when the window is
-  at least 600dp wide (`DOCK_MIN_WIDTH_DP`), on top of the
-  existing art-hidden and landscape conditions. A narrow
-  landscape window falls back to the stacked portrait
-  layout instead, group on its own row and transport on
-  its own row, each at full width — but a short, undocked
-  window cannot fit the whole stacked layout either, so
-  the seek-bar section is hidden there. That is the same
-  evaluation in short portrait split-screen and in short,
-  narrow landscape: `albumArtHidden && !dockSongInfo`.
-  The choice is deliberate: the group is the glanceable
-  part — what is playing, home, favourite — plus the
-  transport controls, while scrubbing can wait until the
-  window is full-size again. Hiding the group instead
-  would leave controls for a song the user cannot
-  identify, and would take home and favourite with it,
-  since both live inside the group. The SeekBar keeps
-  receiving progress updates while hidden, so returning
-  to a full-size window shows the current position with
-  no re-sync. Full landscape, at 800dp and wider, still
-  docks as before, with the seek bar visible.
+- **Narrow landscape no longer docks the artist group, and short, undocked windows hide the seek bar.**
+  Docking splits the window 0.5 / 0.5.
+  In landscape split-screen the window is about 400dp wide, so the transport row got about 200dp against the 288dp it needs and the artist group kept its 72dp + 72dp inner padding, leaving about 56dp for the title: the title truncated to a fragment and the transport buttons squeezed together.
+  The dock now has a width gate: it applies only when the window is at least 600dp wide (`DOCK_MIN_WIDTH_DP`), on top of the existing art-hidden and landscape conditions.
+  A narrow landscape window falls back to the stacked portrait layout instead, group on its own row and transport on its own row, each at full width — but a short, undocked window cannot fit the whole stacked layout either, so the seek-bar section is hidden there.
+  That is the same evaluation in short portrait split-screen and in short, narrow landscape: `albumArtHidden && !dockSongInfo`.
+  The choice is deliberate: the group is the glanceable part — what is playing, home, favourite — plus the transport controls, while scrubbing can wait until the window is full-size again.
+  Hiding the group instead would leave controls for a song the user cannot identify, and would take home and favourite with it, since both live inside the group.
+  The SeekBar keeps receiving progress updates while hidden, so returning to a full-size window shows the current position with no re-sync.
+  Full landscape, at 800dp and wider, still docks as before, with the seek bar visible.
 
-- **Artist group keeps its centering, without the extra top
-  gap, in the stacked layout.** The stacked layout used to
-  pin the group to the top when the art was hidden and add
-  the album-art wrapper's 16dp top padding. That pushed the
-  group down from where centering would put it and read as
-  an extra gap at the top. The pin-to-top is removed: the
-  group stays vertically centered in the space between the
-  header and the seek bar, with its default top padding
-  (zero), in portrait and in a narrow landscape window that
-  falls back to the stacked layout. The docked layout is
-  unchanged: the docked row still hugs its content and the
-  toast lane is still the row's 48dp bottom margin.
+- **Artist group keeps its centering, without the extra top gap, in the stacked layout.**
+  The stacked layout used to pin the group to the top when the art was hidden and add the album-art wrapper's 16dp top padding.
+  That pushed the group down from where centering would put it and read as an extra gap at the top.
+  The pin-to-top is removed: the group stays vertically centered in the space between the header and the seek bar, with its default top padding (zero), in portrait and in a narrow landscape window that falls back to the stacked layout.
+  The docked layout is unchanged: the docked row still hugs its content and the toast lane is still the row's 48dp bottom margin.
 
 ### Changed
 
 - **Seek-bar progress drawable renamed.**
   `seekbar_progress` is now `seekbar_progress_enabled`.
-  The references in `activity_music_player.xml` and
-  `EqualizerActivity` are updated to the new name. There is
-  no visual change: the drawable itself is untouched, only
-  its name says which state it draws.
+  The references in `activity_music_player.xml` and `EqualizerActivity` are updated to the new name.
+  There is no visual change: the drawable itself is untouched, only its name says which state it draws.
 
 ### Preserved
 
-- No change to scope matching, repeat, shuffle, sort, search
-  filtering, favorite persistence, or click debounce.
-- No change to the theme and language dialog behaviour from
-  1.5.8, or to the notification commit rule: one commit per
-  transition, through `broadcastUpdate()`.
-- No change to ProGuard rules. The 1.5.9 changes add no new
-  subscriber and no new kept field.
+- No change to scope matching, repeat, shuffle, sort, search filtering, favorite persistence, or click debounce.
+- No change to the theme and language dialog behaviour from 1.5.8, or to the notification commit rule: one commit per transition, through `broadcastUpdate()`.
+- No change to ProGuard rules.
+  The 1.5.9 changes add no new subscriber and no new kept field.
 
 ## [1.5.8] - Nov 21, 2026
 
 ### Overview
 
-Version 1.5.8 fixes the dialog-refresh failures: a theme change
-picked while an activity is backgrounded, a preset whose band
-controls never refreshed, and a notification that kept the old
-theme and language until the next playback change. It also
-aligns two dialog returns with the behaviour the theme and
-language dialogs already had: reselecting the already applied
-preset now returns without applying anything, and switching
-scope modes no longer wipes the checked boxes of the mode left
-behind. It also decides on screen rotation: the portrait lock is
-lifted, so the app follows the device. Several locales have
-labels longer than a portrait row comfortably fits. Lifting the
-lock exposed one overlap: in a short landscape window the
-player's artist group collapsed onto the seek bar, so the group
-now docks beside the transport controls. These failures were
-reported on TECNO Camon 20 Pro (HiOS), where a theme, preset, or
-language picked from a dialog left the backgrounded surfaces, the
-equalizer controls, or the notification showing the previous
-values until something else forced a refresh.
+Version 1.5.8 fixes the dialog-refresh failures: a theme change picked while an activity is backgrounded, a preset whose band controls never refreshed, and a notification that kept the old theme and language until the next playback change.
+It also aligns two dialog returns with the behaviour the theme and language dialogs already had: reselecting the already applied preset now returns without applying anything, and switching scope modes no longer wipes the checked boxes of the mode left behind.
+It also decides on screen rotation: the portrait lock is lifted, so the app follows the device.
+Several locales have labels longer than a portrait row comfortably fits.
+Lifting the lock exposed one overlap: in a short landscape window the player's artist group collapsed onto the seek bar, so the group now docks beside the transport controls.
+These failures were reported on TECNO Camon 20 Pro (HiOS), where a theme, preset, or language picked from a dialog left the backgrounded surfaces, the equalizer controls, or the notification showing the previous values until something else forced a refresh.
 
 ### Fixed
 
-- **Theme change no longer dropped for a backgrounded
-  activity.** Every activity's `THEME_COLOR_CHANGED` handler
-  recreated only when the activity was visible. A backgrounded
-  activity hit its visibility guard and returned without
-  recording anything, so the event was dropped. The handler now
-  records the dropped event in `mThemeRecreationPending` and the
-  recreate runs when the activity returns: from `onResume()` for
-  the resumed-gated activities, from `onStart()` for
-  `MusicPlayer`, whose guard is the started gate. The drain
-  recreates and returns before the returning lifecycle method
-  does any other work, so the dying instance does not repaint
-  against the old theme. A theme change while the activity is
-  visible still recreates immediately, as before.
+- **Theme change no longer dropped for a backgrounded activity.**
+  Every activity's `THEME_COLOR_CHANGED` handler recreated only when the activity was visible.
+  A backgrounded activity hit its visibility guard and returned without recording anything, so the event was dropped.
+  The handler now records the dropped event in `mThemeRecreationPending` and the recreate runs when the activity returns: from `onResume()` for the resumed-gated activities, from `onStart()` for `MusicPlayer`, whose guard is the started gate.
+  The drain recreates and returns before the returning lifecycle method does any other work, so the dying instance does not repaint against the old theme.
+  A theme change while the activity is visible still recreates immediately, as before.
 
 - **Preset change now refreshes the band controls.**
-  `EqualizerActivity`'s preset callback applied the preset
-  through the manager and relied on the listener notification to
-  refresh the band SeekBars and the preset button. When that
-  notification was lost, the controls kept showing the previous
-  preset's bands even though the audio had changed. The callback
-  now refreshes from the manager's current state immediately
-  after applying: `updateBandControlsFromLevels()` re-reads the
-  band levels into the SeekBars and the preset button re-reads
-  the preset name. The dialog owns the selection; the host owns
-  the refresh.
+  `EqualizerActivity`'s preset callback applied the preset through the manager and relied on the listener notification to refresh the band SeekBars and the preset button.
+  When that notification was lost, the controls kept showing the previous preset's bands even though the audio had changed.
+  The callback now refreshes from the manager's current state immediately after applying: `updateBandControlsFromLevels()` re-reads the band levels into the SeekBars and the preset button re-reads the preset name.
+  The dialog owns the selection; the host owns the refresh.
 
-- **Notification rebuilds in the new theme and language
-  immediately.** `MusicService` had a theme subscriber that did
-  nothing and no language subscriber at all, and
-  `NotificationController`'s theme handler was a no-op whose
-  Javadoc promised a rebuild "on the next commit" which only
-  happened on the next playback change. The service now forces a
-  `broadcastUpdate()` on both events, committing a fresh snapshot
-  against the newly persisted theme and locale on the same turn.
-  The controller's handler stays a no-op, and its Javadoc now
-  says why: committing from there as well would post the same
-  notification twice.
+- **Notification rebuilds in the new theme and language immediately.**
+  `MusicService` had a theme subscriber that did nothing and no language subscriber at all, and `NotificationController`'s theme handler was a no-op whose Javadoc promised a rebuild "on the next commit" which only happened on the next playback change.
+  The service now forces a `broadcastUpdate()` on both events, committing a fresh snapshot against the newly persisted theme and locale on the same turn.
+  The controller's handler stays a no-op, and its Javadoc now says why: committing from there as well would post the same notification twice.
 
-- **Reselecting the already-applied preset no longer re-applies
-  it.** `EqualizerActivity`'s preset listener applied every
-  selection, including a tap on the preset the dialog opened
-  with. The theme and language hosts in `CreditsDialog` return
-  early when the selection equals the index the dialog opened
-  with (`openedAtIndex`). The preset listener has the same guard,
-  first statement, before the operational checks: reselecting
-  the current preset closes the dialog with its bounce and
-  applies nothing. Selecting a different preset applies as
-  before, including the host refresh.
+- **Reselecting the already-applied preset no longer re-applies it.**
+  `EqualizerActivity`'s preset listener applied every selection, including a tap on the preset the dialog opened with.
+  The theme and language hosts in `CreditsDialog` return early when the selection equals the index the dialog opened with (`openedAtIndex`).
+  The preset listener has the same guard, first statement, before the operational checks: reselecting the current preset closes the dialog with its bounce and applies nothing.
+  Selecting a different preset applies as before, including the host refresh.
 
 - **Scope drafts survive a mode switch.**
-  `PlaybackScopeDialog.onModeTapped()` called `clearAllFilters()`
-  on every mode switch, wiping all four filter kinds' draft sets.
-  The mode switch now touches only `mSelectedKind` and the
-  expansion flag, so each kind's draft survives while the dialog
-  is open and returning to a kind restores its checks. Nothing
-  commits on a mode switch: `buildScope()` reads only the
-  selected kind's set, cancel commits nothing, and APPLY still
-  compares `buildScope()` to the scope the dialog opened with.
-  `clearAllFilters()` had exactly one caller, so it is removed
-  with the call.
+  `PlaybackScopeDialog.onModeTapped()` called `clearAllFilters()` on every mode switch, wiping all four filter kinds' draft sets.
+  The mode switch now touches only `mSelectedKind` and the expansion flag, so each kind's draft survives while the dialog is open and returning to a kind restores its checks.
+  Nothing commits on a mode switch: `buildScope()` reads only the selected kind's set, cancel commits nothing, and APPLY still compares `buildScope()` to the scope the dialog opened with.
+  `clearAllFilters()` had exactly one caller, so it is removed with the call.
 
-- **Artist group docks beside the transport controls in
-  landscape.** In a short landscape window the album art is
-  hidden, so the weight-1 song-info group collapsed to zero
-  height and its children spilled over the seek bar.
-  `MusicPlayer.applySongInfoLayout` now docks the group beside
-  the transport row when the art is hidden and the orientation is
-  landscape: the two views are re-parented into a horizontal row
-  group first, then the controls sharing the row with 0.5
-  weight each. The transport row keeps its four spacers, so it
-  looks like its portrait version. The group starts 16dp from the
-  left edge and the controls end 16dp from the right edge, so the
-  gap between the two sits at the center. The seek-bar section
-  takes what is left above the docked row weight 1, its
-  content centred and the docked row hugs its content with a
-  48dp bottom margin: the toast lane. The toast lane is reserved
-  in both orientations: 48dp in split view and in landscape, plus
-  the bottom buttons row's 16dp top padding. In split view, the
-  48dp is the transport row's bottom padding; in landscape, it is
-  the docked row's bottom margin, and the transport row's bottom
-  padding stays zero so the lane is the margin, not padding. In
-  portrait with the art visible, the lane is the layout's 64dp
-  transport padding instead. The 16dp from the bottom buttons to
-  the edge is the bottom buttons row's bottom padding and is never
-  touched. Rotating back restores both views to their own rows
-  and the full lane. The dock only applies in landscape: a short
-  portrait window is too narrow for the two side by side.
+- **Artist group docks beside the transport controls in landscape.**
+  In a short landscape window the album art is hidden, so the weight-1 song-info group collapsed to zero height and its children spilled over the seek bar.
+  `MusicPlayer.applySongInfoLayout` now docks the group beside the transport row when the art is hidden and the orientation is landscape: the two views are re-parented into a horizontal row group first, then the controls sharing the row with 0.5 weight each.
+  The transport row keeps its four spacers, so it looks like its portrait version.
+  The group starts 16dp from the left edge and the controls end 16dp from the right edge, so the gap between the two sits at the center.
+  The seek-bar section takes what is left above the docked row weight 1, its content centred and the docked row hugs its content with a 48dp bottom margin: the toast lane.
+  The toast lane is reserved in both orientations: 48dp in split view and in landscape, plus the bottom buttons row's 16dp top padding.
+  In split view, the 48dp is the transport row's bottom padding; in landscape, it is the docked row's bottom margin, and the transport row's bottom padding stays zero so the lane is the margin, not padding.
+  In portrait with the art visible, the lane is the layout's 64dp transport padding instead.
+  The 16dp from the bottom buttons to the edge is the bottom buttons row's bottom padding and is never touched.
+  Rotating back restores both views to their own rows and the full lane.
+  The dock only applies in landscape: a short portrait window is too narrow for the two side by side.
 
 ### Decision
 
-- **Screen rotation is allowed.** The portrait value on all five
-  activities (`MusicPlayer`, `PlaylistActivity`, `FolderManager`,
-  `EqualizerActivity`, `MetadataEditor`) is replaced with
-  `unspecified`, the platform value for auto-rotation. The system
-  decides the orientation, honouring the user's auto-rotate
-  setting. The portrait lock was the previous behaviour, not a
-  defect lifting it is a decision. The shared configChanges set
-  already covers `orientation`, so rotating does not destroy the
-  activity and does not dismiss an open dialog: the activity
-  receives `onConfigurationChanged` and every view re-measures
-  against the new window. The landscape player overlap this
-  exposed is fixed above.
+- **Screen rotation is allowed.**
+  The portrait value on all five activities (`MusicPlayer`, `PlaylistActivity`, `FolderManager`, `EqualizerActivity`, `MetadataEditor`) is replaced with `unspecified`, the platform value for auto-rotation.
+  The system decides the orientation, honouring the user's auto-rotate setting.
+  The portrait lock was the previous behaviour, not a defect lifting it is a decision.
+  The shared configChanges set already covers `orientation`, so rotating does not destroy the activity and does not dismiss an open dialog: the activity receives `onConfigurationChanged` and every view re-measures against the new window.
+  The landscape player overlap this exposed is fixed above.
 
 ### Preserved
 
-- No change to scope matching, repeat, shuffle, sort, search
-  filtering, favorite persistence, or click debounce.
-- No change to the intentional Reset button, which still writes
-  the default pitch and speed directly and does not go through
-  attach.
-- Language changes still recreate each subscribed activity
-  immediately; `locale` is still deliberately absent from the
-  configChanges set, so a system language change still recreates
-  the activity and rebuilds the wrapped base context.
-- `PresetDialog` still fires for every tap, including a reselect;
-  the guard is in the host listener, as it is for theme and
-  language.
-- No change to ProGuard rules. The new `MusicService`
-  `onLanguageChangedEvent` is a `@Subscribe` method, kept by the
-  existing EventBus keep rule; the new `mThemeRecreationPending`
-  fields are kept by the existing `com.ark.llama.**` wildcard and
-  per-class keeps.
+- No change to scope matching, repeat, shuffle, sort, search filtering, favorite persistence, or click debounce.
+- No change to the intentional Reset button, which still writes the default pitch and speed directly and does not go through attach.
+- Language changes still recreate each subscribed activity immediately; `locale` is still deliberately absent from the configChanges set, so a system language change still recreates the activity and rebuilds the wrapped base context.
+- `PresetDialog` still fires for every tap, including a reselect; the guard is in the host listener, as it is for theme and language.
+- No change to ProGuard rules.
+  The new `MusicService` `onLanguageChangedEvent` is a `@Subscribe` method, kept by the existing EventBus keep rule; the new `mThemeRecreationPending` fields are kept by the existing `com.ark.llama.**` wildcard and per-class keeps.
 
 ## [1.5.7] - Nov 20, 2026
 
 ### Overview
 
-Version 1.5.7 focuses the current song after hiding search, and
-preserves the equalizer pitch and speed across track transitions.
+Version 1.5.7 focuses the current song after hiding search, and preserves the equalizer pitch and speed across track transitions.
 
 ### Fixed
 
-- **Current song focus after hiding search.** `PlaylistActivity`
-  now focuses the current song after hiding search, so the
-  restored full list scrolls to the song that is playing.
-  `hideSearch()` calls `performSearch("")` to restore the full
-  list, then posts the same delayed, guarded `focusCurrentSong()`
-  the sort path uses, so the scroll runs after the adapter has
-  laid out the restored list and is suppressed while the user is
-  scrolling, tapping, or genre-loading. Both callers, the Cancel
-  button and `onBackPressed()`, go through `hideSearch()`.
+- **Current song focus after hiding search.**
+  `PlaylistActivity` now focuses the current song after hiding search, so the restored full list scrolls to the song that is playing.
+  `hideSearch()` calls `performSearch("")` to restore the full list, then posts the same delayed, guarded `focusCurrentSong()` the sort path uses, so the scroll runs after the adapter has laid out the restored list and is suppressed while the user is scrolling, tapping, or genre-loading.
+  Both callers, the Cancel button and `onBackPressed()`, go through `hideSearch()`.
 
-- **Pitch and speed preserved across transitions.** Every
-  transition creates a new `MediaPlayer`, which starts with
-  default `PlaybackParams` (1.00x speed, 0 semitones). Pitch and
-  speed are user preferences, not per-track state, so they are
-  now carried across the session change. `MusicService`
-  `onPrepared()` attaches through the new
-  `attachEqualizerPreservingPlaybackParams()` helper, which
-  snapshots pitch and speed before `attachToAudioSession()` and
-  restores them when the attach changed them. The READY branch
-  (cold-start restore, pause-during-prepare) now calls
-  `updatePlaybackParams()` instead of returning with default
-  params until a later resume. `EqualizerActivity` attaches
-  through the new `attachPreservingPitchSpeed()` helper at all
-  three attach sites (`onCreate()`, `onResume()`,
-  `onAudioSessionChangedEvent()`), so the refresh that follows a
-  transition reads the preserved values into the SeekBars.
+- **Pitch and speed preserved across transitions.**
+  Every transition creates a new `MediaPlayer`, which starts with default `PlaybackParams` (1.00x speed, 0 semitones).
+  Pitch and speed are user preferences, not per-track state, so they are now carried across the session change.
+  `MusicService` `onPrepared()` attaches through the new `attachEqualizerPreservingPlaybackParams()` helper, which snapshots pitch and speed before `attachToAudioSession()` and restores them when the attach changed them.
+  The READY branch (cold-start restore, pause-during-prepare) now calls `updatePlaybackParams()` instead of returning with default params until a later resume.
+  `EqualizerActivity` attaches through the new `attachPreservingPitchSpeed()` helper at all three attach sites (`onCreate()`, `onResume()`, `onAudioSessionChangedEvent()`), so the refresh that follows a transition reads the preserved values into the SeekBars.
 
 ### Preserved
 
-- No change to search filtering, sort, `focusCurrentSong()`
-  itself, or the double `performSearch("")` call in
-  `hideSearch()`.
-- No change to the intentional Reset button, which still writes
-  the default pitch and speed directly and does not go through
-  attach.
-- No change to scope matching, repeat, shuffle, favorite
-  persistence, or click debounce.
+- No change to search filtering, sort, `focusCurrentSong()` itself, or the double `performSearch("")` call in `hideSearch()`.
+- No change to the intentional Reset button, which still writes the default pitch and speed directly and does not go through attach.
+- No change to scope matching, repeat, shuffle, favorite persistence, or click debounce.
 
 ## [1.5.6] - Nov 19, 2026
 
 ### Overview
 
-Version 1.5.6 fixes a stale-target end-of-song deadlock after a
-playback rebuild while playing, and makes the playlist re-evaluate
-its displayed list when a song is tapped.
+Version 1.5.6 fixes a stale-target end-of-song deadlock after a playback rebuild while playing, and makes the playlist re-evaluate its displayed list when a song is tapped.
 
 ### Fixed
 
-- **Stale-target end-of-song deadlock.** After a scope, favorite,
-  sort, or `setPlaylist()` rebuild while `PLAYING`, a stale
-  `mTargetIndex` could suppress `onCompletion()`, leaving playback
-  stuck silent at end-of-song in the `PLAYING` state. The health
-  check could not save it, because the position was already at the
-  duration. A handoff is now only real while `PREPARING`; while
-  `PLAYING`, the target must equal the current song, and
-  `onCompletion()` never suppresses completion for a stale target.
-  `onCompletion()` aligns a stale target to the current song before
-  resolving the next song, `applyPlaybackScopeInternal()` and
-  `reconcilePlaybackAfterScopeChange()` align a stale target while
-  `PLAYING`, and `onCompletion()` uses the new `scopeEmpty()`
-  helper to enter the no-song state when the scope has no eligible
-  songs.
+- **Stale-target end-of-song deadlock.**
+  After a scope, favorite, sort, or `setPlaylist()` rebuild while `PLAYING`, a stale `mTargetIndex` could suppress `onCompletion()`, leaving playback stuck silent at end-of-song in the `PLAYING` state.
+  The health check could not save it, because the position was already at the duration.
+  A handoff is now only real while `PREPARING`; while `PLAYING`, the target must equal the current song, and `onCompletion()` never suppresses completion for a stale target.
+  `onCompletion()` aligns a stale target to the current song before resolving the next song, `applyPlaybackScopeInternal()` and `reconcilePlaybackAfterScopeChange()` align a stale target while `PLAYING`, and `onCompletion()` uses the new `scopeEmpty()` helper to enter the no-song state when the scope has no eligible songs.
 
-- **Playlist refresh on song tap.** `PlaylistActivity` now refreshes
-  its displayed list on a song tap, before highlighting the tapped
-  row. The refresh re-reads the service's current playlist after
-  the service's `rebuildPlaylists()` on commit, so it evaluates
-  whether each song still belongs to the current displayed list.
-  Songs no longer in scope and no longer current/target are
-  evicted; the tapped song survives as the grace-period
-  current/target when it committed, even if it is out of scope.
-  A tapped song that never became current is not highlighted as
-  playing. `onUpdatePlayerEvent()` refreshes again when the
-  playing song is not in the displayed list, covering a prepare
-  that commits after the tap's own refresh. No new service
-  evaluation logic was added for this refresh; the mechanism
-  already existed in the service.
+- **Playlist refresh on song tap.**
+  `PlaylistActivity` now refreshes its displayed list on a song tap, before highlighting the tapped row.
+  The refresh re-reads the service's current playlist after the service's `rebuildPlaylists()` on commit, so it evaluates whether each song still belongs to the current displayed list.
+  Songs no longer in scope and no longer current/target are evicted; the tapped song survives as the grace-period current/target when it committed, even if it is out of scope.
+  A tapped song that never became current is not highlighted as playing.
+  `onUpdatePlayerEvent()` refreshes again when the playing song is not in the displayed list, covering a prepare that commits after the tap's own refresh.
+  No new service evaluation logic was added for this refresh; the mechanism already existed in the service.
 
 ### Preserved
 
-- No change to scope matching, repeat, shuffle, sort, search,
-  favorite persistence, or click debounce.
-- Playlist refresh remains suppressed during genre loading and
-  user scrolling, as before.
-- No event delivery, dependency version, dialog lifecycle, or
-  animation changes.
+- No change to scope matching, repeat, shuffle, sort, search, favorite persistence, or click debounce.
+- Playlist refresh remains suppressed during genre loading and user scrolling, as before.
+- No event delivery, dependency version, dialog lifecycle, or animation changes.
 
 ## [1.5.5] - Nov 19, 2026
 
 ### Overview
 
-Version 1.5.5 adds greenrobot EventBus attribution to the Credits dialog,
-migrates all license texts to `assets/licenses`, and fixes natural
-completion after a scope change back to All Songs.
+Version 1.5.5 adds greenrobot EventBus attribution to the Credits dialog, migrates all license texts to `assets/licenses`, and fixes natural completion after a scope change back to All Songs.
 
 ### Added
 
-- **greenrobot EventBus attribution.** The Credits dialog now lists
-  `greenrobot EventBus` alongside jaudiotagger and FontAwesome, using the
-  same clickable library-credit row.
-- **greenrobot clickable text.** Tapping the `greenrobot EventBus` clickable text displays:
+- **greenrobot EventBus attribution.**
+  The Credits dialog now lists `greenrobot EventBus` alongside jaudiotagger and FontAwesome, using the same clickable library-credit row.
+- **greenrobot clickable text.**
+  Tapping the `greenrobot EventBus` clickable text displays:
 
   > greenrobot EventBus
   >
@@ -817,141 +509,93 @@ completion after a scope change back to All Songs.
   > greenrobot EventBus is used for in-process event delivery
   > between application components in Llama Music Player.
 
-  The full Apache License 2.0 text is included in the source for reference.
-- **Licenses migrated to `assets/licenses`.** All license texts now
-  live under `app/src/main/assets/licenses/`.
+The full Apache License 2.0 text is included in the source for reference. - **Licenses migrated to `assets/licenses`.**
+All license texts now live under `app/src/main/assets/licenses/`.
 
 ### Fixed
 
-- **Completion after a scope change back to All Songs.** After a scope
-  change from, for example, Favorites back to All Songs, playback now
-  transitions when the current song completes naturally. Previously,
-  it could fail to advance when the completed song's position was
-  resolved against the old scope. `onCompletion()` now resolves the
-  next song from `mScopedPlaylist`, and
-  `reconcilePlaybackAfterScopeChange()` keeps the current and pending
-  songs aligned with the new scope.
+- **Completion after a scope change back to All Songs.**
+  After a scope change from, for example, Favorites back to All Songs, playback now transitions when the current song completes naturally.
+  Previously, it could fail to advance when the completed song's position was resolved against the old scope.
+  `onCompletion()` now resolves the next song from `mScopedPlaylist`, and `reconcilePlaybackAfterScopeChange()` keeps the current and pending songs aligned with the new scope.
 
 ### Preserved
 
-- The existing jaudiotagger and FontAwesome entries and license texts
-  remain unchanged.
-- The application's MIT license remains the license for Llama Music
-  Player itself; the Apache license applies to greenrobot.
-- No event delivery, dependency version, dialog lifecycle, click
-  debounce, or animation changes.
+- The existing jaudiotagger and FontAwesome entries and license texts remain unchanged.
+- The application's MIT license remains the license for Llama Music Player itself; the Apache license applies to greenrobot.
+- No event delivery, dependency version, dialog lifecycle, click debounce, or animation changes.
 
 ## [1.5.4] - Nov 19, 2026
 
 ### Overview
 
-Version 1.5.4 addresses playback-scope matching when Android exposes the
-same shared-storage location through different path spellings, enforces
-the selected scope across manual and automatic navigation, and improves
-metadata refresh consistency across the service, player screen, and
-playlist display.
+Version 1.5.4 addresses playback-scope matching when Android exposes the same shared-storage location through different path spellings, enforces the selected scope across manual and automatic navigation, and improves metadata refresh consistency across the service, player screen, and playlist display.
 
 ### Fixed
 
-- **Loose-track playback scope matching.** Loose-track paths are
-  normalized before membership checks so equivalent separator and
-  primary-storage path forms can match consistently.
-- **Selected-folder playback scope matching.** Folder and song paths are
-  normalized before comparison. Folder matches retain an explicit path
-  boundary, preventing a folder such as `Music` from matching a sibling
-  such as `Music2`.
-- **Scope-safe manual navigation.** Next and Previous now select only
-  songs in the active scope, including when the current or pending song
-  is temporarily retained outside it.
-- **Scope-safe recovery and shuffle history.** Prepare failures, player
-  errors, and stall recovery advance within the active scope. Shuffle
-  previews, forward picks, and backward history are also restricted to
-  scoped songs.
-- **No-song-in-scope state.** Applying a scope with no eligible songs
-  now stops and releases playback, clears the active and pending song
-  indices, empties the transitional current playlist, clears artwork and
-  notification state, and publishes a genuine idle/no-song state. The
-  excluded song can no longer continue playing beneath placeholder
-  metadata.
-- **Restore playback after leaving an empty scope.** When a later scope
-  contains eligible songs, the service reloads the previously active song
-  if that song belongs to the new scope. Otherwise it loads the first song
-  in the scoped playlist. The remembered path is separate from active
-  playback state, so the empty scope remains a genuine no-song state.
-- **Scope-change reconciliation.** If the current song is excluded but
-  eligible songs remain, playback transitions to an eligible song. An
-  in-flight prepare whose target becomes excluded is invalidated before
-  a valid replacement is prepared. Favorite changes that remove the
-  current song from a Favorites scope use the same reconciliation.
-- **Repeat-one after a scope change.** Repeat one continues to repeat a
-  current song while it belongs to the active scope. An excluded current
-  song is replaced by an eligible song, or playback enters the no-song
-  state when the scope has no eligible songs.
-- **Metadata preservation during partial updates.** Unchanged fields are
-  preserved from raw song values instead of being replaced with
-  localized display placeholders.
-- **Explicit metadata clearing.** Empty strings remain distinct from
-  `null`: an empty string clears a text field, while `null` leaves it
-  unchanged.
-- **Current-song display refresh.** The player screen refreshes the
-  currently playing song's title and artist after metadata updates.
-- **Playlist playing-index safety.** The playing indicator is updated
-  only when the edited song is present in the current display list.
+- **Loose-track playback scope matching.**
+  Loose-track paths are normalized before membership checks so equivalent separator and primary-storage path forms can match consistently.
+- **Selected-folder playback scope matching.**
+  Folder and song paths are normalized before comparison.
+  Folder matches retain an explicit path boundary, preventing a folder such as `Music` from matching a sibling such as `Music2`.
+- **Scope-safe manual navigation.**
+  Next and Previous now select only songs in the active scope, including when the current or pending song is temporarily retained outside it.
+- **Scope-safe recovery and shuffle history.**
+  Prepare failures, player errors, and stall recovery advance within the active scope.
+  Shuffle previews, forward picks, and backward history are also restricted to scoped songs.
+- **No-song-in-scope state.**
+  Applying a scope with no eligible songs now stops and releases playback, clears the active and pending song indices, empties the transitional current playlist, clears artwork and notification state, and publishes a genuine idle/no-song state.
+  The excluded song can no longer continue playing beneath placeholder metadata.
+- **Restore playback after leaving an empty scope.**
+  When a later scope contains eligible songs, the service reloads the previously active song if that song belongs to the new scope.
+  Otherwise it loads the first song in the scoped playlist.
+  The remembered path is separate from active playback state, so the empty scope remains a genuine no-song state.
+- **Scope-change reconciliation.**
+  If the current song is excluded but eligible songs remain, playback transitions to an eligible song.
+  An in-flight prepare whose target becomes excluded is invalidated before a valid replacement is prepared.
+  Favorite changes that remove the current song from a Favorites scope use the same reconciliation.
+- **Repeat-one after a scope change.**
+  Repeat one continues to repeat a current song while it belongs to the active scope.
+  An excluded current song is replaced by an eligible song, or playback enters the no-song state when the scope has no eligible songs.
+- **Metadata preservation during partial updates.**
+  Unchanged fields are preserved from raw song values instead of being replaced with localized display placeholders.
+- **Explicit metadata clearing.**
+  Empty strings remain distinct from `null`: an empty string clears a text field, while `null` leaves it unchanged.
+- **Current-song display refresh.**
+  The player screen refreshes the currently playing song's title and artist after metadata updates.
+- **Playlist playing-index safety.**
+  The playing indicator is updated only when the edited song is present in the current display list.
 
 ### Improved
 
-- **Filesystem path normalization.** Playback-scope matching normalizes
-  slash direction, redundant `.` and `..` segments, and common aliases
-  for primary shared storage. It is lexical normalization; it does not
-  resolve symbolic links or change path case.
-- **Artwork cache handling.** Artwork caches are invalidated and
-  repopulated only when artwork is changed or removed; a `null` artwork
-  payload means no artwork change, while an empty payload represents
-  removal.
-- **Narrow playlist refresh.** Metadata changes replace and notify only
-  the affected playlist row rather than rebuilding the full display.
-- **Song-state preservation.** Metadata refresh retains favorite state,
-  duration, and unrelated song state.
+- **Filesystem path normalization.**
+  Playback-scope matching normalizes slash direction, redundant `.` and `..` segments, and common aliases for primary shared storage.
+  It is lexical normalization; it does not resolve symbolic links or change path case.
+- **Artwork cache handling.**
+  Artwork caches are invalidated and repopulated only when artwork is changed or removed; a `null` artwork payload means no artwork change, while an empty payload represents removal.
+- **Narrow playlist refresh.**
+  Metadata changes replace and notify only the affected playlist row rather than rebuilding the full display.
+- **Song-state preservation.**
+  Metadata refresh retains favorite state, duration, and unrelated song state.
 
 ### Under the Hood
 
-- `PlaybackScope.normalizePath()` — standardizes path separators,
-  removes redundant path segments, and canonicalizes common primary
-  shared-storage aliases for scope comparisons.
-- `PlaybackScope.matches()` — applies normalized paths to loose-track
-  membership and selected-folder matching while retaining folder
-  boundary checks.
-- `MusicService.refreshMetadataForSong()` — applies metadata to matching
-  full/current playlist entries, persists the resulting song state, and
-  updates artwork caches only for actual artwork changes.
-- `MusicService.computeNext()` / `computePrevious()` — resolve manual
-  navigation and recovery destinations through `mScopedPlaylist`, then
-  map the selected song back to the state machine's current-playlist
-  index.
-- `MusicService.peekNextIndex()` / `peekPreviousIndex()` — keep carousel
-  neighbour previews consistent with scope-aware navigation, including
-  shuffle previews and shuffle history.
-- `MusicService.reconcilePlaybackAfterScopeChange()` — stops and clears
-  playback for an empty scope, replaces an excluded current song when
-  eligible songs remain, and invalidates an out-of-scope in-flight prepare.
-- `MusicPlayer.onUpdatePlayerEvent()` — rejects stale generations before
-  applying the empty-scope UI, preventing delayed broadcasts from clearing
-  a newer scope's display.
-- `MusicPlayer.onMetadataUpdatedEvent()` — refreshes the library cache,
-  conditionally invalidates artwork, and refreshes the current song's
-  displayed title and artist.
-- `PlaylistActivity.onMetadataUpdatedEvent()` — preserves raw unchanged
-  fields and favorite state, then updates only the affected row.
+- `PlaybackScope.normalizePath()` — standardizes path separators, removes redundant path segments, and canonicalizes common primary shared-storage aliases for scope comparisons.
+- `PlaybackScope.matches()` — applies normalized paths to loose-track membership and selected-folder matching while retaining folder boundary checks.
+- `MusicService.refreshMetadataForSong()` — applies metadata to matching full/current playlist entries, persists the resulting song state, and updates artwork caches only for actual artwork changes.
+- `MusicService.computeNext()` / `computePrevious()` — resolve manual navigation and recovery destinations through `mScopedPlaylist`, then map the selected song back to the state machine's current-playlist index.
+- `MusicService.peekNextIndex()` / `peekPreviousIndex()` — keep carousel neighbour previews consistent with scope-aware navigation, including shuffle previews and shuffle history.
+- `MusicService.reconcilePlaybackAfterScopeChange()` — stops and clears playback for an empty scope, replaces an excluded current song when eligible songs remain, and invalidates an out-of-scope in-flight prepare.
+- `MusicPlayer.onUpdatePlayerEvent()` — rejects stale generations before applying the empty-scope UI, preventing delayed broadcasts from clearing a newer scope's display.
+- `MusicPlayer.onMetadataUpdatedEvent()` — refreshes the library cache, conditionally invalidates artwork, and refreshes the current song's displayed title and artist.
+- `PlaylistActivity.onMetadataUpdatedEvent()` — preserves raw unchanged fields and favorite state, then updates only the affected row.
 
 ### Preserved
 
 - The service remains the owner of playback scope and playback state.
-- The current and pending songs may remain in the active queue only
-  while a valid in-scope transition is being completed. An empty scope
-  clears the active queue and stops playback; an excluded current song
-  cannot remain active beneath an empty player display.
-- Existing queue ownership and track-transition behavior remain owned by
-  the service state machine.
+- The current and pending songs may remain in the active queue only while a valid in-scope transition is being completed.
+  An empty scope clears the active queue and stops playback; an excluded current song cannot remain active beneath an empty player display.
+- Existing queue ownership and track-transition behavior remain owned by the service state machine.
 - Favorite persistence remains separate from metadata editing.
 - Background playback and external playback controls remain supported.
 
@@ -959,465 +603,270 @@ playlist display.
 
 ### Overview
 
-Version 1.5.3 addresses dialog dismissal, activity recreation, and
-transport-control visual synchronization issues.
+Version 1.5.3 addresses dialog dismissal, activity recreation, and transport-control visual synchronization issues.
 
-The Credits dialog could become unresponsive after opening and
-dismissing the theme or language picker without selecting an item.
-The picker-showing flags were cleared through dismissal handling
-that was not reliably independent of the selection flow. Both pickers
-now expose a dedicated host dismissal callback, allowing the Credits
-dialog to reset its flags whenever a picker closes.
+The Credits dialog could become unresponsive after opening and dismissing the theme or language picker without selecting an item.
+The picker-showing flags were cleared through dismissal handling that was not reliably independent of the selection flow.
+Both pickers now expose a dedicated host dismissal callback, allowing the Credits dialog to reset its flags whenever a picker closes.
 
-Activity recreation handling has also been improved with a
-pending-recreation guard and deferred execution through the
-activity's window decor view. Playback and favorite controls now
-explicitly refresh their visual states after toggle actions.
+Activity recreation handling has also been improved with a pending-recreation guard and deferred execution through the activity's window decor view.
+Playback and favorite controls now explicitly refresh their visual states after toggle actions.
 
 Foreground-aware playback resumption has also been strengthened.
-Volume-triggered and swipe-triggered playback actions now require
-the activity to be resumed and foreground-interactive, preventing
-unintended playback resumption while the player is in the background.
+Volume-triggered and swipe-triggered playback actions now require the activity to be resumed and foreground-interactive, preventing unintended playback resumption while the player is in the background.
 
 ### Fixed
 
-- **The Credits dialog buttons remain usable after dismissing the
-  pickers.**
-  `ThemeDialog` and `LanguageDialog` now provide a dedicated
-  dismissal callback for the host. The callback runs independently
-  of the selection callback, allowing the Credits dialog to clear its
-  picker-showing flags even when the user closes a picker without
-  selecting an item.
+- **The Credits dialog buttons remain usable after dismissing the pickers.**
+  `ThemeDialog` and `LanguageDialog` now provide a dedicated dismissal callback for the host.
+  The callback runs independently of the selection callback, allowing the Credits dialog to clear its picker-showing flags even when the user closes a picker without selecting an item.
 
 - **Play/pause visual state synchronization.**
-  Play/pause toggle paths now explicitly refresh the transport
-  controls after changing playback state.
+  Play/pause toggle paths now explicitly refresh the transport controls after changing playback state.
 
 - **Favorite icon visual synchronization.**
-  Favorite toggle paths now explicitly refresh the transport controls
-  after changing the current song's favorite state, allowing the icon
-  to reflect the updated state without requiring activity recreation.
+  Favorite toggle paths now explicitly refresh the transport controls after changing the current song's favorite state, allowing the icon to reflect the updated state without requiring activity recreation.
 
 - **Foreground-aware playback resumption.**
-  Volume-triggered and swipe-triggered playback resumption now require
-  the activity to be resumed and foreground-interactive. This prevents
-  unintended playback resumption when the player is in the background
-  or the user returns to the home screen, while preserving normal
-  background music playback.
+  Volume-triggered and swipe-triggered playback resumption now require the activity to be resumed and foreground-interactive.
+  This prevents unintended playback resumption when the player is in the background or the user returns to the home screen, while preserving normal background music playback.
 
 ### Improved
 
 - **Activity recreation lifecycle handling.**
-  Activities now use a pending-recreation guard to prevent
-  duplicate recreation requests. Recreation is posted through
-  the activity's window decor view and checks whether the activity
-  is finishing or destroyed before proceeding.
+  Activities now use a pending-recreation guard to prevent duplicate recreation requests.
+  Recreation is posted through the activity's window decor view and checks whether the activity is finishing or destroyed before proceeding.
 
 - **Credits dialog dismissal coordination.**
-  Language and theme change events now dismiss the Credits dialog
-  directly instead of posting an additional dismissal runnable to
-  the main handler. This reduces overlapping dismissal operations
-  during activity recreation.
+  Language and theme change events now dismiss the Credits dialog directly instead of posting an additional dismissal runnable to the main handler.
+  This reduces overlapping dismissal operations during activity recreation.
 
 - **Transport-control state rendering.**
-  Existing transport-control refresh logic is used to synchronize
-  playback and favorite icons with the current service state.
+  Existing transport-control refresh logic is used to synchronize playback and favorite icons with the current service state.
 
 - **Music-volume change detection.**
-  Volume observer callbacks now compare the actual music-stream
-  volume against the previously observed value before initiating
-  the maximum-volume resume check. This prevents unrelated
-  system-settings notifications from unnecessarily triggering
-  playback checks.
+  Volume observer callbacks now compare the actual music-stream volume against the previously observed value before initiating the maximum-volume resume check.
+  This prevents unrelated system-settings notifications from unnecessarily triggering playback checks.
 
 ### Under the Hood
 
-- `recreateActivity()` — introduces `mRecreationPending`,
-  validates the activity lifecycle, and posts recreation through
-  the window decor view.
+- `recreateActivity()` — introduces `mRecreationPending`, validates the activity lifecycle, and posts recreation through the window decor view.
 
-- `LanguageDialog` — registers a dedicated host dismissal callback
-  during dialog creation and invokes it from the dismissal flow
-  independently of language selection handling.
+- `LanguageDialog` — registers a dedicated host dismissal callback during dialog creation and invokes it from the dismissal flow independently of language selection handling.
 
-- `ThemeDialog` — implements the same dedicated host dismissal
-  callback while preserving the existing theme-selection callback.
+- `ThemeDialog` — implements the same dedicated host dismissal callback while preserving the existing theme-selection callback.
 
-- `CreditsDialog.showThemeDialog()` — registers the host dismissal
-  callback to clear `mIsThemeDialogShowing` whenever the theme
-  picker closes.
+- `CreditsDialog.showThemeDialog()` — registers the host dismissal callback to clear `mIsThemeDialogShowing` whenever the theme picker closes.
 
-- `CreditsDialog.showLanguageDialog()` — registers the host
-  dismissal callback to clear `mIsLanguageDialogShowing` whenever
-  the language picker closes.
+- `CreditsDialog.showLanguageDialog()` — registers the host dismissal callback to clear `mIsLanguageDialogShowing` whenever the language picker closes.
 
-- `MusicPlayer.refreshTransportControls()` — reused after
-  play/pause and favorite toggle operations to synchronize
-  the visible controls with the current service state.
+- `MusicPlayer.refreshTransportControls()` — reused after play/pause and favorite toggle operations to synchronize the visible controls with the current service state.
 
-- `MusicPlayer.mIsResumed` — tracks whether the activity is
-  currently resumed and foreground-interactive, independently
-  of its started state.
+- `MusicPlayer.mIsResumed` — tracks whether the activity is currently resumed and foreground-interactive, independently of its started state.
 
-- `MusicPlayer.onResume()` / `onPause()` — synchronize the
-  service's activity-foreground state with the activity lifecycle.
+- `MusicPlayer.onResume()` / `onPause()` — synchronize the service's activity-foreground state with the activity lifecycle.
 
-- `MusicPlayer.resumeIfPausedAndFocused()` — checks the resumed
-  state before allowing activity-originated playback resumption.
+- `MusicPlayer.resumeIfPausedAndFocused()` — checks the resumed state before allowing activity-originated playback resumption.
 
-- `MusicPlayer.handleObservedMusicVolumeChange()` — detects
-  actual music-volume changes before invoking the maximum-volume
-  resume handler.
+- `MusicPlayer.handleObservedMusicVolumeChange()` — detects actual music-volume changes before invoking the maximum-volume resume handler.
 
 ## [1.5.2] - Nov 17, 2026
 
 ### Overview
 
-The theme and language buttons in the Credits dialog could stop
-responding after the user reselected the current item. Each picker
-installed its selection callback with `setOnDismissListener()`,
-replacing the callback that cleared the Credits dialog's
-picker-showing flag. Since reselecting the current item does not
-change or broadcast a new value, the Credits dialog stayed open
-with its flag still set. The fix gives each picker a separate
-dismiss callback for the host, preserving the selection callback
-while allowing the flag to be cleared after reselection.
+The theme and language buttons in the Credits dialog could stop responding after the user reselected the current item.
+Each picker installed its selection callback with `setOnDismissListener()`, replacing the callback that cleared the Credits dialog's picker-showing flag.
+Since reselecting the current item does not change or broadcast a new value, the Credits dialog stayed open with its flag still set.
+The fix gives each picker a separate dismiss callback for the host, preserving the selection callback while allowing the flag to be cleared after reselection.
 
 ### Fixed
 
 - **The theme and language buttons remain usable after reselection.**
-  `ThemeDialog` and `LanguageDialog` replaced the Credits dialog's
-  dismiss listener when they installed their selection callbacks.
-  On reselection, the selection listener returned without applying
-  a change, and the Credits dialog's picker-showing flag remained
-  `true`. The pickers now notify the host through a separate dismiss
-  callback, so the corresponding button can open its picker again.
+  `ThemeDialog` and `LanguageDialog` replaced the Credits dialog's dismiss listener when they installed their selection callbacks.
+  On reselection, the selection listener returned without applying a change, and the Credits dialog's picker-showing flag remained `true`.
+  The pickers now notify the host through a separate dismiss callback, so the corresponding button can open its picker again.
 
 ### Under the Hood
 
-- `ThemeDialog` and `LanguageDialog` — add a dedicated host dismiss
-  callback alongside the existing selection callback. After a
-  selection, both callbacks run from the picker's dismiss flow.
+- `ThemeDialog` and `LanguageDialog` — add a dedicated host dismiss callback alongside the existing selection callback.
+  After a selection, both callbacks run from the picker's dismiss flow.
 
-- `CreditsDialog.showThemeDialog()` and
-  `CreditsDialog.showLanguageDialog()` — register the dedicated
-  callback to clear the matching picker-showing flag. The existing
-  selection listeners continue to apply only changed selections.
+- `CreditsDialog.showThemeDialog()` and `CreditsDialog.showLanguageDialog()` — register the dedicated callback to clear the matching picker-showing flag.
+  The existing selection listeners continue to apply only changed selections.
 
 ## [1.5.1] - Nov 17, 2026
 
 ### Overview
 
-Three fixes. The transport controls — play/pause, favorite, and
-the four mode buttons — are now written in the subscriber's own
-main-thread turn instead of inside the album-art carousel's
-commit runnable, so they respond on the same turn the state
-machine commits the change. A language change now rebuilds the
-app on the same path a theme change does: through
-`BroadcastTranslator`, fired from the picker's `onDismiss`
-callback, and answered by `recreate()`. The Credits dialog's
-open-and-close gesture continues to use `slide_out_down.xml` and
-`slide_in_up.xml`, the same XML animations every other screen
-transition in the app uses, but its two halves are now driven
-from the animation callbacks rather than from two independent
-delayed runnables, so they start on the same frame.
+Three fixes.
+The transport controls — play/pause, favorite, and the four mode buttons — are now written in the subscriber's own main-thread turn instead of inside the album-art carousel's commit runnable, so they respond on the same turn the state machine commits the change.
+A language change now rebuilds the app on the same path a theme change does: through `BroadcastTranslator`, fired from the picker's `onDismiss` callback, and answered by `recreate()`.
+The Credits dialog's open-and-close gesture continues to use `slide_out_down.xml` and `slide_in_up.xml`, the same XML animations every other screen transition in the app uses, but its two halves are now driven from the animation callbacks rather than from two independent delayed runnables, so they start on the same frame.
 
-The transport-control delay was caused by a coupling between
-two surfaces whose timings are unrelated. The play/pause and
-favorite button states are functions of the service snapshot
-alone. They were being written inside the runnable that the
-album-art carousel executes when its strip settles, so every
-transport change — a play tap, a pause tap, a favorite tap, an
-automatic song change — waited for the carousel before it
-reached the buttons. The transport writes now run before the
-carousel is touched. The album-art writes stay in the carousel
-commit, where their timing is correct.
+The transport-control delay was caused by a coupling between two surfaces whose timings are unrelated.
+The play/pause and favorite button states are functions of the service snapshot alone.
+They were being written inside the runnable that the album-art carousel executes when its strip settles, so every transport change — a play tap, a pause tap, a favorite tap, an automatic song change — waited for the carousel before it reached the buttons.
+The transport writes now run before the carousel is touched.
+The album-art writes stay in the carousel commit, where their timing is correct.
 
-The language change was going out as a raw broadcast whose
-action string happened to match the translator's action
-constant. It now goes through the translator, and the picker
-fires its listener from `onDismiss`, which runs after the
-picker window has detached. The previous ordering fired the
-listener from a delayed runnable that could run before the
-picker's window teardown had completed on a slower input
-pipeline, which is what made the language change unreliable
-on some devices while the theme change — which had no picker
-in its path — was reliable. Both stems now share one path, one
-`onDismiss` firing order, and one `recreate()` handler.
+The language change was going out as a raw broadcast whose action string happened to match the translator's action constant.
+It now goes through the translator, and the picker fires its listener from `onDismiss`, which runs after the picker window has detached.
+The previous ordering fired the listener from a delayed runnable that could run before the picker's window teardown had completed on a slower input pipeline, which is what made the language change unreliable on some devices while the theme change — which had no picker in its path — was reliable.
+Both stems now share one path, one `onDismiss` firing order, and one `recreate()` handler.
 
-The Credits gesture previously started its outgoing slide
-from the click handler and its incoming slide from the
-dialog's `onDismiss`, using the legacy `startAnimation` API
-on a view the framework was about to tear down. The two
-halves started on different callbacks and could slip by a
-vsync. The gesture now loads its existing
-`slide_out_down.xml` and `slide_in_up.xml`, shows the dialog
-in the outgoing animation's `onAnimationEnd`, and starts the
-incoming animation from `onDismiss`. Both halves are the
-same length because the length lives in one place per
-direction.
+The Credits gesture previously started its outgoing slide from the click handler and its incoming slide from the dialog's `onDismiss`, using the legacy `startAnimation` API on a view the framework was about to tear down.
+The two halves started on different callbacks and could slip by a vsync.
+The gesture now loads its existing `slide_out_down.xml` and `slide_in_up.xml`, shows the dialog in the outgoing animation's `onAnimationEnd`, and starts the incoming animation from `onDismiss`.
+Both halves are the same length because the length lives in one place per direction.
 
 ### Fixed
 
-- **Play/pause and favorite buttons respond on the turn of the
-  change.** `onUpdatePlayerEvent` calls `refreshTransportControls()`
-  before the carousel window is touched.
-  `refreshTransportControls` schedules its writes through
-  `updateUISafely`, which now runs synchronously when the caller
-  is already on the main thread and no other update is in flight.
-  The two changes together remove the intermediate post that
-  delayed every transport change on slower input pipelines.
+- **Play/pause and favorite buttons respond on the turn of the change.**
+  `onUpdatePlayerEvent` calls `refreshTransportControls()` before the carousel window is touched.
+  `refreshTransportControls` schedules its writes through `updateUISafely`, which now runs synchronously when the caller is already on the main thread and no other update is in flight.
+  The two changes together remove the intermediate post that delayed every transport change on slower input pipelines.
 
 - **A language change reaches every surface on every device.**
-  `CreditsDialog.showLanguageDialog` posts
-  `BroadcastTranslator.LanguageChangedEvent.create()` through
-  `BroadcastTranslator` rather than sending a raw
-  `"LANGUAGE_CHANGED"` broadcast. `LanguageDialog` fires its
-  listener from `setOnDismissListener`, which runs after the
-  dialog window has detached. `MusicPlayer.onLanguageChangedEvent`
-  answers with `recreateActivity()`. The recreation re-runs
-  `attachBaseContext`, which re-applies the locale through
-  `LanguageManager.wrap()`, so every string the new activity
-  resolves through `getString` from its `onCreate` onward is
-  read from the matching resource folder.
+  `CreditsDialog.showLanguageDialog` posts `BroadcastTranslator.LanguageChangedEvent.create()` through `BroadcastTranslator` rather than sending a raw `"LANGUAGE_CHANGED"` broadcast.
+  `LanguageDialog` fires its listener from `setOnDismissListener`, which runs after the dialog window has detached.
+  `MusicPlayer.onLanguageChangedEvent` answers with `recreateActivity()`.
+  The recreation re-runs `attachBaseContext`, which re-applies the locale through `LanguageManager.wrap()`, so every string the new activity resolves through `getString` from its `onCreate` onward is read from the matching resource folder.
 
-- **A theme change rebuilds on the same path.** The
-  `ThemeDialog` selection listener now also fires from
-  `setOnDismissListener`, matching `LanguageDialog`. The two
-  dialogs and their host activities share one path, one
-  dismissal order, and one `recreateActivity()` handler.
+- **A theme change rebuilds on the same path.**
+  The `ThemeDialog` selection listener now also fires from `setOnDismissListener`, matching `LanguageDialog`.
+  The two dialogs and their host activities share one path, one dismissal order, and one `recreateActivity()` handler.
 
 - **The Credits gesture starts both halves on the same frame.**
-  `MusicPlayer.showCreditsDialog()` loads the existing
-  `R.anim.slide_out_down` and starts it on
-  `android.R.id.content`; the dialog shows in the outgoing
-  animation's `onAnimationEnd`; the incoming animation
-  `R.anim.slide_in_up` starts on `onDismiss`. Both durations
-  live in the XML resources the rest of the app already uses
-  for screen transitions.
+  `MusicPlayer.showCreditsDialog()` loads the existing `R.anim.slide_out_down` and starts it on `android.R.id.content`; the dialog shows in the outgoing animation's `onAnimationEnd`; the incoming animation `R.anim.slide_in_up` starts on `onDismiss`.
+  Both durations live in the XML resources the rest of the app already uses for screen transitions.
 
-- **`recreateWithConfiguration` is renamed to
-  `recreateActivity`.** The method no longer calls
-  `Resources.updateConfiguration` before `recreate()`. The
-  incoming activity builds its resources from
-  `attachBaseContext` and `onCreate`; mutating the outgoing
-  activity's resources only changed the configuration its own
-  final lifecycle callbacks saw, without any consumer left to
-  read it. The rename reflects what the method does.
+- **`recreateWithConfiguration` is renamed to `recreateActivity`.**
+  The method no longer calls `Resources.updateConfiguration` before `recreate()`.
+  The incoming activity builds its resources from `attachBaseContext` and `onCreate`; mutating the outgoing activity's resources only changed the configuration its own final lifecycle callbacks saw, without any consumer left to read it.
+  The rename reflects what the method does.
 
 - **The transport refresh issues one redraw, not two.**
-  `refreshTransportControls` no longer calls
-  `postInvalidateOnAnimation` on the transport row and the
-  play button. The `setText`, `setBackground`, and
-  `setTextColor` calls the method already issues invalidate
-  their views on the next frame. The second invalidate only
-  added a second redraw behind the same vsync, which on slower
-  input pipelines could be serialised behind the animation
-  callback scheduler.
+  `refreshTransportControls` no longer calls `postInvalidateOnAnimation` on the transport row and the play button.
+  The `setText`, `setBackground`, and `setTextColor` calls the method already issues invalidate their views on the next frame.
+  The second invalidate only added a second redraw behind the same vsync, which on slower input pipelines could be serialised behind the animation callback scheduler.
 
 ### Under the Hood
 
-- `BroadcastTranslator.LanguageChangedEvent` — gains a public
-  `create()` factory. The constructor remains private; the
-  factory exists so `CreditsDialog` can post the event without
-  reconstructing an `Intent`.
+- `BroadcastTranslator.LanguageChangedEvent` — gains a public `create()` factory.
+  The constructor remains private; the factory exists so `CreditsDialog` can post the event without reconstructing an `Intent`.
 
-- `CreditsDialog.showLanguageDialog` — the
-  `mContext.sendBroadcast(new Intent("LANGUAGE_CHANGED")...)`
-  call is replaced with
-  `BroadcastTranslator.getInstance(mContext).post(
-  BroadcastTranslator.LanguageChangedEvent.create())`. The
-  dead `language_tag` extra is dropped; nothing read it.
+- `CreditsDialog.showLanguageDialog` — the `mContext.sendBroadcast(new Intent("LANGUAGE_CHANGED")...)` call is replaced with `BroadcastTranslator.getInstance(mContext).post( BroadcastTranslator.LanguageChangedEvent.create())`.
+  The dead `language_tag` extra is dropped; nothing read it.
 
-- `LanguageDialog.animateLanguageSelection` and
-  `ThemeDialog.animateThemeSelection` — the listener now
-  fires from `setOnDismissListener`, not from the
-  `DISMISS_DELAY_MS` runnable. The runnable calls `dismiss()`
-  only. `android.content.DialogInterface` is added to the
-  imports of both files.
+- `LanguageDialog.animateLanguageSelection` and `ThemeDialog.animateThemeSelection` — the listener now fires from `setOnDismissListener`, not from the `DISMISS_DELAY_MS` runnable.
+  The runnable calls `dismiss()` only.
+  `android.content.DialogInterface` is added to the imports of both files.
 
-- `MusicPlayer.onUpdatePlayerEvent` —
-  `refreshTransportControls()` is called before the
-  `updateUISafely` block that drives the carousel. The
-  `refreshTransportControls()` call inside the carousel commit
-  runnable is removed.
+- `MusicPlayer.onUpdatePlayerEvent` — `refreshTransportControls()` is called before the `updateUISafely` block that drives the carousel.
+  The `refreshTransportControls()` call inside the carousel commit runnable is removed.
 
-- `MusicPlayer.updateUISafely` — a synchronous branch runs the
-  update directly when `Looper.myLooper()` is the main looper
-  and `mIsUpdatingUI` is false. The post path is kept for
-  updates that originate off the main thread. Coalescing is
-  preserved in both branches.
+- `MusicPlayer.updateUISafely` — a synchronous branch runs the update directly when `Looper.myLooper()` is the main looper and `mIsUpdatingUI` is false.
+  The post path is kept for updates that originate off the main thread.
+  Coalescing is preserved in both branches.
 
-- `MusicPlayer.refreshTransportControls` — the
-  `postInvalidateOnAnimation` calls on `mTransportRow` and
-  `mPlayButton` are removed.
+- `MusicPlayer.refreshTransportControls` — the `postInvalidateOnAnimation` calls on `mTransportRow` and `mPlayButton` are removed.
 
-- `MusicPlayer.onLanguageChangedEvent` and
-  `onThemeColorChangedEvent` — the call to
-  `recreateWithConfiguration()` is renamed to
-  `recreateActivity()`.
+- `MusicPlayer.onLanguageChangedEvent` and `onThemeColorChangedEvent` — the call to `recreateWithConfiguration()` is renamed to `recreateActivity()`.
 
-- `MusicPlayer.recreateActivity` — the
-  `Resources.updateConfiguration` call is removed. The method
-  calls `recreate()` and `overridePendingTransition(0, 0)`.
+- `MusicPlayer.recreateActivity` — the `Resources.updateConfiguration` call is removed.
+  The method calls `recreate()` and `overridePendingTransition(0, 0)`.
 
-- `MusicPlayer.showCreditsDialog` — new private method,
-  called from the Llama button's click handler.
-  `AnimationUtils.loadAnimation(this, R.anim.slide_out_down)`
-  runs on `android.R.id.content`; the dialog shows in
-  `onAnimationEnd`; `R.anim.slide_in_up` runs on the same view
-  from the dialog's `onDismiss` listener. The Llama handler no
-  longer calls `AnimationUtils.loadAnimation` directly; the
-  handler's only change is the call to
-  `showCreditsDialog()`.
+- `MusicPlayer.showCreditsDialog` — new private method, called from the Llama button's click handler.
+  `AnimationUtils.loadAnimation(this, R.anim.slide_out_down)` runs on `android.R.id.content`; the dialog shows in `onAnimationEnd`; `R.anim.slide_in_up` runs on the same view from the dialog's `onDismiss` listener.
+  The Llama handler no longer calls `AnimationUtils.loadAnimation` directly; the handler's only change is the call to `showCreditsDialog()`.
 
-- `MusicPlayer` imports — `android.view.animation.Animation`
-  is added. `AnimationUtils` remains; the credits gesture is
-  its only consumer.
+- `MusicPlayer` imports — `android.view.animation.Animation` is added.
+  `AnimationUtils` remains; the credits gesture is its only consumer.
 
 ## [1.5.0] - Nov 16, 2026
 
 ### Overview
 
-The migration in this release moves every in-process broadcast
-receiver in the app to a single registrar, `BroadcastTranslator`,
-that converts each broadcast into a typed event and posts it to the
-greenrobot EventBus. Every class that used to own a receiver —
-`MusicPlayer`, `MusicService`, `PlaylistActivity`,
-`PlaylistManager`, `NotificationController`, `ToastManager`,
-`CreditsDialog`, `EqualizerActivity`, `MetadataEditor`,
-`FolderManager` — becomes an `@Subscribe` subscriber. Bodies are
-the original `onReceive` bodies, unchanged except for the
-`intent.get*Extra("key")` → `event.field` substitution.
+The migration in this release moves every in-process broadcast receiver in the app to a single registrar, `BroadcastTranslator`, that converts each broadcast into a typed event and posts it to the greenrobot EventBus.
+Every class that used to own a receiver — `MusicPlayer`, `MusicService`, `PlaylistActivity`, `PlaylistManager`, `NotificationController`, `ToastManager`, `CreditsDialog`, `EqualizerActivity`, `MetadataEditor`, `FolderManager` — becomes an `@Subscribe` subscriber.
+Bodies are the original `onReceive` bodies, unchanged except for the `intent.get*Extra("key")` → `event.field` substitution.
 
-Before the migration the app had 55 in-process broadcast receivers
-across those ten classes, registered and unregistered in the
-matching lifecycle method of each class. A class that forgot to
-unregister leaked its receiver; a class that forgot to register on
-a second entry path silently stopped receiving. The compiler could
-not see either failure because everything was dispatched on
-`intent.getAction()` and everything travelled as an `Intent` extra
-with a string key.
+Before the migration the app had 55 in-process broadcast receivers across those ten classes, registered and unregistered in the matching lifecycle method of each class.
+A class that forgot to unregister leaked its receiver; a class that forgot to register on a second entry path silently stopped receiving.
+The compiler could not see either failure because everything was dispatched on `intent.getAction()` and everything travelled as an `Intent` extra with a string key.
 
-The migration makes the shape of the receiver set visible to the
-compiler and to a reader. It registers one receiver per stem, in
-one place, at process start. Every stem has a named event class
-whose fields are the fields the sender actually writes. Every
-subscriber method names the event type it consumes, so a reader
-can find "who handles `METADATA_UPDATED`" by grepping for
-`onMetadataUpdatedEvent`. Every `Intent` extra used by any stem is
-declared as a field on the corresponding event class — no
-subscriber ever re-reads an extra out of a reconstructed `Intent`.
+The migration makes the shape of the receiver set visible to the compiler and to a reader.
+It registers one receiver per stem, in one place, at process start.
+Every stem has a named event class whose fields are the fields the sender actually writes.
+Every subscriber method names the event type it consumes, so a reader can find "who handles `METADATA_UPDATED`" by grepping for `onMetadataUpdatedEvent`.
+Every `Intent` extra used by any stem is declared as a field on the corresponding event class — no subscriber ever re-reads an extra out of a reconstructed `Intent`.
 
-The 55 receivers map onto 30 stems; the difference is accounted
-for by stems that had more than one receiver-owning class. The
-`THEME_COLOR_CHANGED` stem, for example, was received by
-`MusicPlayer`, `PlaylistActivity`, `EqualizerActivity`, and
-`FolderManager`, and is now a single event with four subscribers.
+The 55 receivers map onto 30 stems; the difference is accounted for by stems that had more than one receiver-owning class.
+The `THEME_COLOR_CHANGED` stem, for example, was received by `MusicPlayer`, `PlaylistActivity`, `EqualizerActivity`, and `FolderManager`, and is now a single event with four subscribers.
 
-`MusicService`'s `VOLUME_CHANGED_ACTION` receiver and
-`MetadataEditor`'s ephemeral `stateReceiver` are **not** migrated.
-Both are synchronous patterns that read one broadcast and reply on
-the same turn; the migration's scope is strictly the set of
-process-wide broadcast receivers that could be forgotten,
-duplicated, or silently lost.
+`MusicService`'s `VOLUME_CHANGED_ACTION` receiver and `MetadataEditor`'s ephemeral `stateReceiver` are **not** migrated.
+Both are synchronous patterns that read one broadcast and reply on the same turn; the migration's scope is strictly the set of process-wide broadcast receivers that could be forgotten, duplicated, or silently lost.
 
 ### Added
 
-- **`BroadcastTranslator`** — new singleton. Registers one
-  `BroadcastReceiver` per stem at process start, converts each
-  `Intent` into a typed event, posts the event to the default
-  `EventBus`. Exposes `register(Object)` / `unregister(Object)` for
-  the ten migrating subscribers and `post` / `postSticky` /
-  `getSticky` / `removeSticky` for symmetric EventBus access. 30
-  event classes, one per stem.
+- **`BroadcastTranslator`** — new singleton.
+  Registers one `BroadcastReceiver` per stem at process start, converts each `Intent` into a typed event, posts the event to the default `EventBus`.
+  Exposes `register(Object)` / `unregister(Object)` for the ten migrating subscribers and `post` / `postSticky` / `getSticky` / `removeSticky` for symmetric EventBus access.
+  30 event classes, one per stem.
 
-- **`LlamaMusicPlayer`** — new `Application` subclass. Owns the
-  process-lifetime `BroadcastTranslator`. Starts it in `onCreate`,
-  and stops it in `onTerminate` (emulator-only; on production
-  devices the translator lives for the process's lifetime and is
-  torn down with the process). Declared in `AndroidManifest.xml`
-  as `android:name=".LlamaMusicPlayer"`.
+- **`LlamaMusicPlayer`** — new `Application` subclass.
+  Owns the process-lifetime `BroadcastTranslator`.
+  Starts it in `onCreate`, and stops it in `onTerminate` (emulator-only; on production devices the translator lives for the process's lifetime and is torn down with the process).
+  Declared in `AndroidManifest.xml` as `android:name=".LlamaMusicPlayer"`.
 
-- **Fifty-five `@Subscribe` methods** across the ten migrated
-  classes. Each method is the original `onReceive` body, unchanged
-  except for the substitution of `intent.get*Extra("key")` with
-  `event.field`.
+- **Fifty-five `@Subscribe` methods** across the ten migrated classes.
+  Each method is the original `onReceive` body, unchanged except for the substitution of `intent.get*Extra("key")` with `event.field`.
 
 ### Changed
 
 - **In-process broadcast receivers are registered by one class.**
-  The fifty-five per-class receivers, their `register*Receiver()`
-  helper methods, and their symmetric `unregisterReceiver` calls
-  are gone. Each migrated class now has one
-  `BroadcastTranslator.getInstance(this).register(this)` call in
-  its `onCreate` (or constructor, for the non-`Activity` classes)
-  and one matching `unregister(this)` call in its `onDestroy` (or
-  `shutdown()` / `dismiss()`).
+  The fifty-five per-class receivers, their `register*Receiver()` helper methods, and their symmetric `unregisterReceiver` calls are gone.
+  Each migrated class now has one `BroadcastTranslator.getInstance(this).register(this)` call in its `onCreate` (or constructor, for the non-`Activity` classes) and one matching `unregister(this)` call in its `onDestroy` (or `shutdown()` / `dismiss()`).
 
-- **`MusicService` now subscribes to 13 events instead of owning
-  13 receivers.** The set is the same set the service used to
-  receive, plus `APPLY_PLAYBACK_SCOPE`, which the service's
-  existing `mApplyScopeReceiver` had registered. The
-  `APPLY_PLAYBACK_SCOPE` stem is a service facet under the same
-  rule as the other twelve: the service is the single writer of
-  the active scope, and applying a scope is a user-initiated
-  transition.
+- **`MusicService` now subscribes to 13 events instead of owning 13 receivers.**
+  The set is the same set the service used to receive, plus `APPLY_PLAYBACK_SCOPE`, which the service's existing `mApplyScopeReceiver` had registered.
+  The `APPLY_PLAYBACK_SCOPE` stem is a service facet under the same rule as the other twelve: the service is the single writer of the active scope, and applying a scope is a user-initiated transition.
 
-- **`PlaylistManager` subscribes to one event instead of owning
-  one receiver.** The subscribe/unsubscribe pair is wired to the
-  singleton's own lifecycle — the private constructor and
-  `shutdown()` — because the manager is not an `Activity`.
+- **`PlaylistManager` subscribes to one event instead of owning one receiver.**
+  The subscribe/unsubscribe pair is wired to the singleton's own lifecycle — the private constructor and `shutdown()` — because the manager is not an `Activity`.
 
-- **`NotificationController` and `ToastManager` subscribe to
-  `THEME_COLOR_CHANGED` in their constructors.** The theme
-  subscriber's body is unchanged; it does not repaint in place.
-  The notification's themed placeholder and action icon caches are
-  still keyed by the color they were built against, and
-  `ToastManager` still tears down and re-creates its persistent
-  overlay's text view through `createOverlayInView`.
+- **`NotificationController` and `ToastManager` subscribe to `THEME_COLOR_CHANGED` in their constructors.**
+  The theme subscriber's body is unchanged; it does not repaint in place.
+  The notification's themed placeholder and action icon caches are still keyed by the color they were built against, and `ToastManager` still tears down and re-creates its persistent overlay's text view through `createOverlayInView`.
 
-- **`resolveBroadcastSongPath` takes `(songPath, songUri)` instead
-  of an `Intent`.** The migration removes the `Intent` parameter
-  from `MusicPlayer`, `MusicService`, and `PlaylistActivity`. The
-  resolver's body is unchanged; only its signature changed.
+- **`resolveBroadcastSongPath` takes `(songPath, songUri)` instead of an `Intent`.**
+  The migration removes the `Intent` parameter from `MusicPlayer`, `MusicService`, and `PlaylistActivity`.
+  The resolver's body is unchanged; only its signature changed.
 
-- **`jaudiotagger` is now resolved from the remote source.** The
-  `net.jthink:jaudiotagger:3.0.1` artifact is now resolved
-  remotely from Maven Central rather than bundled with the source
-  archive.
+- **`jaudiotagger` is now resolved from the remote source.**
+  The `net.jthink:jaudiotagger:3.0.1` artifact is now resolved remotely from Maven Central rather than bundled with the source archive.
 
 ### Fixed
 
-- **`MusicPlayer`'s `onStart`/`onStop` visible-only gate on the
-  theme subscriber is preserved.** The subscriber is guarded by
-  `if (!isResumed()) return;`. A theme change that arrives while
-  the activity is stopped is dropped, matching the pre-migration
-  `onStart`/`onStop` registration pattern. The same guard is
-  applied to `PlaylistActivity`, `EqualizerActivity`, and
-  `FolderManager`, whose theme registrations were also
-  `onResume`/`onPause`.
+- **`MusicPlayer`'s `onStart`/`onStop` visible-only gate on the theme subscriber is preserved.**
+  The subscriber is guarded by `if (!isResumed()) return;`.
+  A theme change that arrives while the activity is stopped is dropped, matching the pre-migration `onStart`/`onStop` registration pattern.
+  The same guard is applied to `PlaylistActivity`, `EqualizerActivity`, and `FolderManager`, whose theme registrations were also `onResume`/`onPause`.
 
-- **Dead `ACTION_*` constants and dead `registerReceiverSafely` /
-  `unregisterReceiverSafely` helpers are removed.** The constants
-  that only the removed receivers used, and the two helper methods
-  whose only callers were the removed `unregisterReceiverSafely`
-  calls, are gone. The `BroadcastReceiver` and `IntentFilter`
-  imports that were only referenced by those removals are gone as
-  well. This is cleanup, not a behavioural change.
+- **Dead `ACTION_*` constants and dead `registerReceiverSafely` / `unregisterReceiverSafely` helpers are removed.**
+  The constants that only the removed receivers used, and the two helper methods whose only callers were the removed `unregisterReceiverSafely` calls, are gone.
+  The `BroadcastReceiver` and `IntentFilter` imports that were only referenced by those removals are gone as well.
+  This is cleanup, not a behavioural change.
 
 ### Under the Hood
 
-- `app/build.gradle` — `implementation 'org.greenrobot:eventbus:3.3.1'`
-  added to the `dependencies` block.
+- `app/build.gradle` — `implementation 'org.greenrobot:eventbus:3.3.1'` added to the `dependencies` block.
 
-- `app/proguard-rules.pro` — rules added to keep the
-  `@Subscribe` methods and the `ThreadMode` enum, which EventBus
-  invokes reflectively. The `*Annotation*` attribute keep is also
-  required for EventBus's reflective discovery of `@Subscribe`.
+- `app/proguard-rules.pro` — rules added to keep the `@Subscribe` methods and the `ThreadMode` enum, which EventBus invokes reflectively.
+  The `*Annotation*` attribute keep is also required for EventBus's reflective discovery of `@Subscribe`.
 
-- `AndroidManifest.xml` — `android:name=".LlamaMusicPlayer"` added
-  to the `<application>` element. No other manifest change.
+- `AndroidManifest.xml` — `android:name=".LlamaMusicPlayer"` added to the `<application>` element.
+  No other manifest change.
 
 - Every migrated class — `@version` moved to `1.5.0`.
 
@@ -1429,4111 +878,2205 @@ duplicated, or silently lost.
 
 Four changes ship in this release.
 
-Selecting the theme that is already applied no longer rebuilds the
-app. `ThemeDialog` was the only picker that called its manager
-from inside its own dismiss-delay runnable. Tapping any row —
-including the row of the theme that was already applied — called
-`ThemeManager.setThemeColor()`, which persists the value and
-broadcasts `THEME_COLOR_CHANGED`. Every activity answered by
-recreating, and every open dialog answered by dismissing.
-Re-picking the theme you were already on closed the picker and
-rebuilt the app behind it. The dialog now reports the tap and does
-not persist it; the `CreditsDialog` listener owns the persist call
-and the reselection guard, exactly as the `LanguageDialog`
-listener owns the language persist and the `PresetDialog` listener
-owns the preset apply.
+Selecting the theme that is already applied no longer rebuilds the app.
+`ThemeDialog` was the only picker that called its manager from inside its own dismiss-delay runnable.
+Tapping any row — including the row of the theme that was already applied — called `ThemeManager.setThemeColor()`, which persists the value and broadcasts `THEME_COLOR_CHANGED`.
+Every activity answered by recreating, and every open dialog answered by dismissing.
+Re-picking the theme you were already on closed the picker and rebuilt the app behind it.
+The dialog now reports the tap and does not persist it; the `CreditsDialog` listener owns the persist call and the reselection guard, exactly as the `LanguageDialog` listener owns the language persist and the `PresetDialog` listener owns the preset apply.
 
-The equalizer's status header again names the applied preset. A
-rewrite of `EqualizerActivity` replaced the preset-aware resting
-state with a transient confirmation that was never meant to be the
-resting state, so the line read `Equalizer: Enabled` after any
-preset was applied. It now reads `Equalizer: <presetName>` —
-`Equalizer: Headphones`, `Equalizer: Custom`, and so on — the
-state the line carried before the rewrite. Every writer of the
-line now resolves through one helper, `buildPresetStatusText()`,
-so the button and the status header cannot disagree again.
+The equalizer's status header again names the applied preset.
+A rewrite of `EqualizerActivity` replaced the preset-aware resting state with a transient confirmation that was never meant to be the resting state, so the line read `Equalizer: Enabled` after any preset was applied.
+It now reads `Equalizer: <presetName>` — `Equalizer: Headphones`, `Equalizer: Custom`, and so on — the state the line carried before the rewrite.
+Every writer of the line now resolves through one helper, `buildPresetStatusText()`, so the button and the status header cannot disagree again.
 
-The Custom preset's restore path in `EqualizerManager` is narrowed
-to the value the design says it owns. Selecting Custom from the
-picker restores the ten band levels; it does not touch bass
-boost, surround, pitch, or speed, all of which are independent of
-preset selection. The manager had been restoring boosters on top
-of the bands on the picker path, so selecting Custom after
-adjusting bass boost on a named preset silently reset bass boost
-to the snapshot value. That restore is removed from
-`applyCustomPreset`, and `setBassBoost`, `setSurround`,
-`setPitch`, and `setSpeed` no longer write into the custom
-snapshot when the Custom preset is active. The reload path is
-unchanged in spirit and completed in fact: `attachToAudioSession`
-now restores the custom pitch and speed values as well as the
-custom bands and boosters, so the user's full tuning survives a
-restart.
+The Custom preset's restore path in `EqualizerManager` is narrowed to the value the design says it owns.
+Selecting Custom from the picker restores the ten band levels; it does not touch bass boost, surround, pitch, or speed, all of which are independent of preset selection.
+The manager had been restoring boosters on top of the bands on the picker path, so selecting Custom after adjusting bass boost on a named preset silently reset bass boost to the snapshot value.
+That restore is removed from `applyCustomPreset`, and `setBassBoost`, `setSurround`, `setPitch`, and `setSpeed` no longer write into the custom snapshot when the Custom preset is active.
+The reload path is unchanged in spirit and completed in fact: `attachToAudioSession` now restores the custom pitch and speed values as well as the custom bands and boosters, so the user's full tuning survives a restart.
 
-The preset-name fallback and the resource that backed it are
-removed. `getPresetName(int)` was branching to
-`R.string.equalizer_preset_custom` when the preset index was out
-of range or the preset-name array could not be read. Neither
-condition is reachable from a valid state — `getCurrentPreset()`
-always returns an in-range index, and the array is declared in
-every locale — so the fallback was masking broken state with a
-hardcoded `Custom`. The method now reads the array directly, and
-`loadPresetNames` no longer swallows a resource-read exception.
-The `equalizer_preset_custom` string is removed from the master
-and every locale; `preset_names[0]` is the sole carrier of the
-word `Custom`.
+The preset-name fallback and the resource that backed it are removed.
+`getPresetName(int)` was branching to `R.string.equalizer_preset_custom` when the preset index was out of range or the preset-name array could not be read.
+Neither condition is reachable from a valid state — `getCurrentPreset()` always returns an in-range index, and the array is declared in every locale — so the fallback was masking broken state with a hardcoded `Custom`.
+The method now reads the array directly, and `loadPresetNames` no longer swallows a resource-read exception.
+The `equalizer_preset_custom` string is removed from the master and every locale; `preset_names[0]` is the sole carrier of the word `Custom`.
 
 ### Changed
 
-- **Re-selecting the current theme no longer triggers a full
-  rebuild.** `ThemeDialog.animateThemeSelection()` no longer calls
-  `ThemeManager.setThemeColor()`. The persist-and-broadcast side
-  effect moved to `CreditsDialog.showThemeDialog`'s
-  `OnThemeSelectedListener`, whose existing guard against
-  re-applying the current theme is now the only gate on the
-  reselection path. On reselection the picker still closes and the
-  tapped row still highlights and bounces; the persist, the
-  broadcast, the listener's downstream work, and the recreation
-  are skipped. This matches `LanguageDialog`, which has always
-  dismissed itself on reselection without rebuilding.
+- **Re-selecting the current theme no longer triggers a full rebuild.**
+  `ThemeDialog.animateThemeSelection()` no longer calls `ThemeManager.setThemeColor()`.
+  The persist-and-broadcast side effect moved to `CreditsDialog.showThemeDialog`'s `OnThemeSelectedListener`, whose existing guard against re-applying the current theme is now the only gate on the reselection path.
+  On reselection the picker still closes and the tapped row still highlights and bounces; the persist, the broadcast, the listener's downstream work, and the recreation are skipped.
+  This matches `LanguageDialog`, which has always dismissed itself on reselection without rebuilding.
 
 - **The Custom preset restores band levels only.**
-  `EqualizerManager.applyCustomPreset()` no longer restores bass
-  boost or surround. Selecting Custom from the picker leaves the
-  four effect values untouched. `setBassBoost`, `setSurround`,
-  `setPitch`, and `setSpeed` no longer write into the custom
-  snapshot when the Custom preset is active. The snapshot is
-  written only by `release()` and `applyStandardPreset()` and by
-  the band-level-change path in `setBandLevel`, and is restored on
-  the reload path by `attachToAudioSession`.
+  `EqualizerManager.applyCustomPreset()` no longer restores bass boost or surround.
+  Selecting Custom from the picker leaves the four effect values untouched.
+  `setBassBoost`, `setSurround`, `setPitch`, and `setSpeed` no longer write into the custom snapshot when the Custom preset is active.
+  The snapshot is written only by `release()` and `applyStandardPreset()` and by the band-level-change path in `setBandLevel`, and is restored on the reload path by `attachToAudioSession`.
 
 - **The reload path restores the full custom snapshot.**
-  `EqualizerManager.attachToAudioSession()` now calls
-  `restoreCustomPitch()` and `restoreCustomSpeed()` in addition to
-  `restoreCustomBandLevels()` and `restoreCustomBoosters()`, and
-  pushes the restored pitch and speed values into `KEY_PITCH` and
-  `KEY_SPEED` through `setPitch(mCustomPitch)` and
-  `setSpeed(mCustomSpeed)` after `applyPreset`, so the pitch and
-  speed sliders show the values the user tuned before the
-  restart.
+  `EqualizerManager.attachToAudioSession()` now calls `restoreCustomPitch()` and `restoreCustomSpeed()` in addition to `restoreCustomBandLevels()` and `restoreCustomBoosters()`, and pushes the restored pitch and speed values into `KEY_PITCH` and `KEY_SPEED` through `setPitch(mCustomPitch)` and `setSpeed(mCustomSpeed)` after `applyPreset`, so the pitch and speed sliders show the values the user tuned before the restart.
 
 ### Fixed
 
 - **The equalizer's status header again names the applied preset.**
-  A rewrite of `EqualizerActivity` replaced the preset-aware
-  status header with a transient confirmation that was never meant
-  to be the resting state; the line read `Equalizer: Enabled`
-  after any preset was applied. Every resting-state writer now
-  resolves through `buildPresetStatusText()`, which reads
-  `EqualizerManager.getCurrentPreset()` and
-  `getPresetName(int)` and composes them with
-  `getString(R.string.equalizer_status_preset, presetName)`.
+  A rewrite of `EqualizerActivity` replaced the preset-aware status header with a transient confirmation that was never meant to be the resting state; the line read `Equalizer: Enabled` after any preset was applied.
+  Every resting-state writer now resolves through `buildPresetStatusText()`, which reads `EqualizerManager.getCurrentPreset()` and `getPresetName(int)` and composes them with `getString(R.string.equalizer_status_preset, presetName)`.
 
 - **The preset-name fallback and its resource are removed.**
-  `getPresetName(int)` no longer substitutes a hardcoded `Custom`
-  for an out-of-range index, and `loadPresetNames` no longer
-  swallows a resource-read failure. The
-  `equalizer_preset_custom` string is removed from the master and
-  every locale; `preset_names[0]` is the sole carrier of the word.
+  `getPresetName(int)` no longer substitutes a hardcoded `Custom` for an out-of-range index, and `loadPresetNames` no longer swallows a resource-read failure.
+  The `equalizer_preset_custom` string is removed from the master and every locale; `preset_names[0]` is the sole carrier of the word.
 
 ### Under the Hood
 
-- `ThemeDialog.animateThemeSelection()` — the
-  `mThemeManager.setThemeColor(colorIndex)` call inside the
-  delayed runnable is removed. The runnable now notifies the
-  listener and dismisses; nothing else. The dialog retains its
-  `ThemeManager` reference for `getCurrentColorInt()` in the row
-  styling and its `ThemeHelper` for the top bar, but it no longer
-  writes through either manager.
+- `ThemeDialog.animateThemeSelection()` — the `mThemeManager.setThemeColor(colorIndex)` call inside the delayed runnable is removed.
+  The runnable now notifies the listener and dismisses; nothing else.
+  The dialog retains its `ThemeManager` reference for `getCurrentColorInt()` in the row styling and its `ThemeHelper` for the top bar, but it no longer writes through either manager.
 
-- `CreditsDialog.showThemeDialog` — the
-  `OnThemeSelectedListener` body is unchanged from the version
-  already in the file; what changes is that it is now the sole
-  writer of `setThemeColor()`, so its existing
-  `if (colorIndex == mThemeManager.getCurrentColorIndex())
-  return;` guard takes effect. `CreditsDialog`'s `@version` and
-  the fallback string in `getAppVersion()` move to `1.4.8`.
+- `CreditsDialog.showThemeDialog` — the `OnThemeSelectedListener` body is unchanged from the version already in the file; what changes is that it is now the sole writer of `setThemeColor()`, so its existing `if (colorIndex == mThemeManager.getCurrentColorIndex()) return;` guard takes effect.
+  `CreditsDialog`'s `@version` and the fallback string in `getAppVersion()` move to `1.4.8`.
 
-- `EqualizerActivity` — new `buildPresetStatusText()` helper,
-  which resolves
-  `getString(R.string.equalizer_status_preset, presetName)` from
-  `EqualizerManager.getCurrentPreset()` and
-  `getPresetName(int)`. `onPresetChanged`, `updateUI(boolean)`,
-  `refreshAllUIControls`, `applyThemeToUI`,
-  `handleEqualizerReady`, and `showTemporaryMessage`'s revert
-  runnable all route through it. `onPresetChanged` no longer
-  routes the status header through `showTemporaryMessage`; the
-  preset name is the resting state, not a transient message. The
-  `revertToWavesRunnable` field is renamed to
-  `revertToRestingRunnable` to match what it now reverts to.
+- `EqualizerActivity` — new `buildPresetStatusText()` helper, which resolves `getString(R.string.equalizer_status_preset, presetName)` from `EqualizerManager.getCurrentPreset()` and `getPresetName(int)`.
+  `onPresetChanged`, `updateUI(boolean)`, `refreshAllUIControls`, `applyThemeToUI`, `handleEqualizerReady`, and `showTemporaryMessage`'s revert runnable all route through it.
+  `onPresetChanged` no longer routes the status header through `showTemporaryMessage`; the preset name is the resting state, not a transient message.
+  The `revertToWavesRunnable` field is renamed to `revertToRestingRunnable` to match what it now reverts to.
 
-- `EqualizerManager` — the booster restore is removed from
-  `applyCustomPreset`. The four `if (mCurrentPreset ==
-  PRESET_INDEX_CUSTOM)` blocks in `setBassBoost`, `setSurround`,
-  `setPitch`, and `setSpeed` are removed.
-  `attachToAudioSession` gains `restoreCustomPitch()`,
-  `restoreCustomSpeed()`, `setPitch(mCustomPitch)`, and
-  `setSpeed(mCustomSpeed)`, placed after `applyPreset(mCurrentPreset)`
-  so the pushes do not back up the custom snapshot they just read.
-  `getPresetName(int)` returns `loadPresetNames()[preset]`
-  directly; `loadPresetNames()` no longer catches the
-  resource-read exception. The class `@version` becomes `1.4.8`.
+- `EqualizerManager` — the booster restore is removed from `applyCustomPreset`.
+  The four `if (mCurrentPreset == PRESET_INDEX_CUSTOM)` blocks in `setBassBoost`, `setSurround`, `setPitch`, and `setSpeed` are removed.
+  `attachToAudioSession` gains `restoreCustomPitch()`, `restoreCustomSpeed()`, `setPitch(mCustomPitch)`, and `setSpeed(mCustomSpeed)`, placed after `applyPreset(mCurrentPreset)` so the pushes do not back up the custom snapshot they just read.
+  `getPresetName(int)` returns `loadPresetNames()[preset]` directly; `loadPresetNames()` no longer catches the resource-read exception.
+  The class `@version` becomes `1.4.8`.
 
-- `strings.xml` (master and all fifteen translated locales) —
-  the `equalizer_preset_custom` string is removed.
-  `equalizer_status_preset` (`Equalizer: %1$s` in English and the
-  localized equivalent in each locale) is added between
-  `equalizer_status_disabled` and `equalizer_preset_disabled`, so
-  the three status strings read `enabled`, `disabled`, `preset` in
-  that order and are followed by the preset-related label. Each
-  file's `@version` becomes `1.4.8`.
+- `strings.xml` (master and all fifteen translated locales) — the `equalizer_preset_custom` string is removed.
+  `equalizer_status_preset` (`Equalizer: %1$s` in English and the localized equivalent in each locale) is added between `equalizer_status_disabled` and `equalizer_preset_disabled`, so the three status strings read `enabled`, `disabled`, `preset` in that order and are followed by the preset-related label.
+  Each file's `@version` becomes `1.4.8`.
 
-- `LanguageDialog` and `PresetDialog` are unchanged. Their side
-  effects already live in the caller's listener, so they never
-  had the reselection behaviour. `ThemeDialog` now matches them
-  rather than carrying a dialog-side write.
+- `LanguageDialog` and `PresetDialog` are unchanged.
+  Their side effects already live in the caller's listener, so they never had the reselection behaviour.
+  `ThemeDialog` now matches them rather than carrying a dialog-side write.
 
 ## [1.4.7] - Nov 13, 2026
 
 ### Overview
 
-This release corrects a visual regression introduced in the 1.4.6
-theme rebuild. The `ABOUT LLAMA` title in the Credits dialog was
-rendered in the active theme color, while the title of every other
-dialog (`PresetDialog`, `ThemeDialog`, `LanguageDialog`, and
-`PlaybackScopeDialog`) is rendered in the static light grey
-(`#C0C0C0`).
+This release corrects a visual regression introduced in the 1.4.6 theme rebuild.
+The `ABOUT LLAMA` title in the Credits dialog was rendered in the active theme color, while the title of every other dialog (`PresetDialog`, `ThemeDialog`, `LanguageDialog`, and `PlaybackScopeDialog`) is rendered in the static light grey (`#C0C0C0`).
 
-The title now reads from `TEXT_COLOR_LIGHT`, matching the other
-dialogs exactly. The theme color continues to be applied to the
-buttons, the app name, the library links, and the header accents,
-where it belongs.
+The title now reads from `TEXT_COLOR_LIGHT`, matching the other dialogs exactly.
+The theme color continues to be applied to the buttons, the app name, the library links, and the header accents, where it belongs.
 
 ### Fixed
 
 - **The Credits dialog's title matches the other dialogs.**
-  During the 1.4.6 theme rebuild, `CreditsDialog.createTitleText()`
-  was rewritten to set the title's text color from
-  `mThemeManager.getCurrentColorInt()`. This made the
-  `ABOUT LLAMA` header change color with the theme, breaking the
-  consistency with every other dialog's top bar. The method now
-  reads from `TEXT_COLOR_LIGHT`, so the Credits dialog's top bar
-  matches `PresetDialog`, `ThemeDialog`, `LanguageDialog`, and
-  `PlaybackScopeDialog` in every theme. The font size, letter
-  spacing, padding, gravity, and layout parameters are unchanged.
+  During the 1.4.6 theme rebuild, `CreditsDialog.createTitleText()` was rewritten to set the title's text color from `mThemeManager.getCurrentColorInt()`.
+  This made the `ABOUT LLAMA` header change color with the theme, breaking the consistency with every other dialog's top bar.
+  The method now reads from `TEXT_COLOR_LIGHT`, so the Credits dialog's top bar matches `PresetDialog`, `ThemeDialog`, `LanguageDialog`, and `PlaybackScopeDialog` in every theme.
+  The font size, letter spacing, padding, gravity, and layout parameters are unchanged.
 
 ### Under the Hood
 
-- `CreditsDialog.createTitleText()` — `textView.setTextColor(...)`
-  now parses `TEXT_COLOR_LIGHT` (`#C0C0C0`) instead of calling
-  `mThemeManager.getCurrentColorInt()`. This restores the behavior
-  that was present before the 1.4.6 theme rebuild and matches the
-  other dialogs' top-bar titles.
+- `CreditsDialog.createTitleText()` — `textView.setTextColor(...)` now parses `TEXT_COLOR_LIGHT` (`#C0C0C0`) instead of calling `mThemeManager.getCurrentColorInt()`.
+  This restores the behavior that was present before the 1.4.6 theme rebuild and matches the other dialogs' top-bar titles.
 
 ## [1.4.6] - Nov 13, 2026
 
 ### Overview
 
-Theme changes now rebuild every surface instead of repainting any
-of them. The theme manager persists the selection and broadcasts it;
-every activity answers with `recreateWithConfiguration()`, every
-open dialog answers by dismissing itself, and the toast overlay
-tears down and re-creates its text view through the same
-`createOverlayInView` path its first show uses. No view anywhere is
-repainted in place.
+Theme changes now rebuild every surface instead of repainting any of them.
+The theme manager persists the selection and broadcasts it; every activity answers with `recreateWithConfiguration()`, every open dialog answers by dismissing itself, and the toast overlay tears down and re-creates its text view through the same `createOverlayInView` path its first show uses.
+No view anywhere is repainted in place.
 
-The change fixes a device-specific failure that could not be
-reproduced on AOSP firmware. On some OEM firmware, a theme change
-reached most of the visible views but left one or more surfaces
-carrying a stale drawable, a stale text color, or a cached asset
-keyed by the previous color. The pattern that produced the failure
-was the same in every case: a broadcast receiver iterating a live
-view tree and calling `setTextColor`, `setBackgroundColor`, or
-`updateButton` on each view. That pattern assumed the framework
-would repaint every affected view on the next frame. On most
-devices it did. On some it did not.
+The change fixes a device-specific failure that could not be reproduced on AOSP firmware.
+On some OEM firmware, a theme change reached most of the visible views but left one or more surfaces carrying a stale drawable, a stale text color, or a cached asset keyed by the previous color.
+The pattern that produced the failure was the same in every case: a broadcast receiver iterating a live view tree and calling `setTextColor`, `setBackgroundColor`, or `updateButton` on each view.
+That pattern assumed the framework would repaint every affected view on the next frame.
+On most devices it did.
+On some it did not.
 
-The theme path now uses the language picker's mechanism, which has
-been reliable since 1.3.0: the manager persists the value and
-broadcasts it, and every surface is torn down and rebuilt against
-the persisted value. The language path has always behaved this way;
-the theme path now does too. Both broadcasts share one receiver
-body per activity and one cancel-or-dismiss rule per dialog, so the
-two paths cannot diverge on any device.
+The theme path now uses the language picker's mechanism, which has been reliable since 1.3.0: the manager persists the value and broadcasts it, and every surface is torn down and rebuilt against the persisted value.
+The language path has always behaved this way; the theme path now does too.
+Both broadcasts share one receiver body per activity and one cancel-or-dismiss rule per dialog, so the two paths cannot diverge on any device.
 
-This release also closes a volume-key path that could take audio
-focus back from an app that was playing, and brings the service's
-audio-focus handling and field nullability into line with one rule
-each. The focus fix is described under Fixed; the nullability and
-request-shape changes are under Under the Hood.
+This release also closes a volume-key path that could take audio focus back from an app that was playing, and brings the service's audio-focus handling and field nullability into line with one rule each.
+The focus fix is described under Fixed; the nullability and request-shape changes are under Under the Hood.
 
 ### Fixed
 
 - **Theme application reaches every surface on every device.**
-  `ThemeManager.setThemeColor(int)` now persists the value, updates
-  the in-memory fields, and broadcasts
-  `ThemeManager.ACTION_THEME_COLOR_CHANGED`. It does not touch any
-  view. The activity receivers no longer iterate a live view tree;
-  each one answers the broadcast with
-  `recreateWithConfiguration()`. The dialogs no longer rebuild
-  their content view; `ThemeDialog` persists the selection and
-  dismisses itself, `CreditsDialog` dismisses itself on the
-  broadcast, and the three dialogs that do not register a theme
-  receiver (`LanguageDialog`, `PresetDialog`,
-  `PlaybackScopeDialog`) are dismissed transitively by their
-  hosts' recreation. The toast overlay is torn down and re-created
-  through `createOverlayInView`. The notification is rebuilt by
-  the recreated activity's next commit.
+  `ThemeManager.setThemeColor(int)` now persists the value, updates the in-memory fields, and broadcasts `ThemeManager.ACTION_THEME_COLOR_CHANGED`.
+  It does not touch any view.
+  The activity receivers no longer iterate a live view tree; each one answers the broadcast with `recreateWithConfiguration()`.
+  The dialogs no longer rebuild their content view; `ThemeDialog` persists the selection and dismisses itself, `CreditsDialog` dismisses itself on the broadcast, and the three dialogs that do not register a theme receiver (`LanguageDialog`, `PresetDialog`, `PlaybackScopeDialog`) are dismissed transitively by their hosts' recreation.
+  The toast overlay is torn down and re-created through `createOverlayInView`.
+  The notification is rebuilt by the recreated activity's next commit.
 
-- **The album-art cache no longer carries stale bitmaps across a
-  theme change.** `AlbumArtCache` is a process-scoped singleton and
-  is unaffected by the change. The theme rebuild does not evict it;
-  it is rebuilt from the persisted color on the next
-  `updatePlaceholderBitmap` run inside the recreated activity.
+- **The album-art cache no longer carries stale bitmaps across a theme change.**
+  `AlbumArtCache` is a process-scoped singleton and is unaffected by the change.
+  The theme rebuild does not evict it; it is rebuilt from the persisted color on the next `updatePlaceholderBitmap` run inside the recreated activity.
 
-- **The notification mirror no longer carries a stale themed
-  placeholder or a stale action icon.** `NotificationController`'s
-  placeholder bitmap and themed action icon cache are keyed by the
-  color they were built against, so the recreated activity's next
-  `commitNow()` reads the persisted theme and either reuses a
-  matching entry or rebuilds.
+- **The notification mirror no longer carries a stale themed placeholder or a stale action icon.**
+  `NotificationController`'s placeholder bitmap and themed action icon cache are keyed by the color they were built against, so the recreated activity's next `commitNow()` reads the persisted theme and either reuses a matching entry or rebuilds.
 
-- **The dialog that opened the picker is dismissed on the same
-  broadcast the activity recreates on.** A theme change made from
-  `CreditsDialog` now closes `CreditsDialog` and, if one is open,
-  `ThemeDialog`, on the same broadcast the hosting activity's
-  receiver sees. The next time either dialog is opened, it is
-  constructed against the new theme from the first frame.
+- **The dialog that opened the picker is dismissed on the same broadcast the activity recreates on.**
+  A theme change made from `CreditsDialog` now closes `CreditsDialog` and, if one is open, `ThemeDialog`, on the same broadcast the hosting activity's receiver sees.
+  The next time either dialog is opened, it is constructed against the new theme from the first frame.
 
-- **The Theme dialog's top-bar buttons carry the current theme
-  color.** The Cancel button previously rendered the static gold
-  from `button_border_selector` on every theme other than Royal
-  Llama, because `onCreate()` did not call any theme-application
-  method and the dialog carried no `ThemeHelper` reference.
-  `ThemeDialog` now holds a `ThemeHelper`, initializes it in the
-  constructor, and calls `applyThemeToButtons()` from `onCreate()`,
-  the same walk `PresetDialog` and `CreditsDialog` use. The
-  invisible trailing placeholder is themed by the same walk.
+- **The Theme dialog's top-bar buttons carry the current theme color.**
+  The Cancel button previously rendered the static gold from `button_border_selector` on every theme other than Royal Llama, because `onCreate()` did not call any theme-application method and the dialog carried no `ThemeHelper` reference.
+  `ThemeDialog` now holds a `ThemeHelper`, initializes it in the constructor, and calls `applyThemeToButtons()` from `onCreate()`, the same walk `PresetDialog` and `CreditsDialog` use.
+  The invisible trailing placeholder is themed by the same walk.
 
-- **The Theme dialog's tapped row is painted in the active theme
-  color before the commit fires.** Tapping a row previously showed
-  only the neutral touch highlight (`#2A2A2A`) during the
-  `DISMISS_DELAY_MS` window; the active theme color never appeared
-  on the row. A restored `updateSelectedTheme(int)` now runs at the
-  top of `animateThemeSelection()`, painting the tapped row's
-  background, name text, and `CURRENT` indicator in
-  `ThemeManager#getCurrentColorInt()` and clearing those from
-  every other row. The method also hides the tapped row's color
-  preview circle, matching the resting state `createThemeItem`
-  produces for the currently applied theme, so the user sees the
-  `CURRENT` indicator alone on the selected row. The commit path
-  is unchanged.
+- **The Theme dialog's tapped row is painted in the active theme color before the commit fires.**
+  Tapping a row previously showed only the neutral touch highlight (`#2A2A2A`) during the `DISMISS_DELAY_MS` window; the active theme color never appeared on the row.
+  A restored `updateSelectedTheme(int)` now runs at the top of `animateThemeSelection()`, painting the tapped row's background, name text, and `CURRENT` indicator in `ThemeManager#getCurrentColorInt()` and clearing those from every other row.
+  The method also hides the tapped row's color preview circle, matching the resting state `createThemeItem` produces for the currently applied theme, so the user sees the `CURRENT` indicator alone on the selected row.
+  The commit path is unchanged.
 
-- **A backgrounded volume-key press no longer takes audio focus
-  from an app that is playing.** The volume-raise path in
-  `onMusicVolumeChanged` previously resumed whenever the service
-  held focus **or** an interruption record existed. The record
-  exists precisely while the interrupting app still holds focus, so
-  the press could reach `doResume()`, request focus, and on some
-  devices succeed, pausing the interrupting app. The raise path now
-  requires `mHasAudioFocus`; an interruption record without focus
-  is not enough. The interrupting app keeps playing, and the
-  `AUDIOFOCUS_GAIN` that ends the interruption resumes the service
-  through `resumeAfterInterruption()`.
+- **A backgrounded volume-key press no longer takes audio focus from an app that is playing.**
+  The volume-raise path in `onMusicVolumeChanged` previously resumed whenever the service held focus **or** an interruption record existed.
+  The record exists precisely while the interrupting app still holds focus, so the press could reach `doResume()`, request focus, and on some devices succeed, pausing the interrupting app.
+  The raise path now requires `mHasAudioFocus`; an interruption record without focus is not enough.
+  The interrupting app keeps playing, and the `AUDIOFOCUS_GAIN` that ends the interruption resumes the service through `resumeAfterInterruption()`.
 
-- **A headset volume press during an interruption no longer
-  starts playback.** The Bluetooth volume remap in
-  `handleMediaButton` calls `playNextSong()` /
-  `playPreviousSong()`, neither of which checked focus. The remap
-  now returns before `clearInterruption()` and before either
-  transport call when `mHasAudioFocus` is false.
+- **A headset volume press during an interruption no longer starts playback.**
+  The Bluetooth volume remap in `handleMediaButton` calls `playNextSong()` / `playPreviousSong()`, neither of which checked focus.
+  The remap now returns before `clearInterruption()` and before either transport call when `mHasAudioFocus` is false.
 
-- **A media-session play callback during an interruption no
-  longer starts playback.** Some devices deliver a volume key as
-  `MediaSessionCompat.Callback.onPlay()`. That callback now refuses
-  when focus is not held and the state is not `IDLE` or
-  `PREPARING`.
+- **A media-session play callback during an interruption no longer starts playback.**
+  Some devices deliver a volume key as `MediaSessionCompat.Callback.onPlay()`.
+  That callback now refuses when focus is not held and the state is not `IDLE` or `PREPARING`.
 
 - **A successful resume clears the interruption record.**
-  `doResume()` left the record in place on success, so a later
-  permanent loss from a different app could be ignored by the
-  first-loss-wins rule. `onPlaybackResumed()` now clears the record
-  on the same turn it commits `PLAYING`.
+  `doResume()` left the record in place on success, so a later permanent loss from a different app could be ignored by the first-loss-wins rule.
+  `onPlaybackResumed()` now clears the record on the same turn it commits `PLAYING`.
 
-- **A permanent loss replaces a stale transient record.** The
-  first-loss-wins rule is retained for the dialer's
-  `LOSS`-then-`TRANSIENT` sequence, but a new `AUDIOFOCUS_LOSS` now
-  replaces a record whose kind is `TRANSIENT_LOSS`, so a genuinely
-  new permanent takeover is recorded.
+- **A permanent loss replaces a stale transient record.**
+  The first-loss-wins rule is retained for the dialer's `LOSS`-then-`TRANSIENT` sequence, but a new `AUDIOFOCUS_LOSS` now replaces a record whose kind is `TRANSIENT_LOSS`, so a genuinely new permanent takeover is recorded.
 
 ### Changed
 
-- **`ThemeManager` owns the theme broadcast.** The
-  `ACTION_THEME_COLOR_CHANGED` constant now lives only on
-  `ThemeManager`. The five activities and two dialogs that carried
-  a private copy of the constant reference
-  `ThemeManager.ACTION_THEME_COLOR_CHANGED`. The broadcast is sent
-  from inside `ThemeManager.setThemeColor(int)`, with
-  `Intent.setPackage(...)` scoping it to the app, so no other
-  process can observe it and no caller has to know the action name.
+- **`ThemeManager` owns the theme broadcast.**
+  The `ACTION_THEME_COLOR_CHANGED` constant now lives only on `ThemeManager`.
+  The five activities and two dialogs that carried a private copy of the constant reference `ThemeManager.ACTION_THEME_COLOR_CHANGED`.
+  The broadcast is sent from inside `ThemeManager.setThemeColor(int)`, with `Intent.setPackage(...)` scoping it to the app, so no other process can observe it and no caller has to know the action name.
 
-- **The class Javadoc's "Thread Safety" section states the new
-  contract.** The section now reads: "Setting the theme color
-  persists the value and broadcasts
-  `THEME_COLOR_CHANGED`. Every activity answers with
-  `recreate()`; every open dialog dismisses itself. No view is
-  repainted in place. The theme takes effect when the surfaces are
-  rebuilt against the persisted value."
+- **The class Javadoc's "Thread Safety" section states the new contract.**
+  The section now reads: "Setting the theme color persists the value and broadcasts `THEME_COLOR_CHANGED`.
+  Every activity answers with `recreate()`; every open dialog dismisses itself.
+  No view is repainted in place.
+  The theme takes effect when the surfaces are rebuilt against the persisted value."
 
 - **`MusicService`'s field nullability follows one rule.**
-  `@Nullable` marks designed runtime nulls. `mAudioManager`,
-  `mAudioFocusRequest`, and `mMediaSession` carry the annotation;
-  the receivers registered unconditionally in `onCreate` do not.
+  `@Nullable` marks designed runtime nulls.
+  `mAudioManager`, `mAudioFocusRequest`, and `mMediaSession` carry the annotation; the receivers registered unconditionally in `onCreate` do not.
 
 ### Under the Hood
 
-- `ThemeManager.ACTION_THEME_COLOR_CHANGED` — new public constant,
-  `"THEME_COLOR_CHANGED"`. The `Intent` import is added.
+- `ThemeManager.ACTION_THEME_COLOR_CHANGED` — new public constant, `"THEME_COLOR_CHANGED"`.
+  The `Intent` import is added.
 
-- `ThemeManager.setThemeColor(int)` — persists the new value to
-  `SharedPreferences` through `apply()` (which commits the
-  in-memory map synchronously, so a consumer reading the index on
-  the broadcast turn sees the new value), updates the in-memory
-  fields, and broadcasts `ACTION_THEME_COLOR_CHANGED` scoped with
-  `Intent.setPackage(mContext.getPackageName())`.
+- `ThemeManager.setThemeColor(int)` — persists the new value to `SharedPreferences` through `apply()` (which commits the in-memory map synchronously, so a consumer reading the index on the broadcast turn sees the new value), updates the in-memory fields, and broadcasts `ACTION_THEME_COLOR_CHANGED` scoped with `Intent.setPackage(mContext.getPackageName())`.
 
-- `ThemeManager`'s "Thread Safety" Javadoc — rewritten to describe
-  the persist-broadcast-rebuild contract above.
+- `ThemeManager`'s "Thread Safety" Javadoc — rewritten to describe the persist-broadcast-rebuild contract above.
 
-- `ThemeDialog` — `onCreate` calls `applyThemeToButtons()` after
-  `scrollToCurrentTheme()`, so the top-bar buttons carry the
-  current theme's stroke and text color from their first frame.
+- `ThemeDialog` — `onCreate` calls `applyThemeToButtons()` after `scrollToCurrentTheme()`, so the top-bar buttons carry the current theme's stroke and text color from their first frame.
   The dialog holds a `ThemeHelper` initialized in the constructor.
-  `applyThemeToButtons()` refreshes the helper's color from
-  `ThemeManager#getCurrentColor()` and walks the view tree from
-  `android.R.id.content`, calling
-  `mThemeHelper.updateButton((Button) child, true)` on every
-  `Button` it reaches. `animateThemeSelection` paints the tapped
-  row in the active theme color through `updateSelectedTheme`
-  before dispatching the delayed commit, then persists the
-  selection with `mThemeManager.setThemeColor(colorIndex)` as
-  before. `updateSelectedTheme` toggles the tapped row's
-  background, name text, color preview circle, and `CURRENT`
-  indicator to the same state `createThemeItem` produces for the
-  currently applied theme: circle hidden, indicator shown in the
-  active theme color. The in-place repaint methods
-  `applyThemeToTextViews` remain deleted; `applyThemeToButtons`,
-  `findAndThemeButtons`, `updateSelectedTheme`, and `forceRedraw`
-  are present because they theme the dialog at construction and
-  highlight the tapped row in the active theme color, not because
-  they repaint it after a broadcast.
+  `applyThemeToButtons()` refreshes the helper's color from `ThemeManager#getCurrentColor()` and walks the view tree from `android.R.id.content`, calling `mThemeHelper.updateButton((Button) child, true)` on every `Button` it reaches.
+  `animateThemeSelection` paints the tapped row in the active theme color through `updateSelectedTheme` before dispatching the delayed commit, then persists the selection with `mThemeManager.setThemeColor(colorIndex)` as before.
+  `updateSelectedTheme` toggles the tapped row's background, name text, color preview circle, and `CURRENT` indicator to the same state `createThemeItem` produces for the currently applied theme: circle hidden, indicator shown in the active theme color.
+  The in-place repaint methods `applyThemeToTextViews` remain deleted; `applyThemeToButtons`, `findAndThemeButtons`, `updateSelectedTheme`, and `forceRedraw` are present because they theme the dialog at construction and highlight the tapped row in the active theme color, not because they repaint it after a broadcast.
 
-- `CreditsDialog` — `onCreate` calls `applyThemeToButtons()` after
-  its receivers are registered. The method refreshes the helper's
-  color from `ThemeManager#getCurrentColor()` and recursively
-  themes every `Button` in the view tree, so the CANCEL, THEMES,
-  and language buttons carry the current theme's stroke and text
-  color from their first frame. `showThemeDialog()` no longer
-  sends a duplicate broadcast. `setThemeColor` sends it.
-  `CreditsDialog.registerThemeReceiver()` now dismisses the dialog
-  on the broadcast. The private `THEME_COLOR_CHANGED_ACTION`
-  constant is removed.
+- `CreditsDialog` — `onCreate` calls `applyThemeToButtons()` after its receivers are registered.
+  The method refreshes the helper's color from `ThemeManager#getCurrentColor()` and recursively themes every `Button` in the view tree, so the CANCEL, THEMES, and language buttons carry the current theme's stroke and text color from their first frame.
+  `showThemeDialog()` no longer sends a duplicate broadcast.
+  `setThemeColor` sends it.
+  `CreditsDialog.registerThemeReceiver()` now dismisses the dialog on the broadcast.
+  The private `THEME_COLOR_CHANGED_ACTION` constant is removed.
 
-- `MusicPlayer`, `FolderManager`, `PlaylistActivity`,
-  `EqualizerActivity` — each `registerThemeReceiver()` now answers
-  the broadcast with `recreateWithConfiguration()`. Each private
-  `ACTION_THEME_COLOR_CHANGED` constant is deleted.
+- `MusicPlayer`, `FolderManager`, `PlaylistActivity`, `EqualizerActivity` — each `registerThemeReceiver()` now answers the broadcast with `recreateWithConfiguration()`.
+  Each private `ACTION_THEME_COLOR_CHANGED` constant is deleted.
 
-- `MetadataEditor` — gains an `mThemeChangedReceiver` field, a
-  `registerThemeReceiver()` method that answers with
-  `recreateWithConfiguration()`, a `registerThemeReceiver()` call
-  in `onCreate`, and a `unregisterReceiverSafely(mThemeChangedReceiver)`
-  call in `onDestroy`. The activity did not previously register a
-  theme receiver. `applyThemeToUI()` is unchanged; it is the
-  seeding path called from `onCreate` and `onResume`.
+- `MetadataEditor` — gains an `mThemeChangedReceiver` field, a `registerThemeReceiver()` method that answers with `recreateWithConfiguration()`, a `registerThemeReceiver()` call in `onCreate`, and a `unregisterReceiverSafely(mThemeChangedReceiver)` call in `onDestroy`.
+  The activity did not previously register a theme receiver.
+  `applyThemeToUI()` is unchanged; it is the seeding path called from `onCreate` and `onResume`.
 
-- `ToastManager.registerThemeReceiver()` now registers against
-  `ThemeManager.ACTION_THEME_COLOR_CHANGED`. `refreshThemeColor()`
-  now posts a `rebuildPersistentOverlaysForTheme()` call.
-  `rebuildPersistentOverlaysForTheme()` removes every persistent
-  overlay's view from the map and, when an activity is resumed,
-  re-creates the overlay through `createOverlayInView`, reading the
-  current theme color at construction. Temporary toasts are not
-  rebuilt.
+- `ToastManager.registerThemeReceiver()` now registers against `ThemeManager.ACTION_THEME_COLOR_CHANGED`.
+  `refreshThemeColor()` now posts a `rebuildPersistentOverlaysForTheme()` call.
+  `rebuildPersistentOverlaysForTheme()` removes every persistent overlay's view from the map and, when an activity is resumed, re-creates the overlay through `createOverlayInView`, reading the current theme color at construction.
+  Temporary toasts are not rebuilt.
 
-- `NotificationController.registerThemeReceiver()` now registers
-  against `ThemeManager.ACTION_THEME_COLOR_CHANGED` and its
-  `onReceive` body is empty. The `onThemeChanged()` method is
-  deleted. The themed placeholder and themed action icon caches are
-  keyed by the color they were built against, so the next commit
-  after the recreated activity's recreation reads the persisted
-  theme and reuses a matching entry or rebuilds.
+- `NotificationController.registerThemeReceiver()` now registers against `ThemeManager.ACTION_THEME_COLOR_CHANGED` and its `onReceive` body is empty.
+  The `onThemeChanged()` method is deleted.
+  The themed placeholder and themed action icon caches are keyed by the color they were built against, so the next commit after the recreated activity's recreation reads the persisted theme and reuses a matching entry or rebuilds.
 
-- The six activities and two dialogs that answered the theme
-  broadcast in place now honor the same contract the language
-  picker has carried since 1.3.0: the broadcast is a signal to
-  rebuild, not an instruction to patch.
+- The six activities and two dialogs that answered the theme broadcast in place now honor the same contract the language picker has carried since 1.3.0: the broadcast is a signal to rebuild, not an instruction to patch.
 
-- `MusicService.onMusicVolumeChanged(int)` — the raise branch's
-  precondition is now `if (!mHasAudioFocus) { … return; }`. The
-  `mInterruption == null` clause is removed.
+- `MusicService.onMusicVolumeChanged(int)` — the raise branch's precondition is now `if (!mHasAudioFocus) { … return; }`.
+  The `mInterruption == null` clause is removed.
 
-- `MusicService.onPlaybackResumed()` — calls `clearInterruption()`
-  on the same turn it sets `mState = PLAYING`, before saving state
-  and broadcasting.
+- `MusicService.onPlaybackResumed()` — calls `clearInterruption()` on the same turn it sets `mState = PLAYING`, before saving state and broadcasting.
 
-- `MusicService.handleAudioFocusChange(int)` — the loss case
-  computes the incoming kind before deciding whether to write the
-  record, and replaces an existing `TRANSIENT_LOSS` record with a
-  new `PERMANENT_LOSS` record on `AUDIOFOCUS_LOSS`.
+- `MusicService.handleAudioFocusChange(int)` — the loss case computes the incoming kind before deciding whether to write the record, and replaces an existing `TRANSIENT_LOSS` record with a new `PERMANENT_LOSS` record on `AUDIOFOCUS_LOSS`.
 
-- `MusicService.handleMediaButton(int)` — returns before
-  `clearInterruption()` when the key is a Bluetooth volume key and
-  `mHasAudioFocus` is false.
+- `MusicService.handleMediaButton(int)` — returns before `clearInterruption()` when the key is a Bluetooth volume key and `mHasAudioFocus` is false.
 
-- `MusicService.setupMediaSession()` — `onPlay` refuses when
-  `!mHasAudioFocus` and the state is not `IDLE` or `PREPARING`.
+- `MusicService.setupMediaSession()` — `onPlay` refuses when `!mHasAudioFocus` and the state is not `IDLE` or `PREPARING`.
 
-- `MusicService.setupAudioFocus()` — builds
-  `mAudioFocusRequestTransient` alongside `mAudioFocusRequest`.
+- `MusicService.setupAudioFocus()` — builds `mAudioFocusRequestTransient` alongside `mAudioFocusRequest`.
 
-- `MusicService.requestAudioFocus(boolean)` — selects the
-  transient or permanent request (or the corresponding legacy
-  call). The no-argument overload requests permanent focus.
-  `doResume()` and `resumeAfterInterruption()` request transient
-  focus; `onPlaybackStarted()` requests permanent focus.
+- `MusicService.requestAudioFocus(boolean)` — selects the transient or permanent request (or the corresponding legacy call).
+  The no-argument overload requests permanent focus.
+  `doResume()` and `resumeAfterInterruption()` request transient focus; `onPlaybackStarted()` requests permanent focus.
 
-- `MusicService` fields — `mAudioManager`, `mAudioFocusRequest`,
-  `mMediaSession`, and `mAudioFocusRequestTransient` are annotated
-  `@Nullable`; `mMetadataUpdatedReceiver`, `mBluetoothPauseReceiver`,
-  and `mApplyScopeReceiver` are not annotated, matching the other
-  receivers registered unconditionally in `onCreate`.
+- `MusicService` fields — `mAudioManager`, `mAudioFocusRequest`, `mMediaSession`, and `mAudioFocusRequestTransient` are annotated `@Nullable`; `mMetadataUpdatedReceiver`, `mBluetoothPauseReceiver`, and `mApplyScopeReceiver` are not annotated, matching the other receivers registered unconditionally in `onCreate`.
 
 ## [1.4.5] - Nov 11, 2026
 
 ### Overview
 
-Five facts the interface shows now have one expression each, read
-from one source each. Every resume surface delivers sound at music
-stream volume zero. A toast is bounded by the window's usable width
-rather than by a fixed cap. A persistent overlay re-reads its
-available width on every render. The library notification carries
-its title and its body as two separate strings. And the playback
-notification and the player screen read their display song from the
-same method, so they agree on every transition.
+Five facts the interface shows now have one expression each, read from one source each.
+Every resume surface delivers sound at music stream volume zero.
+A toast is bounded by the window's usable width rather than by a fixed cap.
+A persistent overlay re-reads its available width on every render.
+The library notification carries its title and its body as two separate strings.
+And the playback notification and the player screen read their display song from the same method, so they agree on every transition.
 
-The audible-resume rule was introduced in v1.4.4 on a single
-surface: the player screen's centre-up album-art swipe raised the
-music stream to three steps above zero before dispatching the
-resume. Every other resume surface — the playback notification's
-play action, the lockscreen and media-session play callback, a
-headset media key, an external intent — reached `PLAYING` while the
-stream stayed at zero, so the user saw a playing indicator and heard
-nothing. The rule now lives once, in `MusicService`, and every
-resume path goes through it. A future resume surface cannot miss the
-rule because there is only one implementation of it, and only one
-place to add a new resume path that honours it.
+The audible-resume rule was introduced in v1.4.4 on a single surface: the player screen's centre-up album-art swipe raised the music stream to three steps above zero before dispatching the resume.
+Every other resume surface — the playback notification's play action, the lockscreen and media-session play callback, a headset media key, an external intent — reached `PLAYING` while the stream stayed at zero, so the user saw a playing indicator and heard nothing.
+The rule now lives once, in `MusicService`, and every resume path goes through it.
+A future resume surface cannot miss the rule because there is only one implementation of it, and only one place to add a new resume path that honours it.
 
-A toast was capped at a fixed 320dp. Progress messages truncated
-well before the display was exhausted. The toast is now bounded by
-the window's usable width, floored at the content's own measured
-width, and ellipsized only when the content genuinely exceeds that
-span.
+A toast was capped at a fixed 320dp.
+Progress messages truncated well before the display was exhausted.
+The toast is now bounded by the window's usable width, floored at the content's own measured width, and ellipsized only when the content genuinely exceeds that span.
 
-The in-activity persistent overlay kept the width it was created
-with, so a progress message that grew past that width was truncated
-at the stale boundary. The overlay now re-reads its available width
-from the window on every render.
+The in-activity persistent overlay kept the width it was created with, so a progress message that grew past that width was truncated at the stale boundary.
+The overlay now re-reads its available width from the window on every render.
 
-The library notification was a single message that the notification
-builder split on a literal separator. The separator stayed in the
-title slot and the count landed on the body line, where a narrow
-shade ellipsized it before the display was exhausted. The controller
-now carries the title and the body as two strings and renders each
-into its own slot.
+The library notification was a single message that the notification builder split on a literal separator.
+The separator stayed in the title slot and the count landed on the body line, where a narrow shade ellipsized it before the display was exhausted.
+The controller now carries the title and the body as two strings and renders each into its own slot.
 
-The `UPDATE_PLAYER` broadcast carried the target song during a
-transition; the notification commit that fired on the same turn
-carried the outgoing one. Any broadcast that landed while a
-transition was in progress showed the incoming song on the player
-screen and the outgoing one in the notification, from the same
-method, on the same frame. Both writers now read the same song from
-the same method.
+The `UPDATE_PLAYER` broadcast carried the target song during a transition; the notification commit that fired on the same turn carried the outgoing one.
+Any broadcast that landed while a transition was in progress showed the incoming song on the player screen and the outgoing one in the notification, from the same method, on the same frame.
+Both writers now read the same song from the same method.
 
-The persistent-overlay message is composed by `ToastManager` alone,
-inside `composeOverlayText(title, body)`, from the two strings the
-operation's owner supplies. Every caller that used to join the verb
-and the count before handing the result to `ToastManager` now passes
-the two strings separately, and `ToastManager` composes the middle
-dot exactly once per render.
+The persistent-overlay message is composed by `ToastManager` alone, inside `composeOverlayText(title, body)`, from the two strings the operation's owner supplies.
+Every caller that used to join the verb and the count before handing the result to `ToastManager` now passes the two strings separately, and `ToastManager` composes the middle dot exactly once per render.
 
-Toast durations are now `long` values in milliseconds throughout the
-public API. `LENGTH_SHORT`, `LENGTH_NORMAL`, and `LENGTH_LONG` are
-`long` constants; `showToast` and `showToastInView` take a `long`
-`duration`. A caller that passes an integer literal widens
-implicitly, so the change is source-compatible with every existing
-call site.
+Toast durations are now `long` values in milliseconds throughout the public API.
+`LENGTH_SHORT`, `LENGTH_NORMAL`, and `LENGTH_LONG` are `long` constants; `showToast` and `showToastInView` take a `long` `duration`.
+A caller that passes an integer literal widens implicitly, so the change is source-compatible with every existing call site.
 
 The horizontal padding inside a toast is reduced from 16dp to 8dp.
-The toast's outer margin is unchanged at 16dp, matching every other
-floating overlay in the app. The result is a compact floating label:
-the toast's edge lines up with the overlay gutter, and the text sits
-close to the toast's own frame rather than being doubly padded.
+The toast's outer margin is unchanged at 16dp, matching every other floating overlay in the app.
+The result is a compact floating label: the toast's edge lines up with the overlay gutter, and the text sits close to the toast's own frame rather than being doubly padded.
 
 ### Added
 
 - **The audible-resume rule is a single implementation.**
-  `MusicService.raiseVolumeIfSilentForResume()` reads the music
-  stream's current volume on the same main-thread turn that starts
-  the player, and raises the stream to `Math.min(3, maxVolume)`
-  when it is exactly zero. Every resume surface reaches the rule
-  through the player's start.
+  `MusicService.raiseVolumeIfSilentForResume()` reads the music stream's current volume on the same main-thread turn that starts the player, and raises the stream to `Math.min(3, maxVolume)` when it is exactly zero.
+  Every resume surface reaches the rule through the player's start.
 
-- **`ToastManager` reads the toast's available width from the
-  window.** The width is the content view's measured width when it
-  has been laid out, the display width otherwise, minus the app's
-  standard overlay gutter of 16dp on each side. A short message
-  renders as a short toast; a long message uses the full span
-  before it ellipsizes.
+- **`ToastManager` reads the toast's available width from the window.**
+  The width is the content view's measured width when it has been laid out, the display width otherwise, minus the app's standard overlay gutter of 16dp on each side.
+  A short message renders as a short toast; a long message uses the full span before it ellipsizes.
 
-- **`ToastManager` re-reads a persistent overlay's available width
-  on every render.** The overlay holder carries a weak reference to
-  the root view it was attached to; every write of a persistent
-  overlay's message re-reads the width from that root view through
-  `resolveAvailableToastWidthPx` before setting the text.
+- **`ToastManager` re-reads a persistent overlay's available width on every render.**
+  The overlay holder carries a weak reference to the root view it was attached to; every write of a persistent overlay's message re-reads the width from that root view through `resolveAvailableToastWidthPx` before setting the text.
 
-- **The library notification carries a title and a body as two
-  strings.** `NotificationController.showLibraryStatus` and
-  `updateLibraryStatus` take `(title, body, operationId)`;
-  `buildLibraryNotification(String, String)` renders each into its
-  own slot and wraps the body in a `BigTextStyle`.
+- **The library notification carries a title and a body as two strings.**
+  `NotificationController.showLibraryStatus` and `updateLibraryStatus` take `(title, body, operationId)`; `buildLibraryNotification(String, String)` renders each into its own slot and wraps the body in a `BigTextStyle`.
 
-- **`ToastManager` exposes two-string overloads of
-  `showPersistentOverlay` and `updatePersistentOverlay`.** The
-  title is the operation's action verb; the body is its count. The
-  single-string forms are preserved and forward with an empty
-  body.
+- **`ToastManager` exposes two-string overloads of `showPersistentOverlay` and `updatePersistentOverlay`.**
+  The title is the operation's action verb; the body is its count.
+  The single-string forms are preserved and forward with an empty body.
 
-- **`ToastManager.composeOverlayText(String, String)`** — new
-  private static helper. Returns the title alone when the body is
-  empty, `title + " \u00B7 " + body` otherwise. Every write of a
-  persistent overlay's text — `showPersistentOverlay`,
-  `updatePersistentOverlay`, the re-render inside
-  `popOperationInternal`, and `reattachToActivity` — goes through
-  this single helper, so the composition has one site in the
-  codebase and the middle dot is produced exactly once per render.
+- **`ToastManager.composeOverlayText(String, String)`** — new private static helper.
+  Returns the title alone when the body is empty, `title + " \u00B7 " + body` otherwise.
+  Every write of a persistent overlay's text — `showPersistentOverlay`, `updatePersistentOverlay`, the re-render inside `popOperationInternal`, and `reattachToActivity` — goes through this single helper, so the composition has one site in the codebase and the middle dot is produced exactly once per render.
 
-- **Toast durations are `long`.** `LENGTH_SHORT = 500L`,
-  `LENGTH_NORMAL = 1000L`, and `LENGTH_LONG = 2000L` are `long`
-  constants on `ToastManager`. `showToast(Activity, String, long)`
-  and `showToastInView(ViewGroup, String, long)` take a `long`
-  `duration` and pass it directly to
-  `Handler.postDelayed(Runnable, long)`, with no implicit
-  conversion.
+- **Toast durations are `long`.**
+  `LENGTH_SHORT = 500L`, `LENGTH_NORMAL = 1000L`, and `LENGTH_LONG = 2000L` are `long` constants on `ToastManager`.
+  `showToast(Activity, String, long)` and `showToastInView(ViewGroup, String, long)` take a `long` `duration` and pass it directly to `Handler.postDelayed(Runnable, long)`, with no implicit conversion.
 
 - **The toast's horizontal padding is 8dp.**
-  `TOAST_PADDING_HORIZONTAL_DP = 8`. The text sits inside its own
-  frame with a compact inset, and the toast's outer edge stays at
-  the 16dp overlay gutter.
+  `TOAST_PADDING_HORIZONTAL_DP = 8`.
+  The text sits inside its own frame with a compact inset, and the toast's outer edge stays at the 16dp overlay gutter.
 
-- **`folder_manager_syncing`** — a new resource key, `Syncing
-  playlist`, so the syncing phase has a distinct action verb from
-  the scanning phase.
+- **`folder_manager_syncing`** — a new resource key, `Syncing playlist`, so the syncing phase has a distinct action verb from the scanning phase.
 
 ### Fixed
 
-- **Resume from the notification, lockscreen, headset, or an
-  external intent is audible at music stream volume zero.** The
-  service raises the stream to `Math.min(3, maxVolume)` on the
-  same main-thread turn that starts the player. On devices whose
-  music stream range is one or two steps, the write clamps to the
-  device maximum. The write fires `VOLUME_CHANGED_ACTION`, which
-  reaches `MusicService.onMusicVolumeChanged` after the state
-  machine has already reached `PLAYING`, so the volume rule's
-  raise branch falls through and does not re-enter the resume
-  path.
+- **Resume from the notification, lockscreen, headset, or an external intent is audible at music stream volume zero.**
+  The service raises the stream to `Math.min(3, maxVolume)` on the same main-thread turn that starts the player.
+  On devices whose music stream range is one or two steps, the write clamps to the device maximum.
+  The write fires `VOLUME_CHANGED_ACTION`, which reaches `MusicService.onMusicVolumeChanged` after the state machine has already reached `PLAYING`, so the volume rule's raise branch falls through and does not re-enter the resume path.
 
-- **The player screen's centre-up gesture delegates to the same
-  rule.** Its inline volume write is removed. The gesture's
-  contract is "resume the song," and the audible outcome is the
-  service's. The gesture does not read or write the stream volume.
+- **The player screen's centre-up gesture delegates to the same rule.**
+  Its inline volume write is removed.
+  The gesture's contract is "resume the song," and the audible outcome is the service's.
+  The gesture does not read or write the stream volume.
 
-- **Toast messages span the full display width before they
-  truncate.** The toast is single-line by design. Its available
-  width is the window width minus the app's standard 16dp overlay
-  gutter on each side; a message that exceeds that span ellipsizes
-  at the edge. A message longer than the previous 320dp cap but
-  shorter than the display's usable width renders in full.
+- **Toast messages span the full display width before they truncate.**
+  The toast is single-line by design.
+  Its available width is the window width minus the app's standard 16dp overlay gutter on each side; a message that exceeds that span ellipsizes at the edge.
+  A message longer than the previous 320dp cap but shorter than the display's usable width renders in full.
 
-- **A toast in a split-screen window is bounded by the window,
-  not by the display.** The available width is read from the
-  content view's measured width when it has been laid out, so a
-  long message in a narrow pane ellipsizes at the pane's edge
-  rather than overhanging it.
+- **A toast in a split-screen window is bounded by the window, not by the display.**
+  The available width is read from the content view's measured width when it has been laid out, so a long message in a narrow pane ellipsizes at the pane's edge rather than overhanging it.
 
-- **A persistent overlay's message ellipsizes at the current
-  window's usable width, not at the width the overlay was created
-  with.** The overlay re-reads its available width from the same
-  source the creation call used, immediately before each write of
-  its text. A progress message that grows past its creation-time
-  width renders in full up to the window's current usable width
-  and ellipsizes only when the composed text exceeds it.
+- **A persistent overlay's message ellipsizes at the current window's usable width, not at the width the overlay was created with.**
+  The overlay re-reads its available width from the same source the creation call used, immediately before each write of its text.
+  A progress message that grows past its creation-time width renders in full up to the window's current usable width and ellipsizes only when the composed text exceeds it.
 
-- **The library notification renders its verb and its count on
-  separate lines.** The title slot carries the action verb — for
-  example, `Searching folders`; the body slot carries the count —
-  for example, `123 songs found`. On a narrow shade the count
-  ellipsizes on the body line and the title stays legible; on an
-  expanded shade the `BigTextStyle` shows the body in full. No
-  resource carries a separator; no consumer splits a joined
-  message.
+- **The library notification renders its verb and its count on separate lines.**
+  The title slot carries the action verb — for example, `Searching folders`; the body slot carries the count — for example, `123 songs found`.
+  On a narrow shade the count ellipsizes on the body line and the title stays legible; on an expanded shade the `BigTextStyle` shows the body in full.
+  No resource carries a separator; no consumer splits a joined message.
 
-- **The in-activity overlay reads as two columns of one status
-  line.** The overlay composes its visible text from the action
-  verb and the count with a middle dot:
-  `Searching folders · 123 songs found`. The middle dot is
-  produced by `ToastManager.composeOverlayText`; no caller
-  composes the joined form.
+- **The in-activity overlay reads as two columns of one status line.**
+  The overlay composes its visible text from the action verb and the count with a middle dot: `Searching folders · 123 songs found`.
+  The middle dot is produced by `ToastManager.composeOverlayText`; no caller composes the joined form.
 
-- **The toast's text sits 8dp inside its own frame.** The text
-  hugs the toast's rounded background rather than sitting inside
-  a second 16dp inset. The toast's outer edge stays at the 16dp
-  overlay gutter, so the surface aligns with every other floating
-  overlay in the app.
+- **The toast's text sits 8dp inside its own frame.**
+  The text hugs the toast's rounded background rather than sitting inside a second 16dp inset.
+  The toast's outer edge stays at the 16dp overlay gutter, so the surface aligns with every other floating overlay in the app.
 
-- **The playback notification and the player screen show the same
-  song on every transition.** The `UPDATE_PLAYER` broadcast and the
-  notification commit both read `getDisplaySong()`, the same method
-  that decides which song the player screen draws. A favorite
-  commit, a repeat or shuffle change, a playlist update, a
-  metadata edit, a sync completion, or any other `broadcastUpdate`
-  that fires while a transition is in progress now shows the same
-  song on both surfaces, for the same generation, on the same
-  frame.
+- **The playback notification and the player screen show the same song on every transition.**
+  The `UPDATE_PLAYER` broadcast and the notification commit both read `getDisplaySong()`, the same method that decides which song the player screen draws.
+  A favorite commit, a repeat or shuffle change, a playlist update, a metadata edit, a sync completion, or any other `broadcastUpdate` that fires while a transition is in progress now shows the same song on both surfaces, for the same generation, on the same frame.
 
 ### Under the Hood
 
-- `MusicService.raiseVolumeIfSilentForResume()` — new private
-  method. Reads `getStreamMaxVolume(STREAM_MUSIC)` and
-  `getStreamVolume(STREAM_MUSIC)`, returns when the maximum is
-  non-positive or the current volume is non-zero, writes
-  `Math.min(3, maxVolume)` through `setStreamVolume`. The method
-  is the single implementation of the rule and is invoked at
-  both and only both sites where `MediaPlayer.start()` is
-  dispatched.
+- `MusicService.raiseVolumeIfSilentForResume()` — new private method.
+  Reads `getStreamMaxVolume(STREAM_MUSIC)` and `getStreamVolume(STREAM_MUSIC)`, returns when the maximum is non-positive or the current volume is non-zero, writes `Math.min(3, maxVolume)` through `setStreamVolume`.
+  The method is the single implementation of the rule and is invoked at both and only both sites where `MediaPlayer.start()` is dispatched.
 
-- `MusicService.onPrepared(long, int, int, Song, int)` — calls
-  `raiseVolumeIfSilentForResume()` immediately before the
-  `onPlayer` dispatch that performs `player.start()`, on the
-  same main-thread turn. The raise runs before the start is
-  dispatched, so the first sample the user hears is at the
-  raised volume.
+- `MusicService.onPrepared(long, int, int, Song, int)` — calls `raiseVolumeIfSilentForResume()` immediately before the `onPlayer` dispatch that performs `player.start()`, on the same main-thread turn.
+  The raise runs before the start is dispatched, so the first sample the user hears is at the raised volume.
 
-- `MusicService.doResumeInternal()` — calls
-  `raiseVolumeIfSilentForResume()` after
-  `onPlaybackResumed()` and before the `onPlayer` dispatch that
-  performs `player.start()`. The raise is placed after the
-  state has been committed to `PLAYING` on purpose: the
-  `VOLUME_CHANGED_ACTION` broadcast that the write fires
-  reaches `onMusicVolumeChanged` with the state already at
-  `PLAYING`, where the volume rule's raise branch falls through
-  and does not re-enter the resume path.
+- `MusicService.doResumeInternal()` — calls `raiseVolumeIfSilentForResume()` after `onPlaybackResumed()` and before the `onPlayer` dispatch that performs `player.start()`.
+  The raise is placed after the state has been committed to `PLAYING` on purpose: the `VOLUME_CHANGED_ACTION` broadcast that the write fires reaches `onMusicVolumeChanged` with the state already at `PLAYING`, where the volume rule's raise branch falls through and does not re-enter the resume path.
 
-- `MusicPlayer.handlePlaybackGesture(float)` — the upward branch
-  now calls `MusicService.resume()` only. The inline volume
-  write is removed; the activity no longer reads or writes the
-  music stream. The downward branch is unchanged and still does
-  not touch the volume. The method's javadoc is updated to state
-  the gesture's contract and to delegate the audible rule to the
-  service.
+- `MusicPlayer.handlePlaybackGesture(float)` — the upward branch now calls `MusicService.resume()` only.
+  The inline volume write is removed; the activity no longer reads or writes the music stream.
+  The downward branch is unchanged and still does not touch the volume.
+  The method's javadoc is updated to state the gesture's contract and to delegate the audible rule to the service.
 
-- `ToastManager.TOAST_HORIZONTAL_INSET_DP` — `16`. The app's
-  standard overlay gutter. The toast's background sits this far
-  from the window edge on each side.
+- `ToastManager.TOAST_HORIZONTAL_INSET_DP` — `16`.
+  The app's standard overlay gutter.
+  The toast's background sits this far from the window edge on each side.
 
-- `ToastManager.TOAST_PADDING_HORIZONTAL_DP` — `8`. The toast's
-  text sits this far inside its own frame. The padding was
-  reduced from `16` so the toast reads as a compact floating
-  label rather than as a padded content card.
+- `ToastManager.TOAST_PADDING_HORIZONTAL_DP` — `8`.
+  The toast's text sits this far inside its own frame.
+  The padding was reduced from `16` so the toast reads as a compact floating label rather than as a padded content card.
 
-- `ToastManager.TOAST_PADDING_VERTICAL_DP` — `8`. Unchanged from
-  the prior release. The vertical analogue of the horizontal
-  padding.
+- `ToastManager.TOAST_PADDING_VERTICAL_DP` — `8`.
+  Unchanged from the prior release.
+  The vertical analogue of the horizontal padding.
 
-- `ToastManager.LENGTH_SHORT` / `LENGTH_NORMAL` / `LENGTH_LONG` —
-  now `long` constants at `500L`, `1000L`, and `2000L`. The three
-  values are the toast durations used across the app.
+- `ToastManager.LENGTH_SHORT` / `LENGTH_NORMAL` / `LENGTH_LONG` — now `long` constants at `500L`, `1000L`, and `2000L`.
+  The three values are the toast durations used across the app.
 
-- `ToastManager.resolveAvailableToastWidthPx(ViewGroup)` — new
-  private method. Returns
-  `Math.max(0, baseWidth - insetPx * 2)`, where `baseWidth` is
-  the content view's measured width when it is non-zero and the
-  display width otherwise.
+- `ToastManager.resolveAvailableToastWidthPx(ViewGroup)` — new private method.
+  Returns `Math.max(0, baseWidth - insetPx * 2)`, where `baseWidth` is the content view's measured width when it is non-zero and the display width otherwise.
 
-- `ToastManager.createOverlayInView(...)` — computes the
-  available width through `resolveAvailableToastWidthPx` and
-  passes it to `TextView.setMaxWidth`. The text view is
-  single-line, ellipsized at the end, and horizontally
-  non-scrolling. The text view's padding is
-  `TOAST_PADDING_HORIZONTAL_DP` on each horizontal side and
-  `TOAST_PADDING_VERTICAL_DP` on each vertical side.
+- `ToastManager.createOverlayInView(...)` — computes the available width through `resolveAvailableToastWidthPx` and passes it to `TextView.setMaxWidth`.
+  The text view is single-line, ellipsized at the end, and horizontally non-scrolling.
+  The text view's padding is `TOAST_PADDING_HORIZONTAL_DP` on each horizontal side and `TOAST_PADDING_VERTICAL_DP` on each vertical side.
 
-- `ToastManager.OverlayHolder` — gained
-  `WeakReference<ViewGroup> rootViewRef` and a constructor
-  parameter that carries the root view. `createOverlayInView`
-  passes the root view it attaches to.
+- `ToastManager.OverlayHolder` — gained `WeakReference<ViewGroup> rootViewRef` and a constructor parameter that carries the root view.
+  `createOverlayInView` passes the root view it attaches to.
 
-- `ToastManager.composeOverlayText(String, String)` — new private
-  static helper. Returns the title alone when the body is empty,
-  `title + " \u00B7 " + body` otherwise. Every write of a
-  persistent overlay's text — `showPersistentOverlay`,
-  `updatePersistentOverlay`, the re-render inside
-  `popOperationInternal`, and `reattachToActivity` — goes through
-  this single helper.
+- `ToastManager.composeOverlayText(String, String)` — new private static helper.
+  Returns the title alone when the body is empty, `title + " \u00B7 " + body` otherwise.
+  Every write of a persistent overlay's text — `showPersistentOverlay`, `updatePersistentOverlay`, the re-render inside `popOperationInternal`, and `reattachToActivity` — goes through this single helper.
 
-- `ToastManager.updatePersistentOverlay(String, String, String)` —
-  the posted re-render calls
-  `setMaxWidth(resolveAvailableToastWidthPx(rootView))` on the
-  holder's current root view before writing the composed text. The
-  composed text is produced by `composeOverlayText(title, body)`.
-  The single-argument form forwards with an empty body and goes
-  through the same path.
+- `ToastManager.updatePersistentOverlay(String, String, String)` — the posted re-render calls `setMaxWidth(resolveAvailableToastWidthPx(rootView))` on the holder's current root view before writing the composed text.
+  The composed text is produced by `composeOverlayText(title, body)`.
+  The single-argument form forwards with an empty body and goes through the same path.
 
-- `ToastManager.showPersistentOverlay(Activity, String, String, String)` —
-  new four-argument form. Forwards the title and body to
-  `NotificationController.showLibraryStatus`. The three-argument
-  form forwards with an empty body.
+- `ToastManager.showPersistentOverlay(Activity, String, String, String)` — new four-argument form.
+  Forwards the title and body to `NotificationController.showLibraryStatus`.
+  The three-argument form forwards with an empty body.
 
-- `ToastManager.showToast(Activity, String, long)` — the
-  `duration` parameter is now `long`. The value is passed
-  directly to `Handler.postDelayed(Runnable, long)`, so no
-  implicit conversion is required at the scheduling call.
+- `ToastManager.showToast(Activity, String, long)` — the `duration` parameter is now `long`.
+  The value is passed directly to `Handler.postDelayed(Runnable, long)`, so no implicit conversion is required at the scheduling call.
 
-- `ToastManager.showToastInView(ViewGroup, String, long)` — the
-  `duration` parameter is now `long`. Same shape as `showToast`.
+- `ToastManager.showToastInView(ViewGroup, String, long)` — the `duration` parameter is now `long`.
+  Same shape as `showToast`.
 
-- `ToastManager.popOperationInternal` — the re-render that runs
-  when a lower operation becomes the new top re-reads the width
-  from the holder's root view before writing the new top's
-  message.
+- `ToastManager.popOperationInternal` — the re-render that runs when a lower operation becomes the new top re-reads the width from the holder's root view before writing the new top's message.
 
-- `NotificationController.mLibraryTitle` / `mLibraryBody` —
-  replace `mLibraryMessage`. `mLibraryTitle` is the
-  notification's title slot; `mLibraryBody` is the body slot.
+- `NotificationController.mLibraryTitle` / `mLibraryBody` — replace `mLibraryMessage`.
+  `mLibraryTitle` is the notification's title slot; `mLibraryBody` is the body slot.
 
 - `NotificationController.LIBRARY_MESSAGE_SEPARATOR` — removed.
-  The library surface carries two strings end to end; no
-  consumer splits a joined message.
+  The library surface carries two strings end to end; no consumer splits a joined message.
 
-- `NotificationController.buildLibraryNotification(String, String)` —
-  takes the title and body as two arguments. `setContentTitle(title)`,
-  `setContentText(body)`, and
-  `setStyle(new Notification.BigTextStyle().bigText(body))`
-  render each into its own slot. The chronometer, progress, and
-  `setOnlyAlertOnce` calls are unchanged.
+- `NotificationController.buildLibraryNotification(String, String)` — takes the title and body as two arguments.
+  `setContentTitle(title)`, `setContentText(body)`, and `setStyle(new Notification.BigTextStyle().bigText(body))` render each into its own slot.
+  The chronometer, progress, and `setOnlyAlertOnce` calls are unchanged.
 
 - `NotificationController.buildPlaybackNotification` — unchanged.
-  The playback surface already rendered a single snapshot per
-  commit and did not split any joined message.
+  The playback surface already rendered a single snapshot per commit and did not split any joined message.
 
-- `MusicService.mStateSource.snapshotForNotification()` — reads
-  `getDisplaySong()` on every call. The branch on `mState` that
-  returned `getCurrentSong()` during `PREPARING` and during a
-  pending `IDLE` transition is removed; `getDisplaySong` already
-  implements exactly the rule that branch was trying to
-  reproduce, and returns the target during `PREPARING` and the
-  current-index song in every other state. Both writers of the
-  notification's rendered content — `commitFromBroadcast` from
-  `broadcastUpdate`, and `syncOnce` from the awareness poll —
-  read the same value for the same generation.
+- `MusicService.mStateSource.snapshotForNotification()` — reads `getDisplaySong()` on every call.
+  The branch on `mState` that returned `getCurrentSong()` during `PREPARING` and during a pending `IDLE` transition is removed; `getDisplaySong` already implements exactly the rule that branch was trying to reproduce, and returns the target during `PREPARING` and the current-index song in every other state.
+  Both writers of the notification's rendered content — `commitFromBroadcast` from `broadcastUpdate`, and `syncOnce` from the awareness poll — read the same value for the same generation.
 
-- `MusicService.broadcastUpdate()` — unchanged. It already passed
-  `getDisplaySong()`'s result to the broadcast and
-  `mStateSource.snapshotForNotification()`'s result to the
-  commit. The two now resolve to the same song.
+- `MusicService.broadcastUpdate()` — unchanged.
+  It already passed `getDisplaySong()`'s result to the broadcast and `mStateSource.snapshotForNotification()`'s result to the commit.
+  The two now resolve to the same song.
 
-- `FolderManager.performPlaylistUpdate()` — the progress callback
-  resolves `action` from `folder_manager_searching` or
-  `folder_manager_syncing` and `detail` from
-  `folder_manager_searching_found` or
-  `folder_manager_syncing_found`, and passes `action` and
-  `detail` to `ToastManager.showPersistentOverlay` and
-  `ToastManager.updatePersistentOverlay` as two separate strings.
-  The `SYNC_STARTED` broadcast carries `custom_text` (the action)
-  and `custom_detail` (the detail) as separate extras.
+- `FolderManager.performPlaylistUpdate()` — the progress callback resolves `action` from `folder_manager_searching` or `folder_manager_syncing` and `detail` from `folder_manager_searching_found` or `folder_manager_syncing_found`, and passes `action` and `detail` to `ToastManager.showPersistentOverlay` and `ToastManager.updatePersistentOverlay` as two separate strings.
+  The `SYNC_STARTED` broadcast carries `custom_text` (the action) and `custom_detail` (the detail) as separate extras.
 
-- `MusicPlayer.mSyncStartedReceiver` — reads `custom_text` and
-  `custom_detail` from the broadcast but does not compose them.
-  It calls `ToastManager.ensureOverlayAttached(MusicPlayer.this)`
-  so that an overlay whose owning activity is gone is re-anchored
-  to the player's window. It does not call
-  `updatePersistentOverlay`.
+- `MusicPlayer.mSyncStartedReceiver` — reads `custom_text` and `custom_detail` from the broadcast but does not compose them.
+  It calls `ToastManager.ensureOverlayAttached(MusicPlayer.this)` so that an overlay whose owning activity is gone is re-anchored to the player's window.
+  It does not call `updatePersistentOverlay`.
 
-- `MusicPlayer.loadFullPlaylistInBackground` and `onResume` —
-  pass the cold-start overlay's title and an empty body through
-  the two-string overload. `abandonLibraryLoadOverlay` is
-  unchanged.
+- `MusicPlayer.loadFullPlaylistInBackground` and `onResume` — pass the cold-start overlay's title and an empty body through the two-string overload.
+  `abandonLibraryLoadOverlay` is unchanged.
 
-- `PlaylistManager.runGenreLoad()` — the progress-update block
-  resolves `title` from `customMessage` or
-  `library_loading_metadata` and `body` as
-  `currentUpdated + "/" + currentTotal`, and passes both to
-  `ToastManager.updatePersistentOverlay` as two separate strings.
-  The genre-load show and the reset show pass their title and an
-  empty body through the four-argument form. `runGenreLoad` does
-  not compose the middle dot; that composition lives in
-  `ToastManager`.
+- `PlaylistManager.runGenreLoad()` — the progress-update block resolves `title` from `customMessage` or `library_loading_metadata` and `body` as `currentUpdated + "/" + currentTotal`, and passes both to `ToastManager.updatePersistentOverlay` as two separate strings.
+  The genre-load show and the reset show pass their title and an empty body through the four-argument form.
+  `runGenreLoad` does not compose the middle dot; that composition lives in `ToastManager`.
 
-- `strings.xml` — `folder_manager_searching` reads
-  `Searching folders`; `folder_manager_searching_found` reads
-  `%1$d songs found`; `folder_manager_syncing` is added at
-  `Syncing playlist`; `folder_manager_syncing_found` reads
-  `%1$d songs synced`. No resource carries a `"..."` separator,
-  a middle dot, or a terminal period. The `player_library_loading`,
-  `library_loading_metadata`, `library_clearing`, and
-  `library_syncing_playlist` strings lose their trailing ellipses
-  for the same reason: the ellipsis was the separator, and the
-  status indicator that accompanies them supplies the progress
-  signal itself. The middle dot is produced by
-  `ToastManager.composeOverlayText` and nowhere else.
+- `strings.xml` — `folder_manager_searching` reads `Searching folders`; `folder_manager_searching_found` reads `%1$d songs found`; `folder_manager_syncing` is added at `Syncing playlist`; `folder_manager_syncing_found` reads `%1$d songs synced`.
+  No resource carries a `"..."` separator, a middle dot, or a terminal period.
+  The `player_library_loading`, `library_loading_metadata`, `library_clearing`, and `library_syncing_playlist` strings lose their trailing ellipses for the same reason: the ellipsis was the separator, and the status indicator that accompanies them supplies the progress signal itself.
+  The middle dot is produced by `ToastManager.composeOverlayText` and nowhere else.
 
 ## [1.4.4] - Nov 09, 2026
 
 ### Overview
 
-The centre-up album-art swipe now produces audible playback when the
-music stream volume is exactly zero. Previously the swipe resumed the
-service — the state machine reached `PLAYING`, the play icon flipped,
-the notification updated — but the stream was still at zero, so the
-user saw a playing indicator and heard silence. The gesture now raises
-the music stream to three steps above zero before it dispatches the
-resume, so the swipe delivers what it promises.
+The centre-up album-art swipe now produces audible playback when the music stream volume is exactly zero.
+Previously the swipe resumed the service — the state machine reached `PLAYING`, the play icon flipped, the notification updated — but the stream was still at zero, so the user saw a playing indicator and heard silence.
+The gesture now raises the music stream to three steps above zero before it dispatches the resume, so the swipe delivers what it promises.
 
-The fix rests on the service's own volume rule: zero is silence,
-non-zero is play. The gesture is the surface that knows the user asked
-for playback, so it is the surface that closes the gap between a
-silent zero-volume resume and a swipe that means "play".
+The fix rests on the service's own volume rule: zero is silence, non-zero is play.
+The gesture is the surface that knows the user asked for playback, so it is the surface that closes the gap between a silent zero-volume resume and a swipe that means "play".
 
 ### Fixed
 
-- **Centre-up swipe is audible at volume zero.** A swipe up on the
-  album art at music-stream volume zero now writes
-  `Math.min(3, maxVolume)` to the stream before calling
-  `MusicService.resume()`. The write is guarded by the stream being
-  exactly zero and the device reporting a non-zero maximum. On a
-  device whose music stream range is 1 or 2, the write clamps to the
-  device maximum rather than exceeding it. On a device whose stream
-  is non-zero, nothing is written and the resume proceeds exactly as
-  before. The write fires `VOLUME_CHANGED_ACTION`, which reaches
-  `MusicService.onMusicVolumeChanged`; the explicit `resume()` that
-  follows reaches `PLAYING` first on the same main-thread turn, and
-  the later broadcast finds the state already at `PLAYING` and falls
-  through without acting. No double-start, no race.
+- **Centre-up swipe is audible at volume zero.**
+  A swipe up on the album art at music-stream volume zero now writes `Math.min(3, maxVolume)` to the stream before calling `MusicService.resume()`.
+  The write is guarded by the stream being exactly zero and the device reporting a non-zero maximum.
+  On a device whose music stream range is 1 or 2, the write clamps to the device maximum rather than exceeding it.
+  On a device whose stream is non-zero, nothing is written and the resume proceeds exactly as before.
+  The write fires `VOLUME_CHANGED_ACTION`, which reaches `MusicService.onMusicVolumeChanged`; the explicit `resume()` that follows reaches `PLAYING` first on the same main-thread turn, and the later broadcast finds the state already at `PLAYING` and falls through without acting.
+  No double-start, no race.
 
 ### Under the Hood
 
-- `MusicPlayer.handlePlaybackGesture(float)` — the upward branch
-  gained a guarded volume write before its `mMusicService.resume()`
-  call. The block reads `mAudioManager` non-null, a positive
-  `getStreamMaxVolume(STREAM_MUSIC)`, and a current
-  `getStreamVolume(STREAM_MUSIC) == 0`, then writes
-  `Math.min(3, maxVolume)` through `setStreamVolume`.
+- `MusicPlayer.handlePlaybackGesture(float)` — the upward branch gained a guarded volume write before its `mMusicService.resume()` call.
+  The block reads `mAudioManager` non-null, a positive `getStreamMaxVolume(STREAM_MUSIC)`, and a current `getStreamVolume(STREAM_MUSIC) == 0`, then writes `Math.min(3, maxVolume)` through `setStreamVolume`.
 
 ## [1.4.3] - Nov 08, 2026
 
 ### Overview
 
-Playback resumes after a phone call in this release, and the
-playback notification stays a foreground notification through the
-interruption that paused it. The Bluetooth-disconnect pause is
-scoped to the case it describes: a disconnect pauses playback only
-when the headset was the active output, no other interruption is
-already handling the pause, and playback was running. The Home
-button's return-home confirmation becomes a colour the user sees.
-Every refinement in the release exists so that an interruption the
-user did not cause, and cannot see, cannot leave the service paused
-with no way back, and so that a gesture the user did cause has a
-visible step between the request and the result.
+Playback resumes after a phone call in this release, and the playback notification stays a foreground notification through the interruption that paused it.
+The Bluetooth-disconnect pause is scoped to the case it describes: a disconnect pauses playback only when the headset was the active output, no other interruption is already handling the pause, and playback was running.
+The Home button's return-home confirmation becomes a colour the user sees.
+Every refinement in the release exists so that an interruption the user did not cause, and cannot see, cannot leave the service paused with no way back, and so that a gesture the user did cause has a visible step between the request and the result.
 
-The resume path rests on one record. An audio-focus interruption —
-a call, a navigation prompt, a ducking app from the focus stack's
-point of view — is recorded once, as an `Interruption`, on the
-first loss that interrupts a live transition. A subsequent loss of
-a different kind during the same interruption does not overwrite
-the record, so a dialer that sends `AUDIOFOCUS_LOSS` for the
-ringtone and `AUDIOFOCUS_LOSS_TRANSIENT` for the call produces one
-record, and the gain that follows resumes from it. The record is
-cleared by any user-initiated transition, by a successful resume,
-and by a transition to idle. Three decisions read from it: whether
-a gain resumes playback, whether the notification stays a
-foreground notification through the interruption, and whether a
-subsequent loss of a different kind is ignored.
+The resume path rests on one record.
+An audio-focus interruption — a call, a navigation prompt, a ducking app from the focus stack's point of view — is recorded once, as an `Interruption`, on the first loss that interrupts a live transition.
+A subsequent loss of a different kind during the same interruption does not overwrite the record, so a dialer that sends `AUDIOFOCUS_LOSS` for the ringtone and `AUDIOFOCUS_LOSS_TRANSIENT` for the call produces one record, and the gain that follows resumes from it.
+The record is cleared by any user-initiated transition, by a successful resume, and by a transition to idle.
+Three decisions read from it: whether a gain resumes playback, whether the notification stays a foreground notification through the interruption, and whether a subsequent loss of a different kind is ignored.
 
 The gain that ends an interruption goes through a bounded retry.
-The telephony stack holds audio focus through its own teardown
-after a call ends, and a single `requestAudioFocus` inside the gain
-callback fails on a meaningful fraction of devices. The retry budget
-is twelve attempts at five hundred milliseconds. When the retry
-budget is exhausted, the record is left in place: the notification
-stays foreground, the shade entry and lockscreen controls survive,
-and the play button resumes through the ordinary transport path.
+The telephony stack holds audio focus through its own teardown after a call ends, and a single `requestAudioFocus` inside the gain callback fails on a meaningful fraction of devices.
+The retry budget is twelve attempts at five hundred milliseconds.
+When the retry budget is exhausted, the record is left in place: the notification stays foreground, the shade entry and lockscreen controls survive, and the play button resumes through the ordinary transport path.
 
-The playback notification is promoted to foreground while an
-interruption is in progress and playback is resumable, not only
-while playback is running. This is the second half of the
-resilience: the shade entry, the lockscreen controls, and the media
-session stay present for the duration of the call and resume with
-the playback. Without the promotion, an interrupted pause demoted
-the notification and the shade entry was eligible for reclamation
-while the call was up.
+The playback notification is promoted to foreground while an interruption is in progress and playback is resumable, not only while playback is running.
+This is the second half of the resilience: the shade entry, the lockscreen controls, and the media session stay present for the duration of the call and resume with the playback.
+Without the promotion, an interrupted pause demoted the notification and the shade entry was eligible for reclamation while the call was up.
 
-The Bluetooth-disconnect pause is now a three-gate decision. The
-headset must be the current audio route, no interruption may
-already be handling the pause, and the state must be playing. A
-disconnect during a call, a link loss on a paired-but-inactive
-device, and a disconnect while already paused are ignored and
-logged. When all three pass, the pause is confirmed after a
-four-hundred-millisecond settling window, which distinguishes a
-disconnect from a link flap; a restored route within the window
-suppresses the pause, and a user-initiated transition during the
-window cancels it.
+The Bluetooth-disconnect pause is now a three-gate decision.
+The headset must be the current audio route, no interruption may already be handling the pause, and the state must be playing.
+A disconnect during a call, a link loss on a paired-but-inactive device, and a disconnect while already paused are ignored and logged.
+When all three pass, the pause is confirmed after a four-hundred-millisecond settling window, which distinguishes a disconnect from a link flap; a restored route within the window suppresses the pause, and a user-initiated transition during the window cancels it.
 
-Every user-initiated transition — a tap, a next, a stop, a volume
-change to zero, a media-session command, a hardware media key, a
-manual resume — clears the interruption record as its first action.
-The automatic resume does not fire after the user has chosen
-otherwise. This is what makes "no other user action intervened" a
-mechanical property rather than a hope.
+Every user-initiated transition — a tap, a next, a stop, a volume change to zero, a media-session command, a hardware media key, a manual resume — clears the interruption record as its first action.
+The automatic resume does not fire after the user has chosen otherwise.
+This is what makes "no other user action intervened" a mechanical property rather than a hope.
 
-The Home button's two-tap gesture gains a third visible state. The
-first tap enters `ARMED` and paints the button in the themed active
-colour; the second tap enters `CONFIRMED`, paints the button in the
-pending colour, and schedules the return-home at a half-second
-dwell, so the user perceives the confirmation as a colour rather
-than as an intent that fires before the screen updates. A tap on
-any other button in either phase cancels the gesture and restores
-the Home button to its steady inactive colour. The two phases are
-carried by one runnable whose body branches on the state, and by
-one cancel method that does not need to know which phase scheduled
-it.
+The Home button's two-tap gesture gains a third visible state.
+The first tap enters `ARMED` and paints the button in the themed active colour; the second tap enters `CONFIRMED`, paints the button in the pending colour, and schedules the return-home at a half-second dwell, so the user perceives the confirmation as a colour rather than as an intent that fires before the screen updates.
+A tap on any other button in either phase cancels the gesture and restores the Home button to its steady inactive colour.
+The two phases are carried by one runnable whose body branches on the state, and by one cancel method that does not need to know which phase scheduled it.
 
 ### Fixed
 
-- **Playback resumes after a phone call.** An answered call
-  produces `AUDIOFOCUS_LOSS_TRANSIENT` (or a `LOSS` followed by a
-  `_TRANSIENT` on some dialers), then `AUDIOFOCUS_GAIN` when the
-  call ends. A single focus request inside the gain callback is
-  refused on devices where the telephony stack still holds focus
-  through its own teardown, and the service stays paused with no
-  further gain to wake it. The resume now goes through
-  `resumeAfterInterruption`, which retries focus acquisition on
-  the bounded cadence above. The first attempt is skipped and the
-  retry path is entered directly when `AudioManager.getMode()`
-  reports a call mode at the moment of the gain.
+- **Playback resumes after a phone call.**
+  An answered call produces `AUDIOFOCUS_LOSS_TRANSIENT` (or a `LOSS` followed by a `_TRANSIENT` on some dialers), then `AUDIOFOCUS_GAIN` when the call ends.
+  A single focus request inside the gain callback is refused on devices where the telephony stack still holds focus through its own teardown, and the service stays paused with no further gain to wake it.
+  The resume now goes through `resumeAfterInterruption`, which retries focus acquisition on the bounded cadence above.
+  The first attempt is skipped and the retry path is entered directly when `AudioManager.getMode()` reports a call mode at the moment of the gain.
 
-- **The interruption record is set on the first loss and not
-  overwritten by a second.** Some dialers send
-  `AUDIOFOCUS_LOSS` for the ringtone followed by
-  `AUDIOFOCUS_LOSS_TRANSIENT` for the call, and some send the two
-  in the opposite order. The record is set on the first loss that
-  interrupts a live transition and a subsequent loss of a
-  different kind is ignored, so the gain that follows sees the
-  record regardless of the order. A user action during the
-  interruption clears the record, so the automatic resume does not
-  fire after the user has chosen otherwise.
+- **The interruption record is set on the first loss and not overwritten by a second.**
+  Some dialers send `AUDIOFOCUS_LOSS` for the ringtone followed by `AUDIOFOCUS_LOSS_TRANSIENT` for the call, and some send the two in the opposite order.
+  The record is set on the first loss that interrupts a live transition and a subsequent loss of a different kind is ignored, so the gain that follows sees the record regardless of the order.
+  A user action during the interruption clears the record, so the automatic resume does not fire after the user has chosen otherwise.
 
-- **The playback notification stays foreground through the
-  interruption.** The foreground promotion is now a two-input
-  expression: the state is playing, or the service reports that
-  an interruption is in progress and the notification must stay
-  foreground. The second input keeps the notification, the shade
-  entry, and the lockscreen controls alive through a phone call,
-  when playback is paused but expected to resume.
+- **The playback notification stays foreground through the interruption.**
+  The foreground promotion is now a two-input expression: the state is playing, or the service reports that an interruption is in progress and the notification must stay foreground.
+  The second input keeps the notification, the shade entry, and the lockscreen controls alive through a phone call, when playback is paused but expected to resume.
 
-- **A Bluetooth disconnect pauses only when the headset was the
-  active output.** The disconnect broadcast is gated on three
-  conditions: the Bluetooth device is the current audio route, no
-  interruption is already handling the pause, and the state is
-  playing. A disconnect during a call, a link loss on a
-  paired-but-inactive device, and a disconnect while already
-  paused are ignored and logged. The broadcast carries the
-  disconnecting profile and the state value, and the service
-  logs both on each gate the request passes through.
+- **A Bluetooth disconnect pauses only when the headset was the active output.**
+  The disconnect broadcast is gated on three conditions: the Bluetooth device is the current audio route, no interruption is already handling the pause, and the state is playing.
+  A disconnect during a call, a link loss on a paired-but-inactive device, and a disconnect while already paused are ignored and logged.
+  The broadcast carries the disconnecting profile and the state value, and the service logs both on each gate the request passes through.
 
-- **A link flap no longer pauses playback.** The disconnect
-  broadcast schedules the pause after a four-hundred-millisecond
-  settling window. If the Bluetooth route is restored within the
-  window, the pause is suppressed. A user-initiated transition
-  during the window cancels it through `clearInterruption`.
+- **A link flap no longer pauses playback.**
+  The disconnect broadcast schedules the pause after a four-hundred-millisecond settling window.
+  If the Bluetooth route is restored within the window, the pause is suppressed.
+  A user-initiated transition during the window cancels it through `clearInterruption`.
 
-- **The service does not leave the playback notification
-  foreground after an interruption resolves.** `clearInterruption`
-  is called by every user-initiated transition and on a successful
-  resume. The notification's foreground lifetime is projected
-  from the interruption record through
-  `ServiceStateSource.shouldRemainForeground`, so the
-  notification and the audio-focus handling cannot disagree about
-  whether the interruption is still in effect.
+- **The service does not leave the playback notification foreground after an interruption resolves.**
+  `clearInterruption` is called by every user-initiated transition and on a successful resume.
+  The notification's foreground lifetime is projected from the interruption record through `ServiceStateSource.shouldRemainForeground`, so the notification and the audio-focus handling cannot disagree about whether the interruption is still in effect.
 
-- **The Home button's confirmation is visible.** The two-tap
-  return-home gesture previously fired the return-home on the
-  same turn as the second tap, so the button's confirmation
-  colour was never seen — the app left before the colour change
-  was drawn. The second tap now transitions the button to the
-  pending colour and dwells for half a second before the task
-  moves to the back. The dwell is bounded by
-  `HOME_CONFIRM_DWELL_MS`, and every user-initiated transition
-  through another button cancels it. The button's `ARMED` and
-  `CONFIRMED` states are distinguished by a three-value
-  `HomeConfirmState` enum rather than a boolean, so a third tap
-  on a `CONFIRMED` button is a no-op and a tap on another
-  button always resets the state to `IDLE`.
+- **The Home button's confirmation is visible.**
+  The two-tap return-home gesture previously fired the return-home on the same turn as the second tap, so the button's confirmation colour was never seen — the app left before the colour change was drawn.
+  The second tap now transitions the button to the pending colour and dwells for half a second before the task moves to the back.
+  The dwell is bounded by `HOME_CONFIRM_DWELL_MS`, and every user-initiated transition through another button cancels it.
+  The button's `ARMED` and `CONFIRMED` states are distinguished by a three-value `HomeConfirmState` enum rather than a boolean, so a third tap on a `CONFIRMED` button is a no-op and a tap on another button always resets the state to `IDLE`.
 
 ### Under the Hood
 
-- `MusicService.Interruption` — new value type. Holds the loss
-  kind (`TRANSIENT_LOSS` or `PERMANENT_LOSS`), the elapsed time it
-  began, whether playback was running, and the generation the
-  transition carried. The record replaces the previous
-  `mPausedByTransientLoss` boolean, which a subsequent loss of a
-  different kind could clear before the gain read it.
+- `MusicService.Interruption` — new value type.
+  Holds the loss kind (`TRANSIENT_LOSS` or `PERMANENT_LOSS`), the elapsed time it began, whether playback was running, and the generation the transition carried.
+  The record replaces the previous `mPausedByTransientLoss` boolean, which a subsequent loss of a different kind could clear before the gain read it.
 
-- `MusicService.mInterruption` — new field. The single record of
-  an interruption in progress. Written only by
-  `handleAudioFocusChange` on the first loss that interrupts a
-  live transition; cleared only by `clearInterruption`.
+- `MusicService.mInterruption` — new field.
+  The single record of an interruption in progress.
+  Written only by `handleAudioFocusChange` on the first loss that interrupts a live transition; cleared only by `clearInterruption`.
 
 - `MusicService.shouldResumeAfterInterruption()` — new method.
-  Three conditions, all required: the state was playing when the
-  interruption began, the generation has not advanced since the
-  interruption began, and the state machine is in a state a
-  resume can act on. The generation check is what makes "no other
-  user action intervened" mechanical.
+  Three conditions, all required: the state was playing when the interruption began, the generation has not advanced since the interruption began, and the state machine is in a state a resume can act on.
+  The generation check is what makes "no other user action intervened" mechanical.
 
-- `MusicService.shouldRemainForeground()` — new method. True
-  while an interruption is in progress, the state is resumable,
-  and the playlist is non-empty. Surfaced to the notification
-  controller through `ServiceStateSource.shouldRemainForeground`.
+- `MusicService.shouldRemainForeground()` — new method.
+  True while an interruption is in progress, the state is resumable, and the playlist is non-empty.
+  Surfaced to the notification controller through `ServiceStateSource.shouldRemainForeground`.
 
-- `MusicService.resumeAfterInterruption()` — new method. The
-  bounded retry that ends an interruption. Focus acquisition
-  succeeds → clear the record and dispatch the resume.
-  Focus refused → post the next retry at
-  `RESUME_RETRY_INTERVAL_MS`, up to
-  `RESUME_RETRY_ATTEMPTS`. Budget exhausted → leave the record
-  in place so the notification stays foreground and the user
-  can revive with one tap. The retry runnable is cancelled by
-  `clearInterruption`.
+- `MusicService.resumeAfterInterruption()` — new method.
+  The bounded retry that ends an interruption.
+  Focus acquisition succeeds → clear the record and dispatch the resume.
+  Focus refused → post the next retry at `RESUME_RETRY_INTERVAL_MS`, up to `RESUME_RETRY_ATTEMPTS`.
+  Budget exhausted → leave the record in place so the notification stays foreground and the user can revive with one tap.
+  The retry runnable is cancelled by `clearInterruption`.
 
-- `MusicService.clearInterruption()` — new method. Clears the
-  record, cancels the resume retry, and cancels any pending
-  Bluetooth pause confirmation. Called by every user-initiated
-  transition and by `onDestroy`.
+- `MusicService.clearInterruption()` — new method.
+  Clears the record, cancels the resume retry, and cancels any pending Bluetooth pause confirmation.
+  Called by every user-initiated transition and by `onDestroy`.
 
 - `MusicService.handleAudioFocusChange(int)` — first-loss-wins.
-  The `AUDIOFOCUS_LOSS` and `AUDIOFOCUS_LOSS_TRANSIENT` cases set
-  the interruption record when the state was PLAYING or when
-  the state was PREPARING and the transition was heading toward
-  playback. The `AUDIOFOCUS_GAIN` case routes through
-  `resumeAfterInterruption`. The duck path is unchanged.
+  The `AUDIOFOCUS_LOSS` and `AUDIOFOCUS_LOSS_TRANSIENT` cases set the interruption record when the state was PLAYING or when the state was PREPARING and the transition was heading toward playback.
+  The `AUDIOFOCUS_GAIN` case routes through `resumeAfterInterruption`.
+  The duck path is unchanged.
 
-- `MusicService.doResume()` — split into a public wrapper and
-  `doResumeInternal`. The wrapper requests focus and leaves the
-  interruption record in place when focus is refused, so a later
-  gain or a volume raise can complete the resume.
-  `doResumeInternal` assumes focus is held and runs the
-  synchronous PLAYING commit, the async `player.start()`, and
-  the failure rollback.
+- `MusicService.doResume()` — split into a public wrapper and `doResumeInternal`.
+  The wrapper requests focus and leaves the interruption record in place when focus is refused, so a later gain or a volume raise can complete the resume.
+  `doResumeInternal` assumes focus is held and runs the synchronous PLAYING commit, the async `player.start()`, and the failure rollback.
 
 - `MusicService.onBluetoothDisconnect(Intent)` — new method.
-  Three gates: no interruption in progress, the Bluetooth
-  device is the active output, and the state is PLAYING. When
-  all three pass, posts the confirmation runnable at
-  `BLUETOOTH_DISCONNECT_CONFIRM_MS`. The confirmation re-checks
-  the route and calls `pause()` only when the route has not
-  been restored.
+  Three gates: no interruption in progress, the Bluetooth device is the active output, and the state is PLAYING.
+  When all three pass, posts the confirmation runnable at `BLUETOOTH_DISCONNECT_CONFIRM_MS`.
+  The confirmation re-checks the route and calls `pause()` only when the route has not been restored.
 
 - `MusicService.isBluetoothChosenOutput()` — new method.
-  `AudioManager.isBluetoothA2dpOn()` for the active route. A
-  link loss on a paired-but-inactive device is not about the
-  user's listening and must not pause playback that was going
-  to the phone's speaker or a wired headset.
+  `AudioManager.isBluetoothA2dpOn()` for the active route.
+  A link loss on a paired-but-inactive device is not about the user's listening and must not pause playback that was going to the phone's speaker or a wired headset.
 
-- `MusicService.cancelBluetoothPauseConfirmation()` — new
-  method. Cancels the pending Bluetooth pause confirmation.
+- `MusicService.cancelBluetoothPauseConfirmation()` — new method.
+  Cancels the pending Bluetooth pause confirmation.
   Called from `clearInterruption`.
 
-- `MusicService.mBluetoothPauseConfirmRunnable` — new field. The
-  pending pause confirmation. Set by `onBluetoothDisconnect`,
-  cleared when it runs or when `clearInterruption` cancels it.
+- `MusicService.mBluetoothPauseConfirmRunnable` — new field.
+  The pending pause confirmation.
+  Set by `onBluetoothDisconnect`, cleared when it runs or when `clearInterruption` cancels it.
 
-- `MusicService.registerBluetoothPauseReceiver()` — the
-  receiver now dispatches to `onBluetoothDisconnect(intent)` on
-  the main thread instead of calling `pause()` directly. The
-  gates and the settling window run inside that method.
+- `MusicService.registerBluetoothPauseReceiver()` — the receiver now dispatches to `onBluetoothDisconnect(intent)` on the main thread instead of calling `pause()` directly.
+  The gates and the settling window run inside that method.
 
-- `MusicService.mStateSource.shouldRemainForeground()` — new
-  override. Projects `MusicService.this.shouldRemainForeground`
-  to the notification controller.
+- `MusicService.mStateSource.shouldRemainForeground()` — new override.
+  Projects `MusicService.this.shouldRemainForeground` to the notification controller.
 
-- `MusicService` user-initiated transitions —
-  `playSong`, `playSongAtPosition`, `playSongByPath`,
-  `requestIncomingFile`, `playNextSong`, `playPreviousSong`,
-  `togglePlayPause`, `pause`, `resume`, `stop`,
-  `stopCompletely`, `transitionToIdle`, `handleMediaButton`,
-  the media-session `onPlay` / `onPause` / `onStop` callbacks,
-  and the volume-drop path in `onMusicVolumeChanged` each call
-  `clearInterruption()` as their first action.
+- `MusicService` user-initiated transitions — `playSong`, `playSongAtPosition`, `playSongByPath`, `requestIncomingFile`, `playNextSong`, `playPreviousSong`, `togglePlayPause`, `pause`, `resume`, `stop`, `stopCompletely`, `transitionToIdle`, `handleMediaButton`, the media-session `onPlay` / `onPause` / `onStop` callbacks, and the volume-drop path in `onMusicVolumeChanged` each call `clearInterruption()` as their first action.
 
-- `MusicService.onDestroy()` — calls `clearInterruption()` at
-  the top, so the resume retry and the Bluetooth pause
-  confirmation are cancelled before the rest of the teardown
-  runs.
+- `MusicService.onDestroy()` — calls `clearInterruption()` at the top, so the resume retry and the Bluetooth pause confirmation are cancelled before the rest of the teardown runs.
 
-- `BluetoothReceiver.handleBluetoothDisconnect` — the pause
-  broadcast now carries the disconnecting profile's action and
-  the state value under `EXTRA_PROFILE_ACTION` and
-  `EXTRA_PROFILE_STATE`. `handleConnectionStateChanged` forwards
-  the intent to the disconnect handler.
+- `BluetoothReceiver.handleBluetoothDisconnect` — the pause broadcast now carries the disconnecting profile's action and the state value under `EXTRA_PROFILE_ACTION` and `EXTRA_PROFILE_STATE`.
+  `handleConnectionStateChanged` forwards the intent to the disconnect handler.
 
-- `NotificationController.ServiceStateSource` — gained
-  `shouldRemainForeground()`. The controller consults it when
-  deciding whether to promote or demote the playback
-  notification.
+- `NotificationController.ServiceStateSource` — gained `shouldRemainForeground()`.
+  The controller consults it when deciding whether to promote or demote the playback notification.
 
-- `NotificationController.performPlaybackUpdate()` — the
-  foreground-promotion decision is now `PLAYING || service
-  reports an interruption in progress`. A failed
-  `startForeground` leaves the flag false and the next sync
-  retries, so the notification is visible in the shade whether
-  or not the promotion succeeded.
+- `NotificationController.performPlaybackUpdate()` — the foreground-promotion decision is now `PLAYING || service reports an interruption in progress`.
+  A failed `startForeground` leaves the flag false and the next sync retries, so the notification is visible in the shade whether or not the promotion succeeded.
 
-- `MusicPlayer.HomeConfirmState` — the three-value enum
-  (`IDLE`, `ARMED`, `CONFIRMED`) that expresses which phase of
-  the return-home gesture the button is in. Replaces the
-  previous `mHomePending` boolean.
+- `MusicPlayer.HomeConfirmState` — the three-value enum (`IDLE`, `ARMED`, `CONFIRMED`) that expresses which phase of the return-home gesture the button is in.
+  Replaces the previous `mHomePending` boolean.
 
-- `MusicPlayer.mHomeConfirmState` — the single field that
-  carries the enum. Read by the click handler, both helpers,
-  the theme reapplication, and `cancelReturnHome`.
+- `MusicPlayer.mHomeConfirmState` — the single field that carries the enum.
+  Read by the click handler, both helpers, the theme reapplication, and `cancelReturnHome`.
 
-- `MusicPlayer.mHomeReturnRunnable` — the single pending
-  timeout. Carries both phases; its body branches on
-  `mHomeConfirmState` to decide which phase it is ending.
+- `MusicPlayer.mHomeReturnRunnable` — the single pending timeout.
+  Carries both phases; its body branches on `mHomeConfirmState` to decide which phase it is ending.
   Cancelled by `cancelReturnHome`.
 
-- `MusicPlayer.HOME_CONFIRM_DWELL_MS` — the dwell on the
-  pending CONFIRMED state before `moveTaskToBack(true)` runs,
-  in milliseconds.
+- `MusicPlayer.HOME_CONFIRM_DWELL_MS` — the dwell on the pending CONFIRMED state before `moveTaskToBack(true)` runs, in milliseconds.
 
-- `MusicPlayer.enterArmedState(long)` — enters the ARMED
-  phase: repaints the button in the themed colour, shows the
-  arming toast, and schedules the ARMED expiry.
+- `MusicPlayer.enterArmedState(long)` — enters the ARMED phase: repaints the button in the themed colour, shows the arming toast, and schedules the ARMED expiry.
 
-- `MusicPlayer.enterConfirmedState()` — enters the CONFIRMED
-  phase: repaints the button in the pending colour, dismisses
-  any persistent overlay, and schedules the return-home via
-  `moveTaskToBack(true)`.
+- `MusicPlayer.enterConfirmedState()` — enters the CONFIRMED phase: repaints the button in the pending colour, dismisses any persistent overlay, and schedules the return-home via `moveTaskToBack(true)`.
 
-- `MusicPlayer.cancelReturnHome()` — replaced. Now cancels
-  the single pending runnable, resets the state to `IDLE`,
-  and repaints the button in the inactive control colour.
-  Every transport button, every navigation button, every
-  committed album-art gesture, `onStop`, and `onDestroy`
-  call it.
+- `MusicPlayer.cancelReturnHome()` — replaced.
+  Now cancels the single pending runnable, resets the state to `IDLE`, and repaints the button in the inactive control colour.
+  Every transport button, every navigation button, every committed album-art gesture, `onStop`, and `onDestroy` call it.
 
-- `MusicPlayer` click handlers — the five navigation buttons
-  (`managerButton`, `llamaButton`, `playlistButton`,
-  `equalizerButton`, `metadataButton`) each gain a
-  `cancelReturnHome()` call as the first statement of their
-  debounced branch, so a navigation tap during either phase
-  cancels the pending return-home.
+- `MusicPlayer` click handlers — the five navigation buttons (`managerButton`, `llamaButton`, `playlistButton`, `equalizerButton`, `metadataButton`) each gain a `cancelReturnHome()` call as the first statement of their debounced branch, so a navigation tap during either phase cancels the pending return-home.
 
-- `MusicPlayer.applyThemeToUI()` — the Home-button tint
-  branch is now three-way: `ARMED` uses
-  `updateControlButton(button, true, true)`, `CONFIRMED` uses
-  `updateButtonPendingState(button, true, red)`, `IDLE` uses
-  `updateControlButton(button, true, false)`.
+- `MusicPlayer.applyThemeToUI()` — the Home-button tint branch is now three-way: `ARMED` uses `updateControlButton(button, true, true)`, `CONFIRMED` uses `updateButtonPendingState(button, true, red)`, `IDLE` uses `updateControlButton(button, true, false)`.
 
-- `MusicPlayer.safeUpdateUI(Runnable)` → `MusicPlayer.updateUISafely(Runnable)` —
-  renamed. Call sites updated; behavior unchanged.
+- `MusicPlayer.safeUpdateUI(Runnable)` → `MusicPlayer.updateUISafely(Runnable)` — renamed.
+  Call sites updated; behavior unchanged.
 
-- `MusicPlayer.safeCallService(Runnable)` → `MusicPlayer.callServiceSafely(Runnable)` —
-  renamed. Call sites updated; behavior unchanged.
+- `MusicPlayer.safeCallService(Runnable)` → `MusicPlayer.callServiceSafely(Runnable)` — renamed.
+  Call sites updated; behavior unchanged.
 
-- `MusicPlayer.safeRecycleBitmap(Bitmap)` → `MusicPlayer.recycleBitmapSafely(Bitmap)` —
-  renamed. Call sites updated; behavior unchanged.
+- `MusicPlayer.safeRecycleBitmap(Bitmap)` → `MusicPlayer.recycleBitmapSafely(Bitmap)` — renamed.
+  Call sites updated; behavior unchanged.
 
 ## [1.4.2] - Nov 07, 2026
 
 ### Overview
 
-The playback-scope dialog now treats an empty filter selection as a
-real scope rather than rewriting it into All Songs. Selecting Specific
-Artists and ticking nothing shows a count of zero and leaves the mode
-and its section in place; APPLY is enabled exactly when the draft
-scope differs from the scope the dialog opened with, so emptying a
-filter section from a different starting scope is a change the user
-can commit, and re-applying the current scope is not.
+The playback-scope dialog now treats an empty filter selection as a real scope rather than rewriting it into All Songs.
+Selecting Specific Artists and ticking nothing shows a count of zero and leaves the mode and its section in place; APPLY is enabled exactly when the draft scope differs from the scope the dialog opened with, so emptying a filter section from a different starting scope is a change the user can commit, and re-applying the current scope is not.
 
 ### Playback scope
 
-A filter kind with an empty set is a scope that matches nothing. The
-dialog no longer normalises that state into All Songs: the header
-count reads zero, the mode stays selected, its filter list stays
-expanded, and the mode is reached by tapping its row rather than by
-emptying a different one. The All Songs scope is reached through the
-All Songs row alone.
+A filter kind with an empty set is a scope that matches nothing.
+The dialog no longer normalises that state into All Songs: the header count reads zero, the mode stays selected, its filter list stays expanded, and the mode is reached by tapping its row rather than by emptying a different one.
+The All Songs scope is reached through the All Songs row alone.
 
-The APPLY button is enabled when the draft scope differs from the
-scope the dialog opened with, and disabled otherwise. An empty filter
-selection therefore enables APPLY when the dialog started on a
-different scope, and disables it when the same empty selection is
-already applied. The equality is computed over the kind and all four
-filter sets, so an empty Specific Artists selection compares unequal
-to All Songs and equal to itself.
+The APPLY button is enabled when the draft scope differs from the scope the dialog opened with, and disabled otherwise.
+An empty filter selection therefore enables APPLY when the dialog started on a different scope, and disables it when the same empty selection is already applied.
+The equality is computed over the kind and all four filter sets, so an empty Specific Artists selection compares unequal to All Songs and equal to itself.
 
-A preference change made during the commit window cancels the queued
-commit and restores APPLY to the state the current draft warrants.
-The dialog opens with APPLY in the correct state for the scope it
-was given.
+A preference change made during the commit window cancels the queued commit and restores APPLY to the state the current draft warrants.
+The dialog opens with APPLY in the correct state for the scope it was given.
 
-An empty filter scope is a scope the service can apply. The service
-builds an empty scoped playlist from it and leaves the playlist view
-empty until the user changes the scope; the scope is not rewritten
-into `ALL_SONGS` at the service boundary.
+An empty filter scope is a scope the service can apply.
+The service builds an empty scoped playlist from it and leaves the playlist view empty until the user changes the scope; the scope is not rewritten into `ALL_SONGS` at the service boundary.
 
 ### Under the Hood
 
-- `PlaybackScopeDialog.buildScope()` returns the real scope for each
-  filter kind, including an empty one. The empty-set normalisation to
-  `PlaybackScope.ALL_SONGS` is removed.
-- `PlaybackScopeDialog.updateApplyEnabled()` enables APPLY when
-  `buildScope()` differs from `mInitialScope`, and is called from
-  `onModeTapped`, `onFilterToggled`, `cancelPendingCommit`, and the
-  end of `onCreate`.
-- `PlaybackScopeDialog.onFilterToggled()` no longer changes
-  `mSelectedKind` or `mFilterExpanded`; only a mode tap changes the
-  mode.
-- `PlaybackScopeDialog.cancelPendingCommit()` restores APPLY through
-  `updateApplyEnabled()` rather than enabling it unconditionally.
-- `PlaybackScopeDialog.updateHeader()` reports the draft scope's real
-  count, which is zero for an empty filter selection.
-- `PlaybackScope.artists({})` and its sibling empty filter scopes are
-  reachable from the dialog. `MusicService.rebuildPlaylists()`
-  produces an empty `mScopedPlaylist` from them, and the playlist view
-  shows its empty state until the scope changes. The scope is not
-  rewritten into `ALL_SONGS` at the service boundary; a persisted
-  empty filter scope round-trips through `serialize()` and
-  `deserialize()` unchanged.
+- `PlaybackScopeDialog.buildScope()` returns the real scope for each filter kind, including an empty one.
+  The empty-set normalisation to `PlaybackScope.ALL_SONGS` is removed.
+- `PlaybackScopeDialog.updateApplyEnabled()` enables APPLY when `buildScope()` differs from `mInitialScope`, and is called from `onModeTapped`, `onFilterToggled`, `cancelPendingCommit`, and the end of `onCreate`.
+- `PlaybackScopeDialog.onFilterToggled()` no longer changes `mSelectedKind` or `mFilterExpanded`; only a mode tap changes the mode.
+- `PlaybackScopeDialog.cancelPendingCommit()` restores APPLY through `updateApplyEnabled()` rather than enabling it unconditionally.
+- `PlaybackScopeDialog.updateHeader()` reports the draft scope's real count, which is zero for an empty filter selection.
+- `PlaybackScope.artists({})` and its sibling empty filter scopes are reachable from the dialog.
+  `MusicService.rebuildPlaylists()` produces an empty `mScopedPlaylist` from them, and the playlist view shows its empty state until the scope changes.
+  The scope is not rewritten into `ALL_SONGS` at the service boundary; a persisted empty filter scope round-trips through `serialize()` and `deserialize()` unchanged.
 
 ## [1.4.1] - Nov 07, 2026
 
 ### Overview
 
-Llama Music Player combines a scope-aware playback engine, persistent
-media controls, and a compact interface designed to remain consistent
-across all sixteen supported languages. Version 1.4.1 presents the
-playback scope, notification lifecycle, and player controls as one
-coherent experience.
+Llama Music Player combines a scope-aware playback engine, persistent media controls, and a compact interface designed to remain consistent across all sixteen supported languages.
+Version 1.4.1 presents the playback scope, notification lifecycle, and player controls as one coherent experience.
 
 ### Playback and scope
 
-The playback scope can select favorites, loose tracks, or specific
-folders, genres, artists, and albums. Its live count uses the same
-matching rules as the playback service. The current song and a pending
-next song remain available while a scope change takes effect, allowing
-the active track to finish naturally.
+The playback scope can select favorites, loose tracks, or specific folders, genres, artists, and albums.
+Its live count uses the same matching rules as the playback service.
+The current song and a pending next song remain available while a scope change takes effect, allowing the active track to finish naturally.
 
-At song completion, the service chooses the next track from the active
-scope. Repeat off advances through the scoped songs and pauses when
-the scope is empty or the current song is its final entry. Repeat all
-wraps within the scope, while shuffle selects from the same scoped
-collection. Repeat one continues the current song.
+At song completion, the service chooses the next track from the active scope.
+Repeat off advances through the scoped songs and pauses when the scope is empty or the current song is its final entry.
+Repeat all wraps within the scope, while shuffle selects from the same scoped collection.
+Repeat one continues the current song.
 
 ### Playback notification
 
-The playback notification is rendered from the service's committed
-playback snapshot and remains synchronized with the media session.
-Notification rendering and foreground-service promotion are handled
-as distinct operations, so the notification can remain visible when
-Android denies a foreground promotion because notification permission
-is unavailable.
+The playback notification is rendered from the service's committed playback snapshot and remains synchronized with the media session.
+Notification rendering and foreground-service promotion are handled as distinct operations, so the notification can remain visible when Android denies a foreground promotion because notification permission is unavailable.
 
-A sticky service restart rebuilds the notification from persisted
-playback state. During a prepare or player error recovery, the service
-keeps transition state visible to the notification controller until
-reconciliation completes. Failed renders remain eligible for another
-synchronization attempt, and the media session retains the same
-committed snapshot as the notification.
+A sticky service restart rebuilds the notification from persisted playback state.
+During a prepare or player error recovery, the service keeps transition state visible to the notification controller until reconciliation completes.
+Failed renders remain eligible for another synchronization attempt, and the media session retains the same committed snapshot as the notification.
 
 ### Player and dialog interface
 
-The player uses a Home control for returning to the Android home
-screen. The two-tap confirmation leaves playback running in the
-background and uses a contrasting border and glyph color in both
-light and dark themes.
+The player uses a Home control for returning to the Android home screen.
+The two-tap confirmation leaves playback running in the background and uses a contrasting border and glyph color in both light and dark themes.
 
-The Home and Favorite controls use the standard 48dp control-button
-treatment. The transport row follows a 48dp / 52dp / 56dp size
-hierarchy with 28sp / 32sp / 36sp glyphs. The playlist favorite control
-uses a 36dp surface and a 20sp glyph.
+The Home and Favorite controls use the standard 48dp control-button treatment.
+The transport row follows a 48dp / 52dp / 56dp size hierarchy with 28sp / 32sp / 36sp glyphs.
+The playlist favorite control uses a 36dp surface and a 20sp glyph.
 
-Dialog and activity title bars use logical start and end margins for
-their 8dp title gutters. The same layout rule applies to the Playback
-Scope, Language, Credits, Preset, and Theme dialogs and to the Player,
-Playlist, Folder Manager, Metadata Editor, and Equalizer activities.
-This keeps the title centered between its neighboring actions in both
-left-to-right and right-to-left layouts.
+Dialog and activity title bars use logical start and end margins for their 8dp title gutters.
+The same layout rule applies to the Playback Scope, Language, Credits, Preset, and Theme dialogs and to the Player, Playlist, Folder Manager, Metadata Editor, and Equalizer activities.
+This keeps the title centered between its neighboring actions in both left-to-right and right-to-left layouts.
 
-The volume gesture uses a 60dp edge zone along the album art. The
-centre swipe resumes paused playback with an upward gesture and pauses
-playing audio with a downward gesture.
+The volume gesture uses a 60dp edge zone along the album art.
+The centre swipe resumes paused playback with an upward gesture and pauses playing audio with a downward gesture.
 
 ## [1.4.0] - Nov 06, 2026
 
 ### Overview
 
-Favorites and playback scope land in this release. A song can now be
-marked as a favorite from the player's screen, from a
-double-tap on the album art, or from a heart on any playlist row. The
-player can be restricted to favorites, to loose tracks, or to a
-chosen set of folders, genres, artists, or albums. A playback-scope
-dialog shows a live count of the songs the current selection would
-yield.
+Favorites and playback scope land in this release.
+A song can now be marked as a favorite from the player's screen, from a double-tap on the album art, or from a heart on any playlist row.
+The player can be restricted to favorites, to loose tracks, or to a chosen set of folders, genres, artists, or albums.
+A playback-scope dialog shows a live count of the songs the current selection would yield.
 
-The favourites feature is protected by a single structural change in
-the database write path. `SongDatabase.setFavorite(String, boolean)`
-is the only writer of the new `favorite` column on an existing row;
-every other metadata write — the scanner, the genre loader, the
-metadata editor, the playlist rebuild — goes through
-`updateSongMetadata(Song)`, which deliberately omits that column. A
-fresh row is inserted with the flag it was built with; an existing
-row is routed through the metadata-only path, so a scan that touches
-every song in the library cannot silently clear a user's favourites.
-The schema bumps to version 3; both tables gain the column with
-`DEFAULT 0`.
+The favourites feature is protected by a single structural change in the database write path.
+`SongDatabase.setFavorite(String, boolean)` is the only writer of the new `favorite` column on an existing row; every other metadata write — the scanner, the genre loader, the metadata editor, the playlist rebuild — goes through `updateSongMetadata(Song)`, which deliberately omits that column.
+A fresh row is inserted with the flag it was built with; an existing row is routed through the metadata-only path, so a scan that touches every song in the library cannot silently clear a user's favourites.
+The schema bumps to version 3; both tables gain the column with `DEFAULT 0`.
 
 The playlist is now a three-tier value in `MusicService`.
 `mFullPlaylist` is the immutable reflection of the database.
-`mScopedPlaylist` is the same list filtered by the active
-`PlaybackScope`. `mCurrentPlaylist` is the active queue — the scoped
-playlist plus the songs at `mCurrentIndex` and `mTargetIndex`, the
-grace period that keeps the currently playing song and its pending
-target in the queue even when a scope change no longer includes
-them. `rebuildPlaylists()` is the single mutator of the second and
-third tiers.
+`mScopedPlaylist` is the same list filtered by the active `PlaybackScope`.
+`mCurrentPlaylist` is the active queue — the scoped playlist plus the songs at `mCurrentIndex` and `mTargetIndex`, the grace period that keeps the currently playing song and its pending target in the queue even when a scope change no longer includes them.
+`rebuildPlaylists()` is the single mutator of the second and third tiers.
 
-Two further listening controls join the album art in this release. A
-centre vertical swipe on the album art resumes a paused song on an
-upward flick and pauses a playing one on a downward flick. The
-gesture requires twice the touch slop of travel to distinguish it
-from digitizer wobble on a resting finger, and it fires on release,
-not on the first significant move, so a single drag toggles at most
-once. The exit button on the main player screen closes the app on a
-deliberate two-tap gesture: the first tap turns the button red and
-shows a confirmation toast, the second tap within one second exits.
-If the second tap does not arrive, the button reverts to its normal
-theme colour so an accidental tap does not leave the exit state
-active.
+Two further listening controls join the album art in this release.
+A centre vertical swipe on the album art resumes a paused song on an upward flick and pauses a playing one on a downward flick.
+The gesture requires twice the touch slop of travel to distinguish it from digitizer wobble on a resting finger, and it fires on release, not on the first significant move, so a single drag toggles at most once.
+The exit button on the main player screen closes the app on a deliberate two-tap gesture: the first tap turns the button red and shows a confirmation toast, the second tap within one second exits.
+If the second tap does not arrive, the button reverts to its normal theme colour so an accidental tap does not leave the exit state active.
 
-The playlist's edge fast-scroll is now a shared helper,
-`EdgeScrollHelper`, installed with one call on any `RecyclerView`.
-The playlist and the playback-scope dialog both install it, so the
-edge width, engagement threshold, and scroll rate are the same on
-both surfaces. A change to any of the three takes effect on both at
-once.
+The playlist's edge fast-scroll is now a shared helper, `EdgeScrollHelper`, installed with one call on any `RecyclerView`.
+The playlist and the playback-scope dialog both install it, so the edge width, engagement threshold, and scroll rate are the same on both surfaces.
+A change to any of the three takes effect on both at once.
 
 ---
 
 ### Added
 
-- **Favorites** — A per-song favourite flag the user can toggle
-  from three places. The transport row carries a sixth button
-  between the repeat button and the metadata row; a double-tap on
-  the album art opens the same commit; every playlist row carries
-  a heart at its trailing edge. In the playlist, a tap on a row's
-  heart flips the in-memory flag immediately, redraws the row,
-  forwards the change to a `FavoriteListener` on the owning
-  activity, and shows the favourite confirmation toast from the
-  adapter's own click handler. The activity batches the changes in
-  a `PendingFavorites` map and flushes them to
-  `MusicService.commitFavorites(Map)` in `onPause()`, so a tap
-  that is reversed before the activity pauses produces no database
-  write at all and the last value staged for each path wins. The
-  transport heart and the album-art double-tap commit immediately.
-  The heart's tint follows the theme colour when the song is
-  favourited and a muted grey when it is not. A
-  `FAVORITE_CHANGED` broadcast reaches consumers that render
-  hearts without waiting for the next `UPDATE_PLAYER` turn.
+- **Favorites** — A per-song favourite flag the user can toggle from three places.
+  The transport row carries a sixth button between the repeat button and the metadata row; a double-tap on the album art opens the same commit; every playlist row carries a heart at its trailing edge.
+  In the playlist, a tap on a row's heart flips the in-memory flag immediately, redraws the row, forwards the change to a `FavoriteListener` on the owning activity, and shows the favourite confirmation toast from the adapter's own click handler.
+  The activity batches the changes in a `PendingFavorites` map and flushes them to `MusicService.commitFavorites(Map)` in `onPause()`, so a tap that is reversed before the activity pauses produces no database write at all and the last value staged for each path wins.
+  The transport heart and the album-art double-tap commit immediately.
+  The heart's tint follows the theme colour when the song is favourited and a muted grey when it is not.
+  A `FAVORITE_CHANGED` broadcast reaches consumers that render hearts without waiting for the next `UPDATE_PLAYER` turn.
 
-- **Playback scope with seven kinds** — A new `PlaybackScope`
-  value object with a `Kind` enum — `ALL`, `FAVORITES`,
-  `LOOSE_TRACKS`, `FOLDERS`, `GENRES`, `ARTISTS`, `ALBUMS` — and
-  four filter sets. `matches(Song, Set)` is the only read; it
-  consults `CharacterMapper.isUnknownX(String)` so a song whose
-  field is the current locale's placeholder is never matched
-  against a stored value. Serializes to and deserializes from
-  JSON through the framework's `org.json`; a malformed string
-  deserializes to `ALL`.
+- **Playback scope with seven kinds** — A new `PlaybackScope` value object with a `Kind` enum — `ALL`, `FAVORITES`, `LOOSE_TRACKS`, `FOLDERS`, `GENRES`, `ARTISTS`, `ALBUMS` — and four filter sets.
+  `matches(Song, Set)` is the only read; it consults `CharacterMapper.isUnknownX(String)` so a song whose field is the current locale's placeholder is never matched against a stored value.
+  Serializes to and deserializes from JSON through the framework's `org.json`; a malformed string deserializes to `ALL`.
 
-- **Playback scope dialog** — Reached from a new SCOPE button in
-  the folder manager's header, styled to match the playlist's
-  SORT button. The dialog presents the seven modes as a single
-  flat list and expands a mode's filter list below its row when
-  that mode is selected; re-tapping the same mode collapses it
-  without changing the selection. Unchecking the last filter
-  value in a category returns playback to **All**. The header
-  shows a live count of the songs the current selection would
-  yield, computed through the same matcher the service uses to
-  build the playlist, so the number the dialog shows and the
-  queue the service plays cannot disagree. Applying a scope
-  broadcasts the serialized scope to the service through
-  `APPLY_PLAYBACK_SCOPE`; the folder manager does not bind
-  `MusicService` directly. The dialog shares the playlist's edge
-  fast-scroll through `EdgeScrollHelper`.
+- **Playback scope dialog** — Reached from a new SCOPE button in the folder manager's header, styled to match the playlist's SORT button.
+  The dialog presents the seven modes as a single flat list and expands a mode's filter list below its row when that mode is selected; re-tapping the same mode collapses it without changing the selection.
+  Unchecking the last filter value in a category returns playback to **All**.
+  The header shows a live count of the songs the current selection would yield, computed through the same matcher the service uses to build the playlist, so the number the dialog shows and the queue the service plays cannot disagree.
+  Applying a scope broadcasts the serialized scope to the service through `APPLY_PLAYBACK_SCOPE`; the folder manager does not bind `MusicService` directly.
+  The dialog shares the playlist's edge fast-scroll through `EdgeScrollHelper`.
 
-- **Three-tier playlist** — `MusicService` carries
-  `mFullPlaylist`, `mScopedPlaylist`, and `mCurrentPlaylist`.
-  `rebuildPlaylists()` is the single mutator of the second and
-  third tiers; it runs on the main thread and is called from
-  `setPlaylist`, `setPlaybackScope`, `commitFavorites`, and at
-  the tail of `onPlaybackStarted`. The currently playing song and
-  the pending target survive a rebuild through the grace period,
-  so unfavoriting the playing song in the Favorites scope does
-  not silence it and a scope change mid-transition does not
-  interrupt the transition.
+- **Three-tier playlist** — `MusicService` carries `mFullPlaylist`, `mScopedPlaylist`, and `mCurrentPlaylist`.
+  `rebuildPlaylists()` is the single mutator of the second and third tiers; it runs on the main thread and is called from `setPlaylist`, `setPlaybackScope`, `commitFavorites`, and at the tail of `onPlaybackStarted`.
+  The currently playing song and the pending target survive a rebuild through the grace period, so unfavoriting the playing song in the Favorites scope does not silence it and a scope change mid-transition does not interrupt the transition.
 
-- **Exit button** — The main player screen's exit button closes
-  the app on a deliberate two-tap gesture. The first tap turns
-  the button red and shows a confirmation toast; the second tap
-  within one second exits. If the second tap does not arrive, the
-  button reverts to the current theme colour so the exit state
-  does not linger after an accidental tap on a button the eye
-  already reads as a close control.
+- **Exit button** — The main player screen's exit button closes the app on a deliberate two-tap gesture.
+  The first tap turns the button red and shows a confirmation toast; the second tap within one second exits.
+  If the second tap does not arrive, the button reverts to the current theme colour so the exit state does not linger after an accidental tap on a button the eye already reads as a close control.
 
-- **Centre swipe to play or pause** — A vertical swipe on the
-  album-art container that starts at the centre becomes a
-  playback gesture. Upward resumes a paused song; downward pauses
-  a playing one. The gesture requires twice the touch slop of
-  travel to distinguish it from digitizer wobble on a resting
-  finger, and it fires on release, not on the first significant
-  move, so a single drag toggles at most once. The gesture is one
-  of four the album-art container classifies on the first
-  significant move: a horizontal swipe becomes a carousel swipe,
-  a vertical swipe that starts in the left or right edge zone
-  becomes a volume change, a vertical swipe that starts at the
-  centre becomes the playback gesture, and a touch that never
-  leaves the slop radius stays in the resting state from which
-  the double-tap favourite is detected. The four classifiers
-  share one state enum so a gesture cannot fall into two modes at
-  once.
+- **Centre swipe to play or pause** — A vertical swipe on the album-art container that starts at the centre becomes a playback gesture.
+  Upward resumes a paused song; downward pauses a playing one.
+  The gesture requires twice the touch slop of travel to distinguish it from digitizer wobble on a resting finger, and it fires on release, not on the first significant move, so a single drag toggles at most once.
+  The gesture is one of four the album-art container classifies on the first significant move: a horizontal swipe becomes a carousel swipe, a vertical swipe that starts in the left or right edge zone becomes a volume change, a vertical swipe that starts at the centre becomes the playback gesture, and a touch that never leaves the slop radius stays in the resting state from which the double-tap favourite is detected.
+  The four classifiers share one state enum so a gesture cannot fall into two modes at once.
 
-- **Shared edge fast-scroll** — The playlist's edge fast-scroll
-  is now a standalone helper, `EdgeScrollHelper`, installed with
-  one call on any `RecyclerView`. The playlist and the
-  playback-scope dialog both install it, so the edge width,
-  engagement threshold, and scroll rate are the same on both
-  surfaces.
+- **Shared edge fast-scroll** — The playlist's edge fast-scroll is now a standalone helper, `EdgeScrollHelper`, installed with one call on any `RecyclerView`.
+  The playlist and the playback-scope dialog both install it, so the edge width, engagement threshold, and scroll rate are the same on both surfaces.
 
-- **Empty-state message distinguishes scope from library** — A
-  library with no songs shows the "import folders" message; a
-  library with songs filtered to zero by an active scope shows
-  "No songs in the current playback scope."
+- **Empty-state message distinguishes scope from library** — A library with no songs shows the "import folders" message; a library with songs filtered to zero by an active scope shows "No songs in the current playback scope."
 
 ---
 
 ### Under the Hood
 
-- `PlaybackScope` — New class. An immutable value with a `Kind`
-  enum and four `Set<String>` fields (`paths`, `genres`,
-  `artists`, `albums`). `matches(Song, Set<String>)` consults the
-  set the kind names; a null song, a null path, and a field
-  carrying the current locale's placeholder all return false.
-  `serialize()` produces a JSON object through the framework's
-  `org.json`; `deserialize(String)` returns `ALL` for any input
-  that does not parse. `ALL` is a static instance.
+- `PlaybackScope` — New class.
+  An immutable value with a `Kind` enum and four `Set<String>` fields (`paths`, `genres`, `artists`, `albums`).
+  `matches(Song, Set<String>)` consults the set the kind names; a null song, a null path, and a field carrying the current locale's placeholder all return false.
+  `serialize()` produces a JSON object through the framework's `org.json`; `deserialize(String)` returns `ALL` for any input that does not parse.
+  `ALL` is a static instance.
 
-- `PlaybackScopeDialog` — New class. Top bar with CANCEL, title,
-  and APPLY; a single RecyclerView carrying both the seven mode
-  rows and the filter rows that belong to the currently expanded
-  mode. Mode rows render a custom-drawn radio indicator; filter
-  rows render a custom-drawn checkbox indicator; both are themed
-  through `ThemeHelper.updateRadio` and
-  `ThemeHelper.updateCheckbox`. Folder rows come from the
-  caller-supplied `List<FolderAdapter.FolderItem>`; genres,
-  artists, and albums are enumerated from
-  `SongDatabase.getAllSongs()` on the dialog's executor. The
-  enumeration filters out `CharacterMapper.isUnknownX(String)`
-  values. Applying a scope whose kind is a filter kind with an
-  empty set returns `ALL` rather than a scope that matches
-  nothing. The executor is shut down in `dismiss()`. APPLY is
-  disabled for the whole window between the tap and the
-  dismissal; a preference change during that window cancels the
-  queued commit and re-enables the button.
+- `PlaybackScopeDialog` — New class.
+  Top bar with CANCEL, title, and APPLY; a single RecyclerView carrying both the seven mode rows and the filter rows that belong to the currently expanded mode.
+  Mode rows render a custom-drawn radio indicator; filter rows render a custom-drawn checkbox indicator; both are themed through `ThemeHelper.updateRadio` and `ThemeHelper.updateCheckbox`.
+  Folder rows come from the caller-supplied `List<FolderAdapter.FolderItem>`; genres, artists, and albums are enumerated from `SongDatabase.getAllSongs()` on the dialog's executor.
+  The enumeration filters out `CharacterMapper.isUnknownX(String)` values.
+  Applying a scope whose kind is a filter kind with an empty set returns `ALL` rather than a scope that matches nothing.
+  The executor is shut down in `dismiss()`.
+  APPLY is disabled for the whole window between the tap and the dismissal; a preference change during that window cancels the queued commit and re-enables the button.
 
-- `Song.isFavorite()` / `Song.setFavorite(boolean)` — New
-  accessors. The `mFavorite` field defaults `false`, is set by
-  the row reader when the schema carries the column, and is
-  preserved across the `serialVersionUID` bump to 2.
+- `Song.isFavorite()` / `Song.setFavorite(boolean)` — New accessors.
+  The `mFavorite` field defaults `false`, is set by the row reader when the schema carries the column, and is preserved across the `serialVersionUID` bump to 2.
 
-- `SongDatabase.DATABASE_VERSION` — Bumped to 3. `createTable`
-  and `onUpgrade` add the `favorite INTEGER DEFAULT 0` column to
-  both tables.
+- `SongDatabase.DATABASE_VERSION` — Bumped to 3.
+  `createTable` and `onUpgrade` add the `favorite INTEGER DEFAULT 0` column to both tables.
 
-- `SongDatabase.buildContentValues(Song)` — Splits into a full
-  builder and a metadata-only builder. The full builder is used
-  by the fresh-row branch of the insert path and includes the
-  favorite flag. The metadata-only builder is used by the update
-  branch and by `updateSongMetadata(Song)`, and deliberately
-  excludes the flag.
+- `SongDatabase.buildContentValues(Song)` — Splits into a full builder and a metadata-only builder.
+  The full builder is used by the fresh-row branch of the insert path and includes the favorite flag.
+  The metadata-only builder is used by the update branch and by `updateSongMetadata(Song)`, and deliberately excludes the flag.
 
-- `SongDatabase.insertSong(Song)` — Routes an existing row
-  through `updateSongMetadataInternal`; a fresh row goes through
-  `insertSongInternal` with the full content values. The batch
-  insert (`insertSongsBatchInternal`) does the same for each song
-  inside its transaction.
+- `SongDatabase.insertSong(Song)` — Routes an existing row through `updateSongMetadataInternal`; a fresh row goes through `insertSongInternal` with the full content values.
+  The batch insert (`insertSongsBatchInternal`) does the same for each song inside its transaction.
 
 - `SongDatabase.updateSongMetadata(Song)` — New public method.
   Updates every column except `favorite`.
 
-- `SongDatabase.setFavorite(String, boolean)` — New public
-  method. Writes the `favorite` column on both the songs and
-  loose-songs tables.
+- `SongDatabase.setFavorite(String, boolean)` — New public method.
+  Writes the `favorite` column on both the songs and loose-songs tables.
 
-- `SongDatabase.RowReader` — Resolves the `favorite` column
-  alongside the others; when present, sets the flag on the
-  returned song. When absent (a cursor from an older schema), the
-  song defaults to not favorited.
+- `SongDatabase.RowReader` — Resolves the `favorite` column alongside the others; when present, sets the flag on the returned song.
+  When absent (a cursor from an older schema), the song defaults to not favorited.
 
-- `MusicService.mFullPlaylist` — New field. The immutable
-  database reflection, assigned by `setPlaylist`.
+- `MusicService.mFullPlaylist` — New field.
+  The immutable database reflection, assigned by `setPlaylist`.
 
-- `MusicService.mScopedPlaylist` — New field. `mFullPlaylist`
-  filtered by `mPlaybackScope`. Recomputed only by
-  `rebuildPlaylists()`.
+- `MusicService.mScopedPlaylist` — New field.
+  `mFullPlaylist` filtered by `mPlaybackScope`.
+  Recomputed only by `rebuildPlaylists()`.
 
-- `MusicService.mPlaybackScope` — New field. The active scope,
-  defaulting to `PlaybackScope.ALL`.
+- `MusicService.mPlaybackScope` — New field.
+  The active scope, defaulting to `PlaybackScope.ALL`.
 
-- `MusicService.mLooseTrackPaths` — New field. The set of paths
-  in the loose-songs table, refreshed by `rebuildPlaylists()`.
+- `MusicService.mLooseTrackPaths` — New field.
+  The set of paths in the loose-songs table, refreshed by `rebuildPlaylists()`.
 
-- `MusicService.rebuildPlaylists()` — New private method. The
-  single mutator for `mScopedPlaylist` and `mCurrentPlaylist`.
-  Captures the paths at `mCurrentIndex` and `mTargetIndex` before
-  rebuilding; adds the songs back into the new list if the scope
-  excluded them; re-anchors both indices to the captured paths;
-  clears the shuffle peek memos, the shuffle history, and the
-  cached window.
+- `MusicService.rebuildPlaylists()` — New private method.
+  The single mutator for `mScopedPlaylist` and `mCurrentPlaylist`.
+  Captures the paths at `mCurrentIndex` and `mTargetIndex` before rebuilding; adds the songs back into the new list if the scope excluded them; re-anchors both indices to the captured paths; clears the shuffle peek memos, the shuffle history, and the cached window.
 
-- `MusicService.setPlaybackScope(PlaybackScope)` — New public
-  method. Stores the scope, persists it under
-  `playback_scope_json`, rebuilds the playlists, and broadcasts.
+- `MusicService.setPlaybackScope(PlaybackScope)` — New public method.
+  Stores the scope, persists it under `playback_scope_json`, rebuilds the playlists, and broadcasts.
 
-- `MusicService.getPlaybackScope()` — New public method. Returns
-  the active scope.
+- `MusicService.getPlaybackScope()` — New public method.
+  Returns the active scope.
 
-- `MusicService.getScopedPlaylist()` /
-  `MusicService.getScopedPlaylistSize()` — New public methods.
+- `MusicService.getScopedPlaylist()` / `MusicService.getScopedPlaylistSize()` — New public methods.
   Return a copy of `mScopedPlaylist` and its size.
 
-- `MusicService.commitFavorites(Map<String, Boolean>)` — New
-  public method. Applies the map to all three lists, persists
-  each path through `SongDatabase.setFavorite`, rebuilds the
-  playlists, broadcasts `UPDATE_PLAYER`, and broadcasts
-  `FAVORITE_CHANGED`. A per-path database failure is logged and
-  does not abort the batch.
+- `MusicService.commitFavorites(Map<String, Boolean>)` — New public method.
+  Applies the map to all three lists, persists each path through `SongDatabase.setFavorite`, rebuilds the playlists, broadcasts `UPDATE_PLAYER`, and broadcasts `FAVORITE_CHANGED`.
+  A per-path database failure is logged and does not abort the batch.
 
 - `MusicService.toggleFavorite()` — New public method.
-  Convenience wrapper that commits a single-path change for the
-  current song.
+  Convenience wrapper that commits a single-path change for the current song.
 
-- `MusicService.broadcastUpdate()` — Carries three new extras:
-  `is_favorite` (the current song's flag), `scope_kind` (the
-  active kind's name), and `scope_count` (the scoped playlist
-  size). The activity reads `scope_count` to present the no-song
-  state when the active scope yields no songs without waiting for
-  a song to appear.
+- `MusicService.broadcastUpdate()` — Carries three new extras: `is_favorite` (the current song's flag), `scope_kind` (the active kind's name), and `scope_count` (the scoped playlist size).
+  The activity reads `scope_count` to present the no-song state when the active scope yields no songs without waiting for a song to appear.
 
-- `MusicService` — New `ACTION_APPLY_PLAYBACK_SCOPE` broadcast
-  constant, `EXTRA_SCOPE_JSON` extra key, `ACTION_FAVORITE_CHANGED`
-  broadcast constant, and a receiver that applies a serialized
-  scope on the main thread. The receiver is registered in
-  `onCreate` and unregistered in `onDestroy`.
+- `MusicService` — New `ACTION_APPLY_PLAYBACK_SCOPE` broadcast constant, `EXTRA_SCOPE_JSON` extra key, `ACTION_FAVORITE_CHANGED` broadcast constant, and a receiver that applies a serialized scope on the main thread.
+  The receiver is registered in `onCreate` and unregistered in `onDestroy`.
 
-- `MusicService.loadPlaybackScope()` /
-  `MusicService.savePlaybackScope()` — New private methods.
+- `MusicService.loadPlaybackScope()` / `MusicService.savePlaybackScope()` — New private methods.
   Deserialize and write `playback_scope_json`.
 
-- `PlaylistActivity.PendingFavorites` — New static inner class. A
-  `HashMap<String, Boolean>` with `stage(path, flag)`,
-  `isEmpty()`, `snapshot()`, and `clear()`. The playlist row's
-  `FavoriteListener` stages; `onPause` flushes and clears.
+- `PlaylistActivity.PendingFavorites` — New static inner class.
+  A `HashMap<String, Boolean>` with `stage(path, flag)`, `isEmpty()`, `snapshot()`, and `clear()`.
+  The playlist row's `FavoriteListener` stages; `onPause` flushes and clears.
 
-- `PlaylistActivity.setupAdapter()` — Installs a
-  `FavoriteListener` on the adapter that stages heart taps in
-  `PendingFavorites`.
+- `PlaylistActivity.setupAdapter()` — Installs a `FavoriteListener` on the adapter that stages heart taps in `PendingFavorites`.
 
-- `PlaylistActivity.onPause()` — Flushes `PendingFavorites` to
-  `MusicService.commitFavorites` before clearing the map and
-  unregistering the theme receiver.
+- `PlaylistActivity.onPause()` — Flushes `PendingFavorites` to `MusicService.commitFavorites` before clearing the map and unregistering the theme receiver.
 
-- `PlaylistActivity.showEmptyView(int)` — Takes a string
-  resource identifier. `refreshPlaylistFromService` passes
-  `playlist_empty_scope` when the active scope is not `ALL`,
-  `playlist_empty_state` otherwise;
-  `registerLibraryResetReceiver` passes `playlist_empty_state`
-  unconditionally, because a reset is always a library-empty
-  state.
+- `PlaylistActivity.showEmptyView(int)` — Takes a string resource identifier.
+  `refreshPlaylistFromService` passes `playlist_empty_scope` when the active scope is not `ALL`, `playlist_empty_state` otherwise; `registerLibraryResetReceiver` passes `playlist_empty_state` unconditionally, because a reset is always a library-empty state.
 
-- `PlaylistActivity.setupEdgeFastScroll()` — Now calls
-  `EdgeScrollHelper.attach(mPlaylistRecyclerView)`. The
-  playlist's own inlined fast-scroll implementation is deleted;
-  the helper is the single implementation on both surfaces.
+- `PlaylistActivity.setupEdgeFastScroll()` — Now calls `EdgeScrollHelper.attach(mPlaylistRecyclerView)`.
+  The playlist's own inlined fast-scroll implementation is deleted; the helper is the single implementation on both surfaces.
 
-- `PlaylistActivity.applyThemeToUI()` — Rebinds every visible row
-  on a theme change through
-  `notifyItemRangeChanged(0, getItemCount())`, so every visible
-  heart picks up the new tint.
+- `PlaylistActivity.applyThemeToUI()` — Rebinds every visible row on a theme change through `notifyItemRangeChanged(0, getItemCount())`, so every visible heart picks up the new tint.
 
-- `PlaylistAdapter.FavoriteListener` — New interface. Called
-  after the row's `Song` flag is flipped and the row is rebound.
+- `PlaylistAdapter.FavoriteListener` — New interface.
+  Called after the row's `Song` flag is flipped and the row is rebound.
 
-- `PlaylistAdapter.ViewHolder` — Resolves `R.id.favoriteIcon`
-  alongside the title and subtitle. Binds the heart's glyph,
-  tint, content description, and click handler in
-  `onBindViewHolder`. The click handler flips the row's
-  `Song` flag, calls `notifyItemChanged`, forwards the change to
-  `mFavoriteListener`, and — when the adapter's context is an
-  `Activity` — shows the favourite confirmation toast through
-  `ToastManager`. The toast is shown by the adapter rather than
-  by the owning activity because the tap is the adapter's event
-  and the feedback belongs on the same turn.
+- `PlaylistAdapter.ViewHolder` — Resolves `R.id.favoriteIcon` alongside the title and subtitle.
+  Binds the heart's glyph, tint, content description, and click handler in `onBindViewHolder`.
+  The click handler flips the row's `Song` flag, calls `notifyItemChanged`, forwards the change to `mFavoriteListener`, and — when the adapter's context is an `Activity` — shows the favourite confirmation toast through `ToastManager`.
+  The toast is shown by the adapter rather than by the owning activity because the tap is the adapter's event and the feedback belongs on the same turn.
 
-- `MusicPlayer.mFavoriteButton` — New field. Resolved in
-  `initializeViews` after `mMetadataButton`; typeface, glyph,
-  background, and animation set alongside the other control
-  buttons. Its click goes through `MusicService.toggleFavorite`
-  with the standard 500ms debounce. Its tint is written by
-  `refreshTransportControls()` — theme colour when the current
-  song is favourited and the controls are enabled, muted grey
-  when it is not, and the disabled grey when the transport is
-  not available — so `applyNoSongState()` resets it to the
-  inactive tint through that same method.
+- `MusicPlayer.mFavoriteButton` — New field.
+  Resolved in `initializeViews` after `mMetadataButton`; typeface, glyph, background, and animation set alongside the other control buttons.
+  Its click goes through `MusicService.toggleFavorite` with the standard 500ms debounce.
+  Its tint is written by `refreshTransportControls()` — theme colour when the current song is favourited and the controls are enabled, muted grey when it is not, and the disabled grey when the transport is not available — so `applyNoSongState()` resets it to the inactive tint through that same method.
 
-- `MusicPlayer.mExitButton` — New field. Resolved in
-  `initializeViews`. Click handler tracks `mExitPending` and
-  schedules `mResetExitRunnable` to clear the pending state after
-  the toast's 1000 ms duration; a second tap while
-  `mExitPending` calls `finishAffinity()`.
+- `MusicPlayer.mExitButton` — New field.
+  Resolved in `initializeViews`.
+  Click handler tracks `mExitPending` and schedules `mResetExitRunnable` to clear the pending state after the toast's 1000 ms duration; a second tap while `mExitPending` calls `finishAffinity()`.
 
-- `MusicPlayer.refreshTransportControls()` — Reads the current
-  song's favorite flag alongside the playing, repeat, and
-  shuffle states and writes the heart's active tint through the
-  same `updateControlButton` call the other four buttons use.
+- `MusicPlayer.refreshTransportControls()` — Reads the current song's favorite flag alongside the playing, repeat, and shuffle states and writes the heart's active tint through the same `updateControlButton` call the other four buttons use.
 
-- `MusicPlayer.handleGestureDown` / `handleGestureMove` /
-  `handleGestureUp` — The gesture mode enum renames `UNDECIDED`
-  to `TOUCHED`, which is now both the pre-classification state
-  and the state from which a double-tap is detected. On
-  `ACTION_UP` in `TOUCHED`, the handler compares the tap time
-  against the last recorded tap; two taps inside
-  `ViewConfiguration.getDoubleTapTimeout()` call
-  `handleGestureDoubleTap()` and reset the timestamp.
+- `MusicPlayer.handleGestureDown` / `handleGestureMove` / `handleGestureUp` — The gesture mode enum renames `UNDECIDED` to `TOUCHED`, which is now both the pre-classification state and the state from which a double-tap is detected.
+  On `ACTION_UP` in `TOUCHED`, the handler compares the tap time against the last recorded tap; two taps inside `ViewConfiguration.getDoubleTapTimeout()` call `handleGestureDoubleTap()` and reset the timestamp.
 
 - `MusicPlayer.handleGestureDoubleTap()` — New private method.
-  Reads the current song's flag, calls
-  `MusicService.toggleFavorite`, and shows the appropriate
-  favorite toast. The read and the toggle run under
-  `mServiceLock` so a concurrent transport tap cannot
-  interleave.
+  Reads the current song's flag, calls `MusicService.toggleFavorite`, and shows the appropriate favorite toast.
+  The read and the toggle run under `mServiceLock` so a concurrent transport tap cannot interleave.
 
-- `MusicPlayer.handlePlaybackGesture(float)` — New private
-  method. Fires from `handleGestureUp` when the state is
-  `PLAYBACK` and the release is an `ACTION_UP`. Requires twice
-  the touch slop; calls `mMusicService.resume()` on an upward
-  swipe against a paused or ready song, and
-  `mMusicService.togglePlayPause()` on a downward swipe against
-  a playing song. No-op when the song is already in the target
-  state.
+- `MusicPlayer.handlePlaybackGesture(float)` — New private method.
+  Fires from `handleGestureUp` when the state is `PLAYBACK` and the release is an `ACTION_UP`.
+  Requires twice the touch slop; calls `mMusicService.resume()` on an upward swipe against a paused or ready song, and `mMusicService.togglePlayPause()` on a downward swipe against a playing song.
+  No-op when the song is already in the target state.
 
-- `MusicPlayer.applyNoSongState()` — Resets the favorite button
-  to the inactive tint when the empty state is applied. The
-  reset is delivered by `refreshTransportControls()`, which the
-  empty-state path calls; `applyNoSongState()` does not write the
-  heart's tint directly.
+- `MusicPlayer.applyNoSongState()` — Resets the favorite button to the inactive tint when the empty state is applied.
+  The reset is delivered by `refreshTransportControls()`, which the empty-state path calls; `applyNoSongState()` does not write the heart's tint directly.
 
-- `FolderManager.mScopeButton` — New field. Resolved in
-  `initializeViews`; its click handler calls
-  `openPlaybackScopeDialog`. Its enabled state is written by
-  `updateFolderButtons` from the same `isUpdating` gate the
-  IMPORT button uses.
+- `FolderManager.mScopeButton` — New field.
+  Resolved in `initializeViews`; its click handler calls `openPlaybackScopeDialog`.
+  Its enabled state is written by `updateFolderButtons` from the same `isUpdating` gate the IMPORT button uses.
 
-- `FolderManager.openPlaybackScopeDialog()` — New private
-  method. Reads the current scope from preferences, constructs a
-  `PlaybackScopeDialog`, and, on apply, broadcasts
-  `APPLY_PLAYBACK_SCOPE` with the serialized scope.
+- `FolderManager.openPlaybackScopeDialog()` — New private method.
+  Reads the current scope from preferences, constructs a `PlaybackScopeDialog`, and, on apply, broadcasts `APPLY_PLAYBACK_SCOPE` with the serialized scope.
 
-- `FolderManager.updateFolderButtons()` — Includes the scope
-  button in the enable/disable pass, gated on `!isUpdating()`.
+- `FolderManager.updateFolderButtons()` — Includes the scope button in the enable/disable pass, gated on `!isUpdating()`.
 
-- `EdgeScrollHelper` — New class. Installs an
-  `OnItemTouchListener` on any `RecyclerView`. A vertical drag
-  that starts inside the list's leftmost or rightmost 32dp
-  scrolls proportionally: a full viewport-height of finger
-  travel maps to five percent of the total scrollable range,
-  anchored at the position the drag began. The gesture engages
-  only when the content is at least three times taller than the
-  viewport; on a shorter list the edge zones defer to the
-  RecyclerView's own scrolling. A tap is never consumed. The
-  playlist and the playback-scope dialog both install it, so a
-  change to the edge width, the engagement threshold, or the
-  scroll rate takes effect on both surfaces at once.
+- `EdgeScrollHelper` — New class.
+  Installs an `OnItemTouchListener` on any `RecyclerView`.
+  A vertical drag that starts inside the list's leftmost or rightmost 32dp scrolls proportionally: a full viewport-height of finger travel maps to five percent of the total scrollable range, anchored at the position the drag began.
+  The gesture engages only when the content is at least three times taller than the viewport; on a shorter list the edge zones defer to the RecyclerView's own scrolling.
+  A tap is never consumed.
+  The playlist and the playback-scope dialog both install it, so a change to the edge width, the engagement threshold, or the scroll rate takes effect on both surfaces at once.
 
 ## [1.3.9] - Nov 02, 2026
 
 ### Overview
 
-The Metadata Editor's file-targeting is hardened in this release. A
-metadata write now lands on the file the user is editing, whichever
-entry path the editor was opened through and whichever file the SAF
-picker selected during the session. The selected content URI is the
-writer's authoritative target; the absolute path the database and the
-playback consumers key on is either resolved from that URI or accepted
-from the caller only when the database confirms the two describe the
-same file. An unresolved URI from the SAF picker refines rather than
-replaces an existing path. The MODIFY action prefers the URI the
-current session selected over a cached URI stored for a previously-
-bound song, and persists the current session's URI against the current
-path when it uses it. The save path captures the target URI, the target
-path, and the album-art-removed flag before dispatching the write to
-the executor, so a later picker result or a later change to a mutable
-Activity field cannot redirect an in-progress save. The success handler
-builds the announcement from the submitted update overlaid on the pre-
-edit bundle, and the post-write reread is verification only: a reread
-failure cannot suppress the `METADATA_UPDATED` broadcast. The broadcast
-always carries the saved URI; the path is carried when the editor knows
-one, and consumers that key by path resolve it from the URI through
-`SongDatabase`. `MusicService` now owns its own `METADATA_UPDATED`
-receiver, so an edit lands on the in-memory playlist even when no
-activity is alive. Every path that resolves a song's identity for the
-database or the broadcast derives its path from the save target rather
-than from the Activity's mutable `mFilePath`.
+The Metadata Editor's file-targeting is hardened in this release.
+A metadata write now lands on the file the user is editing, whichever entry path the editor was opened through and whichever file the SAF picker selected during the session.
+The selected content URI is the writer's authoritative target; the absolute path the database and the playback consumers key on is either resolved from that URI or accepted from the caller only when the database confirms the two describe the same file.
+An unresolved URI from the SAF picker refines rather than replaces an existing path.
+The MODIFY action prefers the URI the current session selected over a cached URI stored for a previously- bound song, and persists the current session's URI against the current path when it uses it.
+The save path captures the target URI, the target path, and the album-art-removed flag before dispatching the write to the executor, so a later picker result or a later change to a mutable Activity field cannot redirect an in-progress save.
+The success handler builds the announcement from the submitted update overlaid on the pre- edit bundle, and the post-write reread is verification only: a reread failure cannot suppress the `METADATA_UPDATED` broadcast.
+The broadcast always carries the saved URI; the path is carried when the editor knows one, and consumers that key by path resolve it from the URI through `SongDatabase`.
+`MusicService` now owns its own `METADATA_UPDATED` receiver, so an edit lands on the in-memory playlist even when no activity is alive.
+Every path that resolves a song's identity for the database or the broadcast derives its path from the save target rather than from the Activity's mutable `mFilePath`.
 
-The read side of the editor is hardened in the same release. The
-initial load of the current song is performed by a helper that returns
-a metadata bundle for every input, so a cached URI whose SAF grant has
-been revoked, a supplied URI whose file has moved, and a file whose
-embedded tags no longer parse each resolve to the editor's normal
-view mode rather than to a crash on open. The URI's write permission
-is checked before the attempt, so a grant revoked from Settings → App
-Info → Storage is not retried on every open; the file path is then
-read directly. When neither source yields a successful read, the
-editor stays on the current song in view mode: the fields are
-populated from the song database's row for the path, the header stays
-on VIEW MODE, and MODIFY is enabled so the user can re-establish file
-access through the storage access framework. `onCreate()` wraps the
-two calls that touch a cached URI and an unparsed file, so a corrupt
-database row or a file whose metadata cannot be read produces a null
-field rather than an exception. The editor continues to load the song
-the service is actually on: the intent extras name
-`MusicService.getCurrentSong()`, whose playlist entry is refreshed by
-`refreshMetadataForSong` when the `METADATA_UPDATED` broadcast lands,
-so a close and re-open after a save shows the values the service now
-carries.
+The read side of the editor is hardened in the same release.
+The initial load of the current song is performed by a helper that returns a metadata bundle for every input, so a cached URI whose SAF grant has been revoked, a supplied URI whose file has moved, and a file whose embedded tags no longer parse each resolve to the editor's normal view mode rather than to a crash on open.
+The URI's write permission is checked before the attempt, so a grant revoked from Settings → App Info → Storage is not retried on every open; the file path is then read directly.
+When neither source yields a successful read, the editor stays on the current song in view mode: the fields are populated from the song database's row for the path, the header stays on VIEW MODE, and MODIFY is enabled so the user can re-establish file access through the storage access framework.
+`onCreate()` wraps the two calls that touch a cached URI and an unparsed file, so a corrupt database row or a file whose metadata cannot be read produces a null field rather than an exception.
+The editor continues to load the song the service is actually on: the intent extras name `MusicService.getCurrentSong()`, whose playlist entry is refreshed by `refreshMetadataForSong` when the `METADATA_UPDATED` broadcast lands, so a close and re-open after a save shows the values the service now carries.
 
 ---
 
 ### Fixed
 
-- **The editor does not crash when it opens with a stale URI** — A
-  cached URI whose SAF grant has been revoked, or a supplied URI
-  whose file has moved, used to crash the editor before the user
-  could interact with it. The initial read is now performed by
-  `readMetadataSafely()`, which returns the editor's normal
-  `FILE_UNREADABLE` bundle on every failure. The failure resolves
-  to the current song in view mode: the fields are populated from
-  the song database's row for the path, the header stays on VIEW
-  MODE, and MODIFY is enabled so the user can re-establish file
-  access. Revoking SAF permissions from Settings → App Info →
-  Storage is the common trigger.
+- **The editor does not crash when it opens with a stale URI** — A cached URI whose SAF grant has been revoked, or a supplied URI whose file has moved, used to crash the editor before the user could interact with it.
+  The initial read is now performed by `readMetadataSafely()`, which returns the editor's normal `FILE_UNREADABLE` bundle on every failure.
+  The failure resolves to the current song in view mode: the fields are populated from the song database's row for the path, the header stays on VIEW MODE, and MODIFY is enabled so the user can re-establish file access.
+  Revoking SAF permissions from Settings → App Info → Storage is the common trigger.
 
-- **The initial read falls back to the path when the URI is
-  unreadable** — The URI is tried first because it is the editor's
-  write identity; the write permission is checked before the
-  attempt, so a grant revoked from Settings is not retried on
-  every open. When the URI read does not return `SUCCESS`, the
-  file path is tried. When neither source returns `SUCCESS`, the
-  editor stays on the current song in view mode with MODIFY
-  enabled; pressing MODIFY re-establishes file access through the
-  storage access framework.
+- **The initial read falls back to the path when the URI is unreadable** — The URI is tried first because it is the editor's write identity; the write permission is checked before the attempt, so a grant revoked from Settings is not retried on every open.
+  When the URI read does not return `SUCCESS`, the file path is tried.
+  When neither source returns `SUCCESS`, the editor stays on the current song in view mode with MODIFY enabled; pressing MODIFY re-establishes file access through the storage access framework.
 
-- **A malformed cached URI and an unparseable file do not crash
-  the open** — `onCreate()` wraps `Song.getContentUri()` and
-  `CharacterMapper.getSongFromFile()` in try/catch, so a corrupt
-  database row or a file whose metadata cannot be read resolves to
-  a null field rather than to an exception. The safe read then
-  treats the missing field the same way it treats any other absent
-  source.
+- **A malformed cached URI and an unparseable file do not crash the open** — `onCreate()` wraps `Song.getContentUri()` and `CharacterMapper.getSongFromFile()` in try/catch, so a corrupt database row or a file whose metadata cannot be read resolves to a null field rather than to an exception.
+  The safe read then treats the missing field the same way it treats any other absent source.
 
-- **Metadata writes land on the file the user is editing** — The
-  editor treats the URI the current session selected as the write
-  target and derives the absolute path from that URI. When the
-  editor is opened with a `song_uri` extra, a supplied `song_path`
-  is accepted only when `getFilePathFromUri` resolves the URI to it,
-  or when `SongDatabase.getSong(suppliedPath)` returns a row whose
-  `getUri()` equals the supplied URI; otherwise `mFilePath` stays
-  null. When the editor is opened with only a `song_path`, the URI
-  is read from the database as before.
+- **Metadata writes land on the file the user is editing** — The editor treats the URI the current session selected as the write target and derives the absolute path from that URI.
+  When the editor is opened with a `song_uri` extra, a supplied `song_path` is accepted only when `getFilePathFromUri` resolves the URI to it, or when `SongDatabase.getSong(suppliedPath)` returns a row whose `getUri()` equals the supplied URI; otherwise `mFilePath` stays null.
+  When the editor is opened with only a `song_path`, the URI is read from the database as before.
 
-- **URI authority for writing** — `performSaveChanges` dispatches
-  the write with the session-selected URI as its target. Every
-  later use of the song's identity — the database row, the
-  broadcast extras, the failure prompt — is derived from that URI,
-  never from a second path lookup that could have moved on.
+- **URI authority for writing** — `performSaveChanges` dispatches the write with the session-selected URI as its target.
+  Every later use of the song's identity — the database row, the broadcast extras, the failure prompt — is derived from that URI, never from a second path lookup that could have moved on.
 
-- **An unresolved URI refines rather than replaces an existing
-  path** — When the editor is opened with a `song_uri` extra whose
-  URI cannot be resolved to a filesystem path, `mFilePath` is left
-  null unless the database confirms a path is paired with that
-  exact URI. The SAF picker result augments identity rather than
-  replacing it: the pick adds the URI, and a resolved path refines
-  `mFilePath` but never removes one the caller already supplied.
-  The URI is authoritative for writing; the path is authoritative
-  for matching receivers.
+- **An unresolved URI refines rather than replaces an existing path** — When the editor is opened with a `song_uri` extra whose URI cannot be resolved to a filesystem path, `mFilePath` is left null unless the database confirms a path is paired with that exact URI.
+  The SAF picker result augments identity rather than replacing it: the pick adds the URI, and a resolved path refines `mFilePath` but never removes one the caller already supplied.
+  The URI is authoritative for writing; the path is authoritative for matching receivers.
 
-- **MODIFY prefers the current session's URI over a cached URI** —
-  The MODIFY action prefers the session-selected URI when it
-  carries write permission, persists it against the current path
-  through `saveUriToDatabase()`, and only falls back to the stored
-  URI when the session has none.
+- **MODIFY prefers the current session's URI over a cached URI** — The MODIFY action prefers the session-selected URI when it carries write permission, persists it against the current path through `saveUriToDatabase()`, and only falls back to the stored URI when the session has none.
 
-- **In-flight saves are pinned to the target captured at
-  dispatch** — `performSaveChanges` captures the target URI, the
-  target path, the album-art-removed flag, the pre-edit bundle, and
-  the submitted update into `final` locals before it dispatches the
-  write to the executor, and passes them to the success and failure
-  handlers as parameters. A later SAF pick or a later change to
-  `mGrantedFileUri` or `mFilePath` cannot redirect a save that is
-  already running.
+- **In-flight saves are pinned to the target captured at dispatch** — `performSaveChanges` captures the target URI, the target path, the album-art-removed flag, the pre-edit bundle, and the submitted update into `final` locals before it dispatches the write to the executor, and passes them to the success and failure handlers as parameters.
+  A later SAF pick or a later change to `mGrantedFileUri` or `mFilePath` cannot redirect a save that is already running.
 
-- **Database rows identify the song that was written** —
-  `onSaveSuccess` uses the captured target path for the database
-  row, falling back to a path resolved from the saved URI when the
-  captured path is null. A path that cannot be derived from either
-  source leaves the database row unwritten rather than writing a
-  row against the Activity's mutable path.
+- **Database rows identify the song that was written** — `onSaveSuccess` uses the captured target path for the database row, falling back to a path resolved from the saved URI when the captured path is null.
+  A path that cannot be derived from either source leaves the database row unwritten rather than writing a row against the Activity's mutable path.
 
-- **The post-write reread is verification, not a gate** —
-  `onSaveSuccess` builds the announcement from the submitted
-  update overlaid on the pre-edit bundle through
-  `buildAnnouncementFromSubmitted`. The post-write reread supplies
-  values when it succeeds; when it fails, the submitted values are
-  announced anyway, because the write itself succeeded. A reread
-  that returns `FILE_UNREADABLE` or `PARSE_FAILED` cannot suppress
-  the `METADATA_UPDATED` broadcast, cannot prevent the database
-  row from being written, and cannot block playback resumption.
+- **The post-write reread is verification, not a gate** — `onSaveSuccess` builds the announcement from the submitted update overlaid on the pre-edit bundle through `buildAnnouncementFromSubmitted`.
+  The post-write reread supplies values when it succeeds; when it fails, the submitted values are announced anyway, because the write itself succeeded.
+  A reread that returns `FILE_UNREADABLE` or `PARSE_FAILED` cannot suppress the `METADATA_UPDATED` broadcast, cannot prevent the database row from being written, and cannot block playback resumption.
 
-- **Broadcasts carry the URI and, when known, the path** — The
-  `METADATA_UPDATED` broadcast always carries the saved URI. The
-  path is present when the editor knows one. Receivers that key by
-  path resolve it from the URI through `SongDatabase` in their
-  `resolveBroadcastSongPath` helper.
+- **Broadcasts carry the URI and, when known, the path** — The `METADATA_UPDATED` broadcast always carries the saved URI.
+  The path is present when the editor knows one.
+  Receivers that key by path resolve it from the URI through `SongDatabase` in their `resolveBroadcastSongPath` helper.
 
-- **SAF-only writes reach path-keyed consumers** — `MusicPlayer`,
-  `PlaylistActivity`, and `MusicService` each have a
-  `resolveBroadcastSongPath` helper that resolves a URI-only
-  broadcast to a path by matching against `SongDatabase`. On a
-  SAF-only write, the editor knows the URI but not the path; the
-  helper lets path-keyed consumers — the player's current-song
-  check, the playlist row lookup, the service's in-memory playlist
-  refresh — still find the edited song.
+- **SAF-only writes reach path-keyed consumers** — `MusicPlayer`, `PlaylistActivity`, and `MusicService` each have a `resolveBroadcastSongPath` helper that resolves a URI-only broadcast to a path by matching against `SongDatabase`.
+  On a SAF-only write, the editor knows the URI but not the path; the helper lets path-keyed consumers — the player's current-song check, the playlist row lookup, the service's in-memory playlist refresh — still find the edited song.
 
-- **MusicService owns its own METADATA_UPDATED receiver** —
-  `MusicService` registers a receiver for `METADATA_UPDATED` in
-  `onCreate` and unregisters it in `onDestroy`, so the edit lands
-  on the in-memory playlist for the service's whole lifetime —
-  including the case where the player activity has been reclaimed
-  but playback continues.
+- **MusicService owns its own METADATA_UPDATED receiver** — `MusicService` registers a receiver for `METADATA_UPDATED` in `onCreate` and unregisters it in `onDestroy`, so the edit lands on the in-memory playlist for the service's whole lifetime — including the case where the player activity has been reclaimed but playback continues.
 
-- **Shared album-art cache evicted under both keys** —
-  `MetadataEditor` evicts the shared album-art cache for both the
-  path and the URI before the broadcast.
-  `MusicService.refreshMetadataForSong` evicts both keys, then
-  stores the resolved art under both keys, so every consumer —
-  whether it keys by path (the player, the carousel) or by URI —
-  sees the new art on its next access.
+- **Shared album-art cache evicted under both keys** — `MetadataEditor` evicts the shared album-art cache for both the path and the URI before the broadcast.
+  `MusicService.refreshMetadataForSong` evicts both keys, then stores the resolved art under both keys, so every consumer — whether it keys by path (the player, the carousel) or by URI — sees the new art on its next access.
 
-- **Failure handling uses the failed target** — `onSaveFailure`
-  takes the captured target path as a parameter and, on
-  `PERMISSION_DENIED`, writes the fallback database row against
-  that path instead of `mFilePath`.
+- **Failure handling uses the failed target** — `onSaveFailure` takes the captured target path as a parameter and, on `PERMISSION_DENIED`, writes the fallback database row against that path instead of `mFilePath`.
 
 ---
 
 ### Under the Hood
 
-- `MetadataEditor.loadMetadataAsync()` — Delegates the read to
-  `readMetadataSafely()`. The overlay show/hide is unchanged. The
-  status branch routes every non-`SUCCESS` outcome —
-  `FILE_UNREADABLE`, `PARSE_FAILED`, and the unsupported-format
-  case — through `loadCurrentSongInViewMode()`, so the editor
-  stays on the current song in view mode with MODIFY enabled
-  instead of entering the "no file" state or disabling the action
-  button.
+- `MetadataEditor.loadMetadataAsync()` — Delegates the read to `readMetadataSafely()`.
+  The overlay show/hide is unchanged.
+  The status branch routes every non-`SUCCESS` outcome — `FILE_UNREADABLE`, `PARSE_FAILED`, and the unsupported-format case — through `loadCurrentSongInViewMode()`, so the editor stays on the current song in view mode with MODIFY enabled instead of entering the "no file" state or disabling the action button.
 
-- `MetadataEditor.readMetadataSafely()` — New helper. Checks the
-  URI's write permission first; a grant that has been revoked
-  from Settings → App Info → Storage is cleared rather than
-  retried, so the URI read is skipped and the path is read
-  directly. Then tries the URI, then the path. Returns a bundle
-  for every input: a URI read that returns `SUCCESS`
-  short-circuits and, when no path is known yet, resolves one
-  from the URI so a later write has both identities. When the URI
-  read does not return `SUCCESS`, the path is tried. When neither
-  source returns `SUCCESS`, the URI's bundle is returned when one
-  exists — it carries the status and format that match the
-  identity the editor was opened with — and a constructed
-  `FILE_UNREADABLE` bundle otherwise. Never throws.
+- `MetadataEditor.readMetadataSafely()` — New helper.
+  Checks the URI's write permission first; a grant that has been revoked from Settings → App Info → Storage is cleared rather than retried, so the URI read is skipped and the path is read directly.
+  Then tries the URI, then the path.
+  Returns a bundle for every input: a URI read that returns `SUCCESS` short-circuits and, when no path is known yet, resolves one from the URI so a later write has both identities.
+  When the URI read does not return `SUCCESS`, the path is tried.
+  When neither source returns `SUCCESS`, the URI's bundle is returned when one exists — it carries the status and format that match the identity the editor was opened with — and a constructed `FILE_UNREADABLE` bundle otherwise.
+  Never throws.
 
 - `MetadataEditor.loadCurrentSongInViewMode()` — New helper.
-  Called from the `FILE_UNREADABLE`, `PARSE_FAILED`, and
-  unsupported-format branches of both failure paths — the
-  initial `loadMetadataAsync()` read and the `onActivityResult()`
-  re-read after a SAF pick. Populates the title, artist, album,
-  and genre fields from the song database's row for `mFilePath`,
-  restores the header to VIEW MODE, sets the action button to
-  MODIFY, and enables it. The editor's "no file" state is left to
-  the `awaiting_file_selection` entry path and is never reached
-  through a read failure.
+  Called from the `FILE_UNREADABLE`, `PARSE_FAILED`, and unsupported-format branches of both failure paths — the initial `loadMetadataAsync()` read and the `onActivityResult()` re-read after a SAF pick.
+  Populates the title, artist, album, and genre fields from the song database's row for `mFilePath`, restores the header to VIEW MODE, sets the action button to MODIFY, and enables it.
+  The editor's "no file" state is left to the `awaiting_file_selection` entry path and is never reached through a read failure.
 
-- `MetadataEditor.onCreate(Bundle)` — Wraps
-  `Song.getContentUri()` and `CharacterMapper.getSongFromFile()`
-  in try/catch, so a malformed cached URI or an unparseable file
-  resolves to a null field rather than to an exception. The rest
-  of the method is unchanged. When the intent carries a
-  `song_uri` extra, the URI is the editor's write target. A
-  supplied `song_path` is accepted only when
-  `getFilePathFromUri(mGrantedFileUri)` resolves to it, or when
-  `SongDatabase.getSong(suppliedPath)` returns a row whose
-  `getUri()` equals the supplied URI. Otherwise `mFilePath` stays
-  null. When the intent carries only a `song_path`, the URI is
-  read from the database as before.
+- `MetadataEditor.onCreate(Bundle)` — Wraps `Song.getContentUri()` and `CharacterMapper.getSongFromFile()` in try/catch, so a malformed cached URI or an unparseable file resolves to a null field rather than to an exception.
+  The rest of the method is unchanged.
+  When the intent carries a `song_uri` extra, the URI is the editor's write target.
+  A supplied `song_path` is accepted only when `getFilePathFromUri(mGrantedFileUri)` resolves to it, or when `SongDatabase.getSong(suppliedPath)` returns a row whose `getUri()` equals the supplied URI.
+  Otherwise `mFilePath` stays null.
+  When the intent carries only a `song_path`, the URI is read from the database as before.
 
-- `MetadataEditor.handleModifyClick()` — MODIFY prefers
-  `mGrantedFileUri` when the session-selected URI has write
-  permission; the stored URI is consulted only when the session
-  has none. When the session-selected URI is used,
-  `saveUriToDatabase()` persists it against `mFilePath` before
-  edit mode is entered.
+- `MetadataEditor.handleModifyClick()` — MODIFY prefers `mGrantedFileUri` when the session-selected URI has write permission; the stored URI is consulted only when the session has none.
+  When the session-selected URI is used, `saveUriToDatabase()` persists it against `mFilePath` before edit mode is entered.
 
-- `MetadataEditor.onActivityResult(int, int, Intent)` — The SAF
-  picker branch sets `mGrantedFileUri = selectedUri`, then
-  overwrites `mFilePath` only when
-  `getFilePathFromUri(selectedUri)` resolves to a non-null path.
-  A pick whose URI has no filesystem path preserves the existing
-  `mFilePath` rather than clearing it. When the re-read that
-  follows the pick does not return `SUCCESS`, the branch routes
-  through `loadCurrentSongInViewMode()`.
+- `MetadataEditor.onActivityResult(int, int, Intent)` — The SAF picker branch sets `mGrantedFileUri = selectedUri`, then overwrites `mFilePath` only when `getFilePathFromUri(selectedUri)` resolves to a non-null path.
+  A pick whose URI has no filesystem path preserves the existing `mFilePath` rather than clearing it.
+  When the re-read that follows the pick does not return `SUCCESS`, the branch routes through `loadCurrentSongInViewMode()`.
 
-- `MetadataEditor.performSaveChanges()` — Captures
-  `final Uri targetUri = mGrantedFileUri`,
-  `final String targetPath = mFilePath`,
-  `final boolean albumArtWasDeleted = mAlbumArtDeleted`,
-  `final MetadataReader.MetadataBundle preEditBundle = mOriginalData`,
-  and `final MetadataWriter.UpdateBundle submittedUpdate = update`
-  before the executor submission. The success and failure handlers
-  take these as parameters. The write itself is dispatched with
-  `targetUri`.
+- `MetadataEditor.performSaveChanges()` — Captures `final Uri targetUri = mGrantedFileUri`, `final String targetPath = mFilePath`, `final boolean albumArtWasDeleted = mAlbumArtDeleted`, `final MetadataReader.MetadataBundle preEditBundle = mOriginalData`, and `final MetadataWriter.UpdateBundle submittedUpdate = update` before the executor submission.
+  The success and failure handlers take these as parameters.
+  The write itself is dispatched with `targetUri`.
 
-- `MetadataEditor.onSaveSuccess(Uri, String, boolean,
-  MetadataBundle, UpdateBundle)` — Builds the announcement from
-  the submitted update overlaid on the pre-edit bundle via
-  `buildAnnouncementFromSubmitted`. The post-write reread supplies
-  values when it succeeds. `mOriginalData` is set to the verified
-  bundle when the reread succeeds, and to the announcement
-  otherwise. The database row and broadcast path come from
-  `savedPath` when it is non-null, and from
-  `getFilePathFromUri(savedUri)` otherwise. The broadcast always
-  carries the URI; the path is included when known. The shared
-  album-art cache is evicted for both keys before the broadcast.
+- `MetadataEditor.onSaveSuccess(Uri, String, boolean, MetadataBundle, UpdateBundle)` — Builds the announcement from the submitted update overlaid on the pre-edit bundle via `buildAnnouncementFromSubmitted`.
+  The post-write reread supplies values when it succeeds.
+  `mOriginalData` is set to the verified bundle when the reread succeeds, and to the announcement otherwise.
+  The database row and broadcast path come from `savedPath` when it is non-null, and from `getFilePathFromUri(savedUri)` otherwise.
+  The broadcast always carries the URI; the path is included when known.
+  The shared album-art cache is evicted for both keys before the broadcast.
 
-- `MetadataEditor.buildAnnouncementFromSubmitted(MetadataBundle,
-  UpdateBundle)` — New helper. Overlays the submitted update on
-  the pre-edit bundle. A null field in the update inherits the
-  pre-edit value; a zero-length `albumArt` array means "removed"
-  and becomes a null album art on the bundle. A null pre-edit
-  bundle is handled: only the update's non-null fields appear.
+- `MetadataEditor.buildAnnouncementFromSubmitted(MetadataBundle, UpdateBundle)` — New helper.
+  Overlays the submitted update on the pre-edit bundle.
+  A null field in the update inherits the pre-edit value; a zero-length `albumArt` array means "removed" and becomes a null album art on the bundle.
+  A null pre-edit bundle is handled: only the update's non-null fields appear.
 
 - `MetadataEditor.evictAlbumArtCaches(String, Uri)` — New helper.
-  Evicts the shared album-art cache for both the path key and the
-  URI key before the broadcast.
+  Evicts the shared album-art cache for both the path key and the URI key before the broadcast.
 
-- `MetadataEditor.onSaveFailure(WriteResult, String)` — Takes
-  `failedTargetPath` as a parameter and uses it for the
-  `PERMISSION_DENIED` database repair row.
+- `MetadataEditor.onSaveFailure(WriteResult, String)` — Takes `failedTargetPath` as a parameter and uses it for the `PERMISSION_DENIED` database repair row.
 
-- `MetadataEditor.saveUriToDatabase()` — Called from
-  `handleModifyClick()` when the session-selected URI is used, in
-  addition to its previous call sites.
+- `MetadataEditor.saveUriToDatabase()` — Called from `handleModifyClick()` when the session-selected URI is used, in addition to its previous call sites.
 
 - `MusicPlayer.resolveBroadcastSongPath(Intent)` — New helper.
-  Returns the broadcast's `song_path` extra when present;
-  otherwise resolves the `song_uri` extra against `SongDatabase`
-  and returns the matching song's path.
+  Returns the broadcast's `song_path` extra when present; otherwise resolves the `song_uri` extra against `SongDatabase` and returns the matching song's path.
 
-- `MusicPlayer.mMetadataUpdatedReceiver.onReceive` — Uses
-  `resolveBroadcastSongPath` to resolve the edited song's path,
-  then calls `MusicService.refreshMetadataForSong` with the
-  submitted values and evicts the carousel's per-path cache via
-  `AlbumArtCarousel.invalidatePath`.
+- `MusicPlayer.mMetadataUpdatedReceiver.onReceive` — Uses `resolveBroadcastSongPath` to resolve the edited song's path, then calls `MusicService.refreshMetadataForSong` with the submitted values and evicts the carousel's per-path cache via `AlbumArtCarousel.invalidatePath`.
 
-- `PlaylistActivity.resolveBroadcastSongPath(Intent)` — New
-  helper, same shape as `MusicPlayer`'s.
+- `PlaylistActivity.resolveBroadcastSongPath(Intent)` — New helper, same shape as `MusicPlayer`'s.
 
-- `PlaylistActivity.mMetadataUpdatedReceiver.onReceive` — Uses
-  `resolveBroadcastSongPath` to resolve the edited song's path,
-  then updates the display row and, if the edited song is the
-  current playing song, refreshes the playing indicator.
+- `PlaylistActivity.mMetadataUpdatedReceiver.onReceive` — Uses `resolveBroadcastSongPath` to resolve the edited song's path, then updates the display row and, if the edited song is the current playing song, refreshes the playing indicator.
 
-- `MusicService.ACTION_METADATA_UPDATED` — New broadcast-action
-  constant alongside the existing `ACTION_*` constants.
+- `MusicService.ACTION_METADATA_UPDATED` — New broadcast-action constant alongside the existing `ACTION_*` constants.
 
-- `MusicService.registerMetadataUpdatedReceiver()` — New method,
-  called from `onCreate` and torn down in `onDestroy`. Registers
-  a receiver for `METADATA_UPDATED` that uses
-  `resolveBroadcastSongPath` and calls `refreshMetadataForSong`.
+- `MusicService.registerMetadataUpdatedReceiver()` — New method, called from `onCreate` and torn down in `onDestroy`.
+  Registers a receiver for `METADATA_UPDATED` that uses `resolveBroadcastSongPath` and calls `refreshMetadataForSong`.
 
-- `MusicService.resolveBroadcastSongPath(Intent)` — New helper,
-  same shape as `MusicPlayer`'s and `PlaylistActivity`'s.
+- `MusicService.resolveBroadcastSongPath(Intent)` — New helper, same shape as `MusicPlayer`'s and `PlaylistActivity`'s.
 
-- `MusicService.refreshMetadataForSong(...)` — Evicts the shared
-  album-art cache under both the path key and the URI key, then
-  stores the resolved art under both keys. Re-announces
-  unconditionally through `broadcastUpdate()`, which commits the
-  notification on the same main-thread turn.
+- `MusicService.refreshMetadataForSong(...)` — Evicts the shared album-art cache under both the path key and the URI key, then stores the resolved art under both keys.
+  Re-announces unconditionally through `broadcastUpdate()`, which commits the notification on the same main-thread turn.
 
 ## [1.3.8] - Oct 27, 2026
 
 ### Overview
 
-Five changes ship in this release. The notification surface commits the
-same state the player screen commits, on the same main-thread turn. The
-notification's rendered content does not advance during a prepare — it
-stays on the song the player screen is still showing until the
-transition commits. The notification's transport buttons dispatch
-directly to the service rather than through the media session's
-broadcast receiver. The resume path commits PLAYING synchronously so
-every surface flips on the same turn as the user's tap. And the service
-no longer pre-commits or re-posts the notification around a transport
-action, so a tap produces exactly one commit and the icon never flashes
-the pre-tap state.
+Five changes ship in this release.
+The notification surface commits the same state the player screen commits, on the same main-thread turn.
+The notification's rendered content does not advance during a prepare — it stays on the song the player screen is still showing until the transition commits.
+The notification's transport buttons dispatch directly to the service rather than through the media session's broadcast receiver.
+The resume path commits PLAYING synchronously so every surface flips on the same turn as the user's tap.
+And the service no longer pre-commits or re-posts the notification around a transport action, so a tap produces exactly one commit and the icon never flashes the pre-tap state.
 
-`NotificationController.commitFromBroadcast` is the notification's
-primary commit path. `MusicService.broadcastUpdate` calls it
-immediately after `sendBroadcast` returns, with the exact snapshot the
-broadcast described. The player screen commits inside its
-`UPDATE_PLAYER` receiver, which runs synchronously inside that same
-`sendBroadcast` call. Both commits land on the same main-thread turn
-with the same snapshot: same title, artist, art, playing flag,
-generation.
+`NotificationController.commitFromBroadcast` is the notification's primary commit path.
+`MusicService.broadcastUpdate` calls it immediately after `sendBroadcast` returns, with the exact snapshot the broadcast described.
+The player screen commits inside its `UPDATE_PLAYER` receiver, which runs synchronously inside that same `sendBroadcast` call.
+Both commits land on the same main-thread turn with the same snapshot: same title, artist, art, playing flag, generation.
 
-`broadcastUpdate` is the only path that commits the notification's
-rendered content. `onStartCommand` does not commit the notification
-before processing a transport action — that pre-action commit showed
-the state the user had already left, and on some devices the two posts
-interleaved and produced a brief flash of the old icon after the new
-one. `onPlaybackStarted` and `onPlaybackResumed` do not re-post after
-`broadcastUpdate` — a second `startForegroundSync` after the commit
-re-posted the same notification asynchronously, producing the same
-flash. A notification transport tap now produces exactly one commit,
-fired by `broadcastUpdate` when the state machine reaches the new
-state.
+`broadcastUpdate` is the only path that commits the notification's rendered content.
+`onStartCommand` does not commit the notification before processing a transport action — that pre-action commit showed the state the user had already left, and on some devices the two posts interleaved and produced a brief flash of the old icon after the new one.
+`onPlaybackStarted` and `onPlaybackResumed` do not re-post after `broadcastUpdate` — a second `startForegroundSync` after the commit re-posted the same notification asynchronously, producing the same flash.
+A notification transport tap now produces exactly one commit, fired by `broadcastUpdate` when the state machine reaches the new state.
 
-During PREPARING, `snapshotForNotification()` returns the
-current-committed song — the song the player screen is still
-showing — rather than the target. The poll that runs on the
-controller's cadence therefore reads the same song the player screen
-is showing and cannot advance the notification ahead of the player.
-Both surfaces continue to show the song the previous transition
-committed until `broadcastUpdate` fires; both advance to the target
-on that turn.
+During PREPARING, `snapshotForNotification()` returns the current-committed song — the song the player screen is still showing — rather than the target.
+The poll that runs on the controller's cadence therefore reads the same song the player screen is showing and cannot advance the notification ahead of the player.
+Both surfaces continue to show the song the previous transition committed until `broadcastUpdate` fires; both advance to the target on that turn.
 
-The three transport PendingIntents the notification attaches to
-play/pause, next, and previous dispatch through
-`PendingIntent.getService` with private actions (`ACTION_PLAY_PAUSE`,
-`ACTION_NEXT`, `ACTION_PREV`). `MusicService.onStartCommand` handles
-each synchronously on the main thread by calling `togglePlayPause()`,
-`playNextSong()`, or `playPreviousSong()` directly. This is one hop —
-the same path the close button uses — rather than the three-hop
-broadcast receiver → service start → media-session dispatch that
-`MediaButtonReceiver` and
-`MediaSessionCompat.dispatchMediaButtonEvent` introduce. The media
-session still receives lockscreen, bluetooth, and headset media
-buttons through the unchanged `ACTION_MEDIA_BUTTON` path; only the
-notification's own buttons take the direct path.
+The three transport PendingIntents the notification attaches to play/pause, next, and previous dispatch through `PendingIntent.getService` with private actions (`ACTION_PLAY_PAUSE`, `ACTION_NEXT`, `ACTION_PREV`).
+`MusicService.onStartCommand` handles each synchronously on the main thread by calling `togglePlayPause()`, `playNextSong()`, or `playPreviousSong()` directly.
+This is one hop — the same path the close button uses — rather than the three-hop broadcast receiver → service start → media-session dispatch that `MediaButtonReceiver` and `MediaSessionCompat.dispatchMediaButtonEvent` introduce.
+The media session still receives lockscreen, bluetooth, and headset media buttons through the unchanged `ACTION_MEDIA_BUTTON` path; only the notification's own buttons take the direct path.
 
-`doResume` commits PLAYING synchronously, before `player.start()` is
-dispatched to the player thread, so the play/pause icon, the
-notification title and art, the media session state, and the player
-screen's button all flip on the same main-thread turn as the user's
-tap. The async continuation exists only to roll the state back to IDLE
-if `player.start()` actually fails, and the rollback is guarded by
-both `mStartToken` and `mState` so a subsequent user action is not
-clobbered by a start that began before it. `doPause` bumps
-`mStartToken` at entry so a pause that arrives during an in-flight
-resume invalidates the resume's failure continuation. The `READY`
-branch of `togglePlayPause` routes through `doResume`, so a cold-start
-play uses the same synchronous-commit pattern as a `PAUSED` resume.
+`doResume` commits PLAYING synchronously, before `player.start()` is dispatched to the player thread, so the play/pause icon, the notification title and art, the media session state, and the player screen's button all flip on the same main-thread turn as the user's tap.
+The async continuation exists only to roll the state back to IDLE if `player.start()` actually fails, and the rollback is guarded by both `mStartToken` and `mState` so a subsequent user action is not clobbered by a start that began before it.
+`doPause` bumps `mStartToken` at entry so a pause that arrives during an in-flight resume invalidates the resume's failure continuation.
+The `READY` branch of `togglePlayPause` routes through `doResume`, so a cold-start play uses the same synchronous-commit pattern as a `PAUSED` resume.
 
-A generation filter drops any notification read whose generation is
-strictly lower than the last committed generation, so a poll that
-captured state before a broadcast cannot re-apply it after the
-broadcast lands.
+A generation filter drops any notification read whose generation is strictly lower than the last committed generation, so a poll that captured state before a broadcast cannot re-apply it after the broadcast lands.
 
 ---
 
 ### Fixed
 
-- **Notification icon does not flash the pre-tap state** — The
-  service no longer commits the notification before processing a
-  transport action, and no longer re-posts the notification after
-  `broadcastUpdate`. A pause tap produces exactly one commit — the
-  one `broadcastUpdate` fires when `doPause` has committed `PAUSED` —
-  and a resume tap produces exactly one commit — the one
-  `broadcastUpdate` fires when `onPlaybackResumed` has committed
-  `PLAYING`. The icon flips once and stays. On the previous code path
-  the pre-action commit showed the pre-tap state, and the post-commit
-  `startForegroundSync` re-posted the same notification asynchronously;
-  on some devices the two posts interleaved and the user saw a brief
-  flash of the pre-tap icon after the post-tap one.
+- **Notification icon does not flash the pre-tap state** — The service no longer commits the notification before processing a transport action, and no longer re-posts the notification after `broadcastUpdate`.
+  A pause tap produces exactly one commit — the one `broadcastUpdate` fires when `doPause` has committed `PAUSED` — and a resume tap produces exactly one commit — the one `broadcastUpdate` fires when `onPlaybackResumed` has committed `PLAYING`.
+  The icon flips once and stays.
+  On the previous code path the pre-action commit showed the pre-tap state, and the post-commit `startForegroundSync` re-posted the same notification asynchronously; on some devices the two posts interleaved and the user saw a brief flash of the pre-tap icon after the post-tap one.
 
-- **Notification never advances ahead of the player screen** —
-  During PREPARING, `snapshotForNotification()` returns the
-  current-committed song, not the target. The poll that runs on the
-  controller's cadence reads the same song the player screen is
-  showing and therefore cannot advance the notification ahead of the
-  player. `broadcastUpdate` fires when the transition commits, and
-  both surfaces advance on that turn. Without this, the poll would
-  advance the notification to the target while the player screen
-  still shows the outgoing song, and the two surfaces would disagree
-  for the duration of every prepare.
+- **Notification never advances ahead of the player screen** — During PREPARING, `snapshotForNotification()` returns the current-committed song, not the target.
+  The poll that runs on the controller's cadence reads the same song the player screen is showing and therefore cannot advance the notification ahead of the player.
+  `broadcastUpdate` fires when the transition commits, and both surfaces advance on that turn.
+  Without this, the poll would advance the notification to the target while the player screen still shows the outgoing song, and the two surfaces would disagree for the duration of every prepare.
 
-- **Notification play/pause button fires play/pause** — A tap on the
-  notification's play/pause action dispatches the play/pause action
-  to `MusicService.onStartCommand`, which handles it synchronously on
-  the main thread. The three transport PendingIntents carry distinct
-  request codes and private actions that are not shared with the
-  media session. The notification button reaches the state machine
-  in one hop — the same path the close button uses — rather than the
-  three-hop broadcast receiver → service start → media-session
-  dispatch that routed all three buttons through the same dispatch
-  point.
+- **Notification play/pause button fires play/pause** — A tap on the notification's play/pause action dispatches the play/pause action to `MusicService.onStartCommand`, which handles it synchronously on the main thread.
+  The three transport PendingIntents carry distinct request codes and private actions that are not shared with the media session.
+  The notification button reaches the state machine in one hop — the same path the close button uses — rather than the three-hop broadcast receiver → service start → media-session dispatch that routed all three buttons through the same dispatch point.
 
-- **Notification play/pause icon matches the audio on every
-  transport action** — The icon reads the destination of the current
-  transition from the state machine, the same value the player
-  screen's icon reads, and commits it on the same main-thread turn as
-  the player screen. A play/pause tap from the notification, the
-  lockscreen, a headset, or the player screen produces the same icon
-  change on both surfaces on the same frame.
+- **Notification play/pause icon matches the audio on every transport action** — The icon reads the destination of the current transition from the state machine, the same value the player screen's icon reads, and commits it on the same main-thread turn as the player screen.
+  A play/pause tap from the notification, the lockscreen, a headset, or the player screen produces the same icon change on both surfaces on the same frame.
 
-- **Rapid transport taps are handled correctly** — The resume path
-  commits PLAYING synchronously before dispatching `player.start()`,
-  so a pause that follows a resume within the transport debounce
-  window sees `PLAYING` and is honored. `doPause` bumps
-  `mStartToken` to invalidate an in-flight resume's failure
-  continuation. A next or previous that arrives during a prepare is
-  stored as the deferred target and played once the current prepare
-  completes. Every sequence of rapid taps reaches the state machine,
-  and the state machine handles it correctly.
+- **Rapid transport taps are handled correctly** — The resume path commits PLAYING synchronously before dispatching `player.start()`, so a pause that follows a resume within the transport debounce window sees `PLAYING` and is honored.
+  `doPause` bumps `mStartToken` to invalidate an in-flight resume's failure continuation.
+  A next or previous that arrives during a prepare is stored as the deferred target and played once the current prepare completes.
+  Every sequence of rapid taps reaches the state machine, and the state machine handles it correctly.
 
-- **Notification title, artist, and art match the player screen
-  through every transition** — When a transition begins, neither
-  surface advances. Both continue to show the song the previous
-  transition committed. When the transition commits, both advance to
-  the target on the same frame.
+- **Notification title, artist, and art match the player screen through every transition** — When a transition begins, neither surface advances.
+  Both continue to show the song the previous transition committed.
+  When the transition commits, both advance to the target on the same frame.
 
-- **Foreground promotion is retried on failure** — A
-  `startForeground` call that throws leaves the controller's
-  foreground flag `false`, so the next sync retries the promotion.
+- **Foreground promotion is retried on failure** — A `startForeground` call that throws leaves the controller's foreground flag `false`, so the next sync retries the promotion.
   The flag is set only after the call succeeds.
 
 ---
 
 ### Under the Hood
 
-- `NotificationController.ServiceStateSource` — `long
-  getGeneration()`. Returns the service's monotonic transition
-  counter. Both `commitFromBroadcast` and `syncOnce` use it to drop
-  stale reads.
+- `NotificationController.ServiceStateSource` — `long getGeneration()`.
+  Returns the service's monotonic transition counter.
+  Both `commitFromBroadcast` and `syncOnce` use it to drop stale reads.
 
-- `NotificationController.commitFromBroadcast(long, RenderSnapshot)`
-  — the notification's primary commit path.
-  `MusicService.broadcastUpdate` calls it after `sendBroadcast`
-  returns, with the exact snapshot the broadcast described. Marshals
-  to the main thread from any other thread. Drops any call whose
-  generation is strictly lower than the last committed generation.
+- `NotificationController.commitFromBroadcast(long, RenderSnapshot)` — the notification's primary commit path.
+  `MusicService.broadcastUpdate` calls it after `sendBroadcast` returns, with the exact snapshot the broadcast described.
+  Marshals to the main thread from any other thread.
+  Drops any call whose generation is strictly lower than the last committed generation.
 
-- `NotificationController.syncOnce()` — reads
-  `ServiceStateSource.getGeneration()` first. When the generation is
-  strictly lower than `mLastCommittedGeneration`, the read is
-  dropped. When it is at or beyond that generation, the snapshot is
-  committed and `mLastCommittedGeneration` advances.
+- `NotificationController.syncOnce()` — reads `ServiceStateSource.getGeneration()` first.
+  When the generation is strictly lower than `mLastCommittedGeneration`, the read is dropped.
+  When it is at or beyond that generation, the snapshot is committed and `mLastCommittedGeneration` advances.
 
-- `NotificationController.mLastCommittedGeneration` — the generation
-  as of the last committed snapshot. Advanced by both commit paths.
-  Reset in `detachService()`, `clearPlaybackNotification()`, and
-  `shutdown()`.
+- `NotificationController.mLastCommittedGeneration` — the generation as of the last committed snapshot.
+  Advanced by both commit paths.
+  Reset in `detachService()`, `clearPlaybackNotification()`, and `shutdown()`.
 
-- `NotificationController.performPlaybackUpdate()` — the
-  `mPlaybackForeground` flag is set only after
-  `Service.startForeground` returns.
+- `NotificationController.performPlaybackUpdate()` — the `mPlaybackForeground` flag is set only after `Service.startForeground` returns.
 
-- `NotificationController.startForegroundSync()` — removed. It had no
-  remaining callers after the pre-action commit and the post-commit
-  re-post were both removed from `MusicService`. The foreground
-  promotion now happens exclusively inside `performPlaybackUpdate`,
-  driven by `commitFromBroadcast` — the only path that commits the
-  notification.
+- `NotificationController.startForegroundSync()` — removed.
+  It had no remaining callers after the pre-action commit and the post-commit re-post were both removed from `MusicService`.
+  The foreground promotion now happens exclusively inside `performPlaybackUpdate`, driven by `commitFromBroadcast` — the only path that commits the notification.
 
-- `NotificationController` transport PendingIntents — the three
-  intents the notification attaches to play/pause, next, and
-  previous are built through a
-  `buildTransportPendingIntent(int requestCode, String action)`
-  helper with distinct request codes (1, 2, 3) and actions
-  `ACTION_PLAY_PAUSE`, `ACTION_NEXT`, `ACTION_PREV`.
-  `MusicService.onStartCommand` handles each action synchronously on
-  the main thread. This is one hop — the same path the close button
-  uses — rather than the three-hop broadcast receiver → service
-  start → media-session dispatch. The media session still receives
-  lockscreen, bluetooth, and headset media buttons through the
-  unchanged `ACTION_MEDIA_BUTTON` path; only the notification's own
-  buttons take the direct path.
+- `NotificationController` transport PendingIntents — the three intents the notification attaches to play/pause, next, and previous are built through a `buildTransportPendingIntent(int requestCode, String action)` helper with distinct request codes (1, 2, 3) and actions `ACTION_PLAY_PAUSE`, `ACTION_NEXT`, `ACTION_PREV`.
+  `MusicService.onStartCommand` handles each action synchronously on the main thread.
+  This is one hop — the same path the close button uses — rather than the three-hop broadcast receiver → service start → media-session dispatch.
+  The media session still receives lockscreen, bluetooth, and headset media buttons through the unchanged `ACTION_MEDIA_BUTTON` path; only the notification's own buttons take the direct path.
 
-- `MusicService.mStateSource` — implements `getGeneration()`,
-  returning `mGeneration`.
+- `MusicService.mStateSource` — implements `getGeneration()`, returning `mGeneration`.
 
-- `MusicService.mStateSource.snapshotForNotification()` — returns the
-  current-committed song's snapshot during PREPARING, not the
-  target. The player screen does not advance to the target until the
-  transition commits and fires `broadcastUpdate`, and the
-  notification must match the player screen. Without this, the poll
-  would advance the notification to the target while the player
-  screen still shows the outgoing song.
+- `MusicService.mStateSource.snapshotForNotification()` — returns the current-committed song's snapshot during PREPARING, not the target.
+  The player screen does not advance to the target until the transition commits and fires `broadcastUpdate`, and the notification must match the player screen.
+  Without this, the poll would advance the notification to the target while the player screen still shows the outgoing song.
 
-- `MusicService.broadcastUpdate()` — after `sendBroadcast(intent)`,
-  builds the same snapshot from the same main-thread state and calls
-  `mNotificationController.commitFromBroadcast(generation, snapshot)`.
-  The generation is captured before `sendBroadcast` so the commit
-  and the broadcast carry the same value. This is the only path that
-  commits the notification.
+- `MusicService.broadcastUpdate()` — after `sendBroadcast(intent)`, builds the same snapshot from the same main-thread state and calls `mNotificationController.commitFromBroadcast(generation, snapshot)`.
+  The generation is captured before `sendBroadcast` so the commit and the broadcast carry the same value.
+  This is the only path that commits the notification.
 
-- `MusicService.onStartCommand()` — the pre-action
-  `startForegroundSync()` block is removed. Every action commits
-  through its own path (`doPause`, `doResume`, or the completion
-  callback that fires `broadcastUpdate`). Committing before the
-  action showed the pre-action state.
+- `MusicService.onStartCommand()` — the pre-action `startForegroundSync()` block is removed.
+  Every action commits through its own path (`doPause`, `doResume`, or the completion callback that fires `broadcastUpdate`).
+  Committing before the action showed the pre-action state.
 
-- `MusicService.beginTransition(int, int)` — does not commit the
-  notification. During PREPARING the notification continues to show
-  the previous song; it advances to the target when the transition
-  commits through `broadcastUpdate`.
+- `MusicService.beginTransition(int, int)` — does not commit the notification.
+  During PREPARING the notification continues to show the previous song; it advances to the target when the transition commits through `broadcastUpdate`.
 
-- `MusicService.doResume()` — commits PLAYING synchronously through
-  `onPlaybackResumed()` before dispatching `player.start()` to the
-  player thread. The async continuation exists only for the failure
-  rollback, which is guarded by both `mStartToken` and
-  `mState == ServiceState.PLAYING`. On failure, the rollback sets
-  the state to IDLE, releases the player, releases the wake lock,
-  persists the rolled-back state, broadcasts, and re-enters
-  reconciliation.
+- `MusicService.doResume()` — commits PLAYING synchronously through `onPlaybackResumed()` before dispatching `player.start()` to the player thread.
+  The async continuation exists only for the failure rollback, which is guarded by both `mStartToken` and `mState == ServiceState.PLAYING`.
+  On failure, the rollback sets the state to IDLE, releases the player, releases the wake lock, persists the rolled-back state, broadcasts, and re-enters reconciliation.
 
-- `MusicService.doPause()` — bumps `mStartToken` at entry. The bump
-  invalidates any in-flight resume continuation, so a pause that
-  arrives while a resume's `player.start()` is still on the player
-  thread is not followed by a rollback that clobbers the committed
-  `PAUSED`.
+- `MusicService.doPause()` — bumps `mStartToken` at entry.
+  The bump invalidates any in-flight resume continuation, so a pause that arrives while a resume's `player.start()` is still on the player thread is not followed by a rollback that clobbers the committed `PAUSED`.
 
-- `MusicService.togglePlayPause()` — the `READY` branch routes
-  through `doResume()` so a cold-start play commits PLAYING
-  synchronously, matching the `PAUSED` resume path.
+- `MusicService.togglePlayPause()` — the `READY` branch routes through `doResume()` so a cold-start play commits PLAYING synchronously, matching the `PAUSED` resume path.
 
-- `MusicService.onPlaybackResumed()` — called synchronously from
-  `doResume()` before the async `player.start()`. Commits the
-  PLAYING state, the wake lock, the media session activation, the
-  persisted state, and the notification through `broadcastUpdate`.
-  No separate `startForegroundSync` call after the commit;
-  `broadcastUpdate`'s commit already promotes or demotes based on
-  the state.
+- `MusicService.onPlaybackResumed()` — called synchronously from `doResume()` before the async `player.start()`.
+  Commits the PLAYING state, the wake lock, the media session activation, the persisted state, and the notification through `broadcastUpdate`.
+  No separate `startForegroundSync` call after the commit; `broadcastUpdate`'s commit already promotes or demotes based on the state.
 
-- `MusicService.onPlaybackStarted()` — commits the transition
-  through `broadcastUpdate`. No separate `startForegroundSync` call
-  after the commit, same reason.
+- `MusicService.onPlaybackStarted()` — commits the transition through `broadcastUpdate`.
+  No separate `startForegroundSync` call after the commit, same reason.
 
-- `MusicService.handleMediaButton(int)` — the play/pause, next,
-  previous, and bluetooth volume keys are debounced at the same
-  interval as the notification's transport actions and the media
-  session's callbacks. A rapid double-press on a headset collapses
-  to one action, matching the debounce every other transport surface
-  applies.
+- `MusicService.handleMediaButton(int)` — the play/pause, next, previous, and bluetooth volume keys are debounced at the same interval as the notification's transport actions and the media session's callbacks.
+  A rapid double-press on a headset collapses to one action, matching the debounce every other transport surface applies.
 
-- `MusicService.prefetchNotificationArt()` — the art-resolve poke is
-  guarded by `mState != ServiceState.PREPARING`. An art resolve that
-  lands during PREPARING is picked up by the commit that fires from
-  `broadcastUpdate`; an art resolve that lands after the commit pokes
-  the controller on the same main-thread turn as the resolve.
+- `MusicService.prefetchNotificationArt()` — the art-resolve poke is guarded by `mState != ServiceState.PREPARING`.
+  An art resolve that lands during PREPARING is picked up by the commit that fires from `broadcastUpdate`; an art resolve that lands after the commit pokes the controller on the same main-thread turn as the resolve.
 
-- `MusicService` javadoc — "The Commit Turn" describes
-  `broadcastUpdate` as the only notification commit path and
-  describes the PREPARING hold. "Play State Truth" describes the
-  synchronous PLAYING commit at resume.
+- `MusicService` javadoc — "The Commit Turn" describes `broadcastUpdate` as the only notification commit path and describes the PREPARING hold.
+  "Play State Truth" describes the synchronous PLAYING commit at resume.
 
-- `NotificationController` javadoc — "Commit Model", "Generation
-  Filtering", and "Transport PendingIntents" sections document the
-  synchronous commit path, the generation filter, and the direct
-  transport dispatch.
+- `NotificationController` javadoc — "Commit Model", "Generation Filtering", and "Transport PendingIntents" sections document the synchronous commit path, the generation filter, and the direct transport dispatch.
 
 ## [1.3.7] - Oct 25, 2026
 
 ### Overview
 
-This release ships fixes to the incoming-file pathway, the
-notification's play/pause icon, the transport control contrast, the
-Credits license viewer, and four smaller correctness issues in the
-activity. It also adds two colors to the theme list.
+This release ships fixes to the incoming-file pathway, the notification's play/pause icon, the transport control contrast, the Credits license viewer, and four smaller correctness issues in the activity.
+It also adds two colors to the theme list.
 
-An incoming audio file is an explicit play request. The activity hands
-the file's path to the bound service through a direct main-thread
-method call. The service stores the path as its newest incoming-file
-request and, when the playlist already contains it, asks the state
-machine to transition to it on the same turn. When the playlist does
-not yet contain the path, the path stays parked and the reconcile that
-follows the insert's rebuild consumes it. The slot is cleared only
-when the transition it names actually begins, so a request that
-arrives while another transition is preparing survives the prepare and
-plays after it settles. No broadcast is involved, so there is no
-delivery window between the activity and the service.
+An incoming audio file is an explicit play request.
+The activity hands the file's path to the bound service through a direct main-thread method call.
+The service stores the path as its newest incoming-file request and, when the playlist already contains it, asks the state machine to transition to it on the same turn.
+When the playlist does not yet contain the path, the path stays parked and the reconcile that follows the insert's rebuild consumes it.
+The slot is cleared only when the transition it names actually begins, so a request that arrives while another transition is preparing survives the prepare and plays after it settles.
+No broadcast is involved, so there is no delivery window between the activity and the service.
 
-The notification's play/pause icon reads the destination of the
-current transition. The destination is derived from `isPlaying()`,
-which accounts for both the auto-start flag and the pending-pause
-flag, so the value the icon reports and the value the state machine
-settles on are the same. Every state change that shifts
-`isPlaying()` during PREPARING pokes the controller on the same
-main-thread turn, and the audio-focus gain path handles PREPARING
-and READY.
+The notification's play/pause icon reads the destination of the current transition.
+The destination is derived from `isPlaying()`, which accounts for both the auto-start flag and the pending-pause flag, so the value the icon reports and the value the state machine settles on are the same.
+Every state change that shifts `isPlaying()` during PREPARING pokes the controller on the same main-thread turn, and the audio-focus gain path handles PREPARING and READY.
 
-The transport controls draw their inactive stroke and text in a
-value that holds visible contrast against both the app's `#121212`
-background and the palette's lightest theme color, Pure White at
-`#FFFFFF`. The Credits dialog's license viewer cross-fades only when
-the requested license differs from the one on screen. The theme list
-gains two colors at its end, under a category the source labels
-Muted tones: Pure White and Frosted Glass.
+The transport controls draw their inactive stroke and text in a value that holds visible contrast against both the app's `#121212` background and the palette's lightest theme color, Pure White at `#FFFFFF`.
+The Credits dialog's license viewer cross-fades only when the requested license differs from the one on screen.
+The theme list gains two colors at its end, under a category the source labels Muted tones: Pure White and Frosted Glass.
 
-This release also ships four smaller correctness fixes in the
-activity. A cancelled album-art swipe now returns the carousel to
-rest instead of committing a gesture the user did not complete. A
-content-URI file whose MediaStore query returns no rows now falls
-back to the copy path instead of being dropped silently. Two callers
-on different threads can no longer both claim the update slot in
-`safeUpdateUI`. A failed loose-track insert now clears the service's
-pending path, so a later reconcile cannot resolve to a path that was
-never added to the playlist.
+This release also ships four smaller correctness fixes in the activity.
+A cancelled album-art swipe now returns the carousel to rest instead of committing a gesture the user did not complete.
+A content-URI file whose MediaStore query returns no rows now falls back to the copy path instead of being dropped silently.
+Two callers on different threads can no longer both claim the update slot in `safeUpdateUI`.
+A failed loose-track insert now clears the service's pending path, so a later reconcile cannot resolve to a path that was never added to the playlist.
 
 ### Fixed
 
-- **Incoming file plays on every request** — When a user opens an
-  audio file from another app, the activity hands the file's path to
-  the bound service through a direct main-thread method call rather
-  than a broadcast. The service stores the path as the newest
-  incoming-file request and, when the playlist already contains it,
-  asks the state machine to transition to it on the same turn. When
-  the playlist does not yet contain the path, the path stays parked
-  and the reconcile that follows the insert's rebuild resolves it.
-  The slot is cleared only when the transition it names actually
-  begins, so a request that arrives while another transition is
-  preparing survives the prepare and plays after it settles. The
-  prepare-completion callback re-checks the pending slot before
-  settling, so a request whose path landed during the prepare still
-  re-enters reconciliation even when the target and current indices
-  agree. No broadcast is involved, so there is no delivery window
-  between the activity and the service.
+- **Incoming file plays on every request** — When a user opens an audio file from another app, the activity hands the file's path to the bound service through a direct main-thread method call rather than a broadcast.
+  The service stores the path as the newest incoming-file request and, when the playlist already contains it, asks the state machine to transition to it on the same turn.
+  When the playlist does not yet contain the path, the path stays parked and the reconcile that follows the insert's rebuild resolves it.
+  The slot is cleared only when the transition it names actually begins, so a request that arrives while another transition is preparing survives the prepare and plays after it settles.
+  The prepare-completion callback re-checks the pending slot before settling, so a request whose path landed during the prepare still re-enters reconciliation even when the target and current indices agree.
+  No broadcast is involved, so there is no delivery window between the activity and the service.
 
-- **Notification play/pause icon never drifts from the state
-  machine** — The icon reads `isPlaying()`, which reports the
-  destination of a PREPARING transition from both the auto-start
-  flag and the pending-pause flag. A pause scheduled during a
-  prepare — a notification pause tap, a media-session pause, a
-  hardware pause key, an audio-focus loss — sets
-  `mPauseAfterPrepare`, and the icon flips at the moment the
-  request is accepted rather than when the prepare completes. The
-  same holds in reverse: a resume requested during a prepare
-  clears the pending pause and re-arms the auto-start, and the
-  icon follows. Every state change that shifts `isPlaying()`
-  during PREPARING pokes the notification controller on the same
-  main-thread turn.
+- **Notification play/pause icon never drifts from the state machine** — The icon reads `isPlaying()`, which reports the destination of a PREPARING transition from both the auto-start flag and the pending-pause flag.
+  A pause scheduled during a prepare — a notification pause tap, a media-session pause, a hardware pause key, an audio-focus loss — sets `mPauseAfterPrepare`, and the icon flips at the moment the request is accepted rather than when the prepare completes.
+  The same holds in reverse: a resume requested during a prepare clears the pending pause and re-arms the auto-start, and the icon follows.
+  Every state change that shifts `isPlaying()` during PREPARING pokes the notification controller on the same main-thread turn.
 
-- **Audio focus gain handles PREPARING and READY** —
-  `AUDIOFOCUS_GAIN` resumes from PAUSED, PREPARING, and READY.
-  When the state is PREPARING, the gain branch clears the pending
-  pause and re-arms the auto-start; when the state is READY and
-  the prepare completed while the loss was active, the gain
-  branch starts playback. Every branch of the focus handler pokes
-  the controller, so a focus event that does not change the state
-  — a duck, a gain without a remembered pause, a loss while
-  already paused — does not leave the icon from the previous
-  transition.
+- **Audio focus gain handles PREPARING and READY** — `AUDIOFOCUS_GAIN` resumes from PAUSED, PREPARING, and READY.
+  When the state is PREPARING, the gain branch clears the pending pause and re-arms the auto-start; when the state is READY and the prepare completed while the loss was active, the gain branch starts playback.
+  Every branch of the focus handler pokes the controller, so a focus event that does not change the state — a duck, a gain without a remembered pause, a loss while already paused — does not leave the icon from the previous transition.
 
-- **Control button contrast against the lightest theme** — The
-  transport buttons draw their inactive stroke and text in a fixed
-  grey. That value is read against both the app's `#121212`
-  background and the palette's lightest theme color, Pure White at
-  `#FFFFFF`, and a single grey cannot hold its edge against both
-  ends. The inactive color is now `#A0A0A0`, carried as
-  `ThemeHelper.CONTROL_BUTTON_INACTIVE_COLOR`. Every other surface
-  that reads `ThemeHelper.COLOR_TEXT_PRIMARY` keeps its current
-  value.
+- **Control button contrast against the lightest theme** — The transport buttons draw their inactive stroke and text in a fixed grey.
+  That value is read against both the app's `#121212` background and the palette's lightest theme color, Pure White at `#FFFFFF`, and a single grey cannot hold its edge against both ends.
+  The inactive color is now `#A0A0A0`, carried as `ThemeHelper.CONTROL_BUTTON_INACTIVE_COLOR`.
+  Every other surface that reads `ThemeHelper.COLOR_TEXT_PRIMARY` keeps its current value.
 
-- **Credits license viewer skips the cross-fade when the tapped
-  license is already on screen** — The viewer cross-faded even when
-  the tapped license was the one displayed. The touch feedback still
-  plays on every tap; the cross-fade now runs only when the requested
-  license differs from the one on screen.
+- **Credits license viewer skips the cross-fade when the tapped license is already on screen** — The viewer cross-faded even when the tapped license was the one displayed.
+  The touch feedback still plays on every tap; the cross-fade now runs only when the requested license differs from the one on screen.
 
-- **Cancelled album-art swipe returns the carousel to rest** — When
-  the framework cancels a touch sequence mid-carousel — a parent
-  view takes the gesture, the window loses focus, a system
-  interruption arrives — the activity released the carousel with
-  the cancel event's position interpreted as a horizontal
-  displacement. The strip could commit a swipe the user never
-  meant to make, dispatching a next or previous request. The
-  cancel branch now releases the carousel with a displacement of
-  zero, so the strip returns to rest and no transport request is
-  dispatched. Only an `ACTION_UP` reaches `endSwipe` with a
-  meaningful displacement.
+- **Cancelled album-art swipe returns the carousel to rest** — When the framework cancels a touch sequence mid-carousel — a parent view takes the gesture, the window loses focus, a system interruption arrives — the activity released the carousel with the cancel event's position interpreted as a horizontal displacement.
+  The strip could commit a swipe the user never meant to make, dispatching a next or previous request.
+  The cancel branch now releases the carousel with a displacement of zero, so the strip returns to rest and no transport request is dispatched.
+  Only an `ACTION_UP` reaches `endSwipe` with a meaningful displacement.
 
-- **Content-URI file resolution falls back to copy when MediaStore
-  has no DATA column** — `getFilePathFromUri` previously reached
-  its copy-to-temp-file fallback only when the MediaStore query
-  raised. A provider that returned an empty cursor — no `DATA`
-  column exposed, or no rows for the given URI — left the resolved
-  path null and the file was dropped silently. The fallback is now
-  reached from both cases: an exception is logged and the copy is
-  attempted, and an empty cursor proceeds to the copy without
-  logging. Files from providers that do not implement the media
-  store schema play through the same path as any other incoming
-  file.
+- **Content-URI file resolution falls back to copy when MediaStore has no DATA column** — `getFilePathFromUri` previously reached its copy-to-temp-file fallback only when the MediaStore query raised.
+  A provider that returned an empty cursor — no `DATA` column exposed, or no rows for the given URI — left the resolved path null and the file was dropped silently.
+  The fallback is now reached from both cases: an exception is logged and the copy is attempted, and an empty cursor proceeds to the copy without logging.
+  Files from providers that do not implement the media store schema play through the same path as any other incoming file.
 
-- **Loose-track insert failure clears the service's pending path**
-  — When the insert of an incoming loose track fails, the activity
-  now calls `MusicService.clearPendingSongPath()` on the bound
-  service in addition to clearing its own `mPendingIncomingPath`
-  field. Without the service-side clear, a subsequent reconcile
-  could resolve the still-parked path to an index the rebuild had
-  already rejected, and start a transition to a song that was
-  never added to the playlist.
+- **Loose-track insert failure clears the service's pending path** — When the insert of an incoming loose track fails, the activity now calls `MusicService.clearPendingSongPath()` on the bound service in addition to clearing its own `mPendingIncomingPath` field.
+  Without the service-side clear, a subsequent reconcile could resolve the still-parked path to an index the rebuild had already rejected, and start a transition to a song that was never added to the playlist.
 
 ### Added
 
-- **Pure White theme color** — A pure white at index 30 of
-  `ThemeManager.COLOR_VALUES`. The hex value is `#FFFFFF`. The
-  theme's display name is carried in `R.array.theme_names` in
-  each locale. Against the player's `#121212` background, Pure
-  White is the lightest and quietest of the muted entries: it
-  reads as a clean paper surface, so it works as the palette's
-  highest-contrast neutral when the user wants one.
+- **Pure White theme color** — A pure white at index 30 of `ThemeManager.COLOR_VALUES`.
+  The hex value is `#FFFFFF`.
+  The theme's display name is carried in `R.array.theme_names` in each locale.
+  Against the player's `#121212` background, Pure White is the lightest and quietest of the muted entries: it reads as a clean paper surface, so it works as the palette's highest-contrast neutral when the user wants one.
 
-- **Frosted Glass theme color** — A diffuse cool blue-green at
-  index 31 of `ThemeManager.COLOR_VALUES`. The hex value is
-  `#9DBCBC`. The theme's display name is carried in
-  `R.array.theme_names` in each locale. The value is chosen for
-  the player's `#121212` background: the swatch reads as
-  illuminated translucency against near-black, not as a solid
-  panel, and its cool cast supplies the glass read the swatch
-  itself cannot carry. `#9DBCBC` sits below the Pure White swatch
-  in value, so the two muted entries occupy distinct ends of the
-  palette without crowding each other.
+- **Frosted Glass theme color** — A diffuse cool blue-green at index 31 of `ThemeManager.COLOR_VALUES`.
+  The hex value is `#9DBCBC`.
+  The theme's display name is carried in `R.array.theme_names` in each locale.
+  The value is chosen for the player's `#121212` background: the swatch reads as illuminated translucency against near-black, not as a solid panel, and its cool cast supplies the glass read the swatch itself cannot carry.
+  `#9DBCBC` sits below the Pure White swatch in value, so the two muted entries occupy distinct ends of the palette without crowding each other.
 
-- **Both new colors resolve in every locale** — Each locale's
-  `theme_names` string-array carries both entries, so the array's
-  length matches `COLOR_VALUES` at 32 and
-  `ThemeManager.getColorName(int)` resolves a name for both new
-  indices in every language.
+- **Both new colors resolve in every locale** — Each locale's `theme_names` string-array carries both entries, so the array's length matches `COLOR_VALUES` at 32 and `ThemeManager.getColorName(int)` resolves a name for both new indices in every language.
 
 ### Under the Hood
 
-- `MusicService.isPlaying()` — the PREPARING arm returns
-  `mAutoStartOnPrepared && !mPauseAfterPrepare`.
+- `MusicService.isPlaying()` — the PREPARING arm returns `mAutoStartOnPrepared && !mPauseAfterPrepare`.
 
-- `MusicService.pokeNotificationIfAttached()` — a new helper that
-  pokes the controller's awareness poll when one is installed and
-  is a no-op when it is not. Called from every state change that
-  shifts `isPlaying()`.
+- `MusicService.pokeNotificationIfAttached()` — a new helper that pokes the controller's awareness poll when one is installed and is a no-op when it is not.
+  Called from every state change that shifts `isPlaying()`.
 
-- `MusicService.beginTransition(int, int)` — pokes the controller
-  after setting the state to PREPARING, so the icon flips on the
-  turn the transition begins. Consumes the pending incoming-file
-  path when it names the target, at the moment the transition
-  begins rather than at reconcile time; a pending path that names
-  a different target survives and is re-checked on the completion
-  of this transition.
+- `MusicService.beginTransition(int, int)` — pokes the controller after setting the state to PREPARING, so the icon flips on the turn the transition begins.
+  Consumes the pending incoming-file path when it names the target, at the moment the transition begins rather than at reconcile time; a pending path that names a different target survives and is re-checked on the completion of this transition.
 
-- `MusicService.togglePlayPause()` — the PREPARING arm reads the
-  current destination and toggles it. A transition heading toward
-  playback gets a pending pause and a cleared transient-loss
-  flag; a transition already headed toward pause has the pending
-  pause cleared and the auto-start re-armed. Both branches poke
-  the controller.
+- `MusicService.togglePlayPause()` — the PREPARING arm reads the current destination and toggles it.
+  A transition heading toward playback gets a pending pause and a cleared transient-loss flag; a transition already headed toward pause has the pending pause cleared and the auto-start re-armed.
+  Both branches poke the controller.
 
-- `MusicService.pause()` — the PREPARING arm pokes the controller
-  after setting `mPauseAfterPrepare`.
+- `MusicService.pause()` — the PREPARING arm pokes the controller after setting `mPauseAfterPrepare`.
 
-- `MusicService.resume()` — gained a PREPARING arm that clears
-  `mPauseAfterPrepare` and re-arms `mAutoStartOnPrepared` when
-  either was set, and pokes the controller.
+- `MusicService.resume()` — gained a PREPARING arm that clears `mPauseAfterPrepare` and re-arms `mAutoStartOnPrepared` when either was set, and pokes the controller.
 
-- `MusicService.handleAudioFocusChange(int)` — the
-  `AUDIOFOCUS_GAIN` branch handles PAUSED, PREPARING, and READY.
-  The PREPARING case clears the pending pause and re-arms the
-  auto-start; the READY case runs the READY-to-PLAYING
-  transition. Every branch pokes the controller.
+- `MusicService.handleAudioFocusChange(int)` — the `AUDIOFOCUS_GAIN` branch handles PAUSED, PREPARING, and READY.
+  The PREPARING case clears the pending pause and re-arms the auto-start; the READY case runs the READY-to-PLAYING transition.
+  Every branch pokes the controller.
 
-- `MusicService.setupMediaSession()` — the `onPlay` and `onPause`
-  callbacks gained PREPARING arms that reflect the request and
-  poke the controller.
+- `MusicService.setupMediaSession()` — the `onPlay` and `onPause` callbacks gained PREPARING arms that reflect the request and poke the controller.
 
-- `MusicService.handleMediaButton(int)` — the
-  `KEYCODE_MEDIA_PLAY` and `KEYCODE_MEDIA_PAUSE` arms gained
-  PREPARING handling and poke the controller.
+- `MusicService.handleMediaButton(int)` — the `KEYCODE_MEDIA_PLAY` and `KEYCODE_MEDIA_PAUSE` arms gained PREPARING handling and poke the controller.
 
-- `MusicService.reconcile()` — resolves a pending incoming-file
-  path against the current playlist before the need check. A
-  pending path that resolves to an index overrides the
-  reconcile's ordinary target; one that resolves to the current
-  song is consumed without a transition. The no-op branch clears
-  `mDeferredReconcile` before returning, so a request that
-  resolved to the current song cannot be re-entered by a later
-  completion callback.
+- `MusicService.reconcile()` — resolves a pending incoming-file path against the current playlist before the need check.
+  A pending path that resolves to an index overrides the reconcile's ordinary target; one that resolves to the current song is consumed without a transition.
+  The no-op branch clears `mDeferredReconcile` before returning, so a request that resolved to the current song cannot be re-entered by a later completion callback.
 
-- `MusicService.setPlaylist(ArrayList<Song>, boolean)` — the
-  PREPARING branch re-resolves the target's index against the
-  new playlist, then calls `reconcile()` before broadcasting.
-  The pending slot is not consumed here; it is consumed only
-  inside `beginTransition` when the transition it names actually
-  begins, so a request that arrives during the prepare survives
-  the rebuild.
+- `MusicService.setPlaylist(ArrayList<Song>, boolean)` — the PREPARING branch re-resolves the target's index against the new playlist, then calls `reconcile()` before broadcasting.
+  The pending slot is not consumed here; it is consumed only inside `beginTransition` when the transition it names actually begins, so a request that arrives during the prepare survives the rebuild.
 
-- `MusicService.requestIncomingFile(String)` — a new method
-  that records the given path as the newest incoming-file
-  request and re-enters reconciliation. Called from the bound
-  service on the main thread by the activity's incoming-file
-  handoff. The newest request overwrites the field — the user
-  who opens a second file while the first is still preparing
-  gets the second file, not the first.
+- `MusicService.requestIncomingFile(String)` — a new method that records the given path as the newest incoming-file request and re-enters reconciliation.
+  Called from the bound service on the main thread by the activity's incoming-file handoff.
+  The newest request overwrites the field — the user who opens a second file while the first is still preparing gets the second file, not the first.
 
-- `MusicService.mPendingSongPath` — the incoming-file request
-  slot. Set by `requestIncomingFile` and by `setPendingSongPath`,
-  read by `reconcile` and by the prepare-completion callbacks
-  (`onPrepared` and `onPlaybackStarted`). Cleared only when
-  `beginTransition` begins the transition the path names, or when
-  `reconcile` resolves it to the current song. A rebuild that
-  runs before either of those leaves the slot set, so a request
-  that arrives during a prepare survives the prepare.
+- `MusicService.mPendingSongPath` — the incoming-file request slot.
+  Set by `requestIncomingFile` and by `setPendingSongPath`, read by `reconcile` and by the prepare-completion callbacks (`onPrepared` and `onPlaybackStarted`).
+  Cleared only when `beginTransition` begins the transition the path names, or when `reconcile` resolves it to the current song.
+  A rebuild that runs before either of those leaves the slot set, so a request that arrives during a prepare survives the prepare.
 
-- `MusicPlayer.handOffIncomingPath(String)` — hands the path to
-  the bound service through a direct call when the service is
-  bound, or parks it on `mPendingIncomingPath` when the bind has
-  not yet completed. The parked path is handed off from
-  `onServiceConnected`. No broadcast is involved on either path.
+- `MusicPlayer.handOffIncomingPath(String)` — hands the path to the bound service through a direct call when the service is bound, or parks it on `mPendingIncomingPath` when the bind has not yet completed.
+  The parked path is handed off from `onServiceConnected`.
+  No broadcast is involved on either path.
 
-- `MusicPlayer.insertLooseTrackAndHandOff` — the `onError`
-  branch now calls `MusicService.clearPendingSongPath()` when
-  the service is bound. The activity's own parked field is
-  cleared first, as before.
+- `MusicPlayer.insertLooseTrackAndHandOff` — the `onError` branch now calls `MusicService.clearPendingSongPath()` when the service is bound.
+  The activity's own parked field is cleared first, as before.
 
-- `MusicPlayer.safeUpdateUI(Runnable)` — the update slot is
-  claimed with `mIsUpdatingUI.compareAndSet(false, true)`
-  instead of a read-then-write. Two callers that both observed
-  `false` can no longer both post the update. `mPendingUIUpdate`
-  is now `volatile`, so the queued update written by a losing
-  caller is visible to the main thread's `finally` block when
-  it decides whether to re-enter.
+- `MusicPlayer.safeUpdateUI(Runnable)` — the update slot is claimed with `mIsUpdatingUI.compareAndSet(false, true)` instead of a read-then-write.
+  Two callers that both observed `false` can no longer both post the update.
+  `mPendingUIUpdate` is now `volatile`, so the queued update written by a losing caller is visible to the main thread's `finally` block when it decides whether to re-enter.
 
-- `MusicPlayer.handleGestureUp(View, MotionEvent)` — an
-  `ACTION_CANCEL` passes a displacement of `0f` to
-  `endSwipe`. Only an `ACTION_UP` reaches `endSwipe` with the
-  event's actual horizontal displacement.
+- `MusicPlayer.handleGestureUp(View, MotionEvent)` — an `ACTION_CANCEL` passes a displacement of `0f` to `endSwipe`.
+  Only an `ACTION_UP` reaches `endSwipe` with the event's actual horizontal displacement.
 
-- `MusicPlayer.getFilePathFromUri(Uri)` — the copy-to-temp-file
-  fallback is reached from both the exception case and the
-  empty-cursor case. A provider that returns no rows for a valid
-  content URI no longer leaves the path null.
+- `MusicPlayer.getFilePathFromUri(Uri)` — the copy-to-temp-file fallback is reached from both the exception case and the empty-cursor case.
+  A provider that returns no rows for a valid content URI no longer leaves the path null.
 
-- `ThemeManager.COLOR_VALUES` — two entries appended at indices
-  30 and 31, under a `// Muted tones.` category comment. Index 30
-  carries `#FFFFFF` under the name Pure White. Index 31 carries
-  `#9DBCBC` under the name Frosted Glass.
+- `ThemeManager.COLOR_VALUES` — two entries appended at indices 30 and 31, under a `// Muted tones.` category comment.
+  Index 30 carries `#FFFFFF` under the name Pure White.
+  Index 31 carries `#9DBCBC` under the name Frosted Glass.
 
-- `ThemeHelper.CONTROL_BUTTON_INACTIVE_COLOR` — a new constant at
-  `0xFFA0A0A0`, used by `updateControlButton(...)` for the
-  inactive stroke and inactive text of the transport buttons. It
-  is separate from `COLOR_TEXT_PRIMARY`, which keeps its value and
-  continues to serve every other surface that reads it.
+- `ThemeHelper.CONTROL_BUTTON_INACTIVE_COLOR` — a new constant at `0xFFA0A0A0`, used by `updateControlButton(...)` for the inactive stroke and inactive text of the transport buttons.
+  It is separate from `COLOR_TEXT_PRIMARY`, which keeps its value and continues to serve every other surface that reads it.
 
-- `CreditsDialog.updateLicenseViewer(String)` — returns early when
-  the requested text equals `mCurrentLicenseText`, which is set
-  before the cross-fade begins so a second tap during a running
-  fade is also a no-op.
+- `CreditsDialog.updateLicenseViewer(String)` — returns early when the requested text equals `mCurrentLicenseText`, which is set before the cross-fade begins so a second tap during a running fade is also a no-op.
 
-- `res/values/strings.xml` and every locale's `strings.xml` —
-  the `theme_names` string-array carries two additional entries
-  in each file, so the array's length matches `COLOR_VALUES` and
-  `ThemeManager.getColorName(int)` resolves a name for both new
-  indices in every locale.
+- `res/values/strings.xml` and every locale's `strings.xml` — the `theme_names` string-array carries two additional entries in each file, so the array's length matches `COLOR_VALUES` and `ThemeManager.getColorName(int)` resolves a name for both new indices in every locale.
 
 ## [1.3.6] - Oct 21, 2026
 
 ### Overview
 
-Two fixes ship in this release: a layout consistency pass for the
-Metadata Editor, and a notification state flush for audio focus
-changes.
+Two fixes ship in this release: a layout consistency pass for the Metadata Editor, and a notification state flush for audio focus changes.
 
-The vertical spacing in the Metadata Editor previously relied on a mix
-of parent container padding and child view padding. The spacing is now
-driven entirely by explicit `layout_marginTop` values on the section
-labels, guaranteeing uniform bounding boxes and consistent behavior
-across all screen sizes.
+The vertical spacing in the Metadata Editor previously relied on a mix of parent container padding and child view padding.
+The spacing is now driven entirely by explicit `layout_marginTop` values on the section labels, guaranteeing uniform bounding boxes and consistent behavior across all screen sizes.
 
-The notification surface previously derived its play/pause icon from
-the service's state machine, but the service did not flush the
-notification controller on every audio focus change. A focus event
-that did not change the state — a duck, a gain without a remembered
-pause, a loss while already paused — could leave the notification
-showing the state from the previous transition. The service now pokes
-the controller's awareness poll on every focus change, ensuring the
-icon always reflects the current state.
+The notification surface previously derived its play/pause icon from the service's state machine, but the service did not flush the notification controller on every audio focus change.
+A focus event that did not change the state — a duck, a gain without a remembered pause, a loss while already paused — could leave the notification showing the state from the previous transition.
+The service now pokes the controller's awareness poll on every focus change, ensuring the icon always reflects the current state.
 
 ### Fixed
 
-- **Metadata Editor Label Bounding Boxes** — The "Title" label
-  relied on its parent's padding, while "Artist" and "Album" used
-  their own `paddingTop`, and the grouped rows ("Year/Genre",
-  "Track/Info", "Lyrics") used parent `paddingTop`. This resulted in
-  inconsistent layout bounds for the `TextView` elements. All
-  section labels and rows now use `layout_marginTop="12dp"` to
-  establish the gap, removing the reliance on parent paddings.
-- **Metadata Editor Lyrics Label Bottom Padding** — The bottom padding
-  of the "Lyrics" label was 8dp, while every other label used 4dp. It
-  has been reduced to 4dp to match the rest of the form.
-- **Notification Play/Pause State During Audio Focus Changes** — The
-  notification controller is now flushed on every audio focus change.
-  Previously, ducking (`AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK`) or a
-  transient loss that arrived during `PREPARING` could leave the
-  notification displaying a stale play/pause icon. The service now
-  pokes the controller on every branch of `handleAudioFocusChange`,
-  and correctly prevents auto-starting a prepared track if focus was
-  lost during the prepare.
-- **Notification State During Prepare** — When a permanent or
-  transient audio focus loss arrives while the state machine is in
-  `PREPARING`, the service now sets `mPauseAfterPrepare` and clears
-  `mAutoStartOnPrepared`. This prevents the track from starting
-  playback on a lost focus.
+- **Metadata Editor Label Bounding Boxes** — The "Title" label relied on its parent's padding, while "Artist" and "Album" used their own `paddingTop`, and the grouped rows ("Year/Genre", "Track/Info", "Lyrics") used parent `paddingTop`.
+  This resulted in inconsistent layout bounds for the `TextView` elements.
+  All section labels and rows now use `layout_marginTop="12dp"` to establish the gap, removing the reliance on parent paddings.
+- **Metadata Editor Lyrics Label Bottom Padding** — The bottom padding of the "Lyrics" label was 8dp, while every other label used 4dp.
+  It has been reduced to 4dp to match the rest of the form.
+- **Notification Play/Pause State During Audio Focus Changes** — The notification controller is now flushed on every audio focus change.
+  Previously, ducking (`AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK`) or a transient loss that arrived during `PREPARING` could leave the notification displaying a stale play/pause icon.
+  The service now pokes the controller on every branch of `handleAudioFocusChange`, and correctly prevents auto-starting a prepared track if focus was lost during the prepare.
+- **Notification State During Prepare** — When a permanent or transient audio focus loss arrives while the state machine is in `PREPARING`, the service now sets `mPauseAfterPrepare` and clears `mAutoStartOnPrepared`.
+  This prevents the track from starting playback on a lost focus.
 
 ### Changed
 
-- **Metadata Editor Album Art Section** — Removed the
-  `paddingBottom="8dp"` from the album art container. The space
-  between the album art and the "Title" label is now provided by the
-  Title label's `layout_marginTop`.
-- **Metadata Editor Editable Fields Container** — Removed the
-  `paddingTop="4dp"` from the parent container holding the editable
-  fields. The top spacing is now entirely managed by the Title label.
+- **Metadata Editor Album Art Section** — Removed the `paddingBottom="8dp"` from the album art container.
+  The space between the album art and the "Title" label is now provided by the Title label's `layout_marginTop`.
+- **Metadata Editor Editable Fields Container** — Removed the `paddingTop="4dp"` from the parent container holding the editable fields.
+  The top spacing is now entirely managed by the Title label.
 
 ### Under the Hood
 
-- `activity_metadata_editor.xml` — Replaced `paddingTop` with
-  `layout_marginTop="12dp"` for the "Title", "Artist", "Album" text
-  views, and the "Year/Genre", "Track/Info", and "Lyrics" row
-  containers. Removed the `paddingTop` from the "Editable Fields"
-  `LinearLayout`, removed the `paddingBottom` from the "Album Art
-  Section" `LinearLayout`, and reduced the "Lyrics" label's
-  `paddingBottom` to `4dp`.
-- `MusicService.java` — Updated `handleAudioFocusChange(int)` to call
-  `mNotificationController.pokeAwareness()` on every branch. Added
-  handling for the `PREPARING` state during `AUDIOFOCUS_LOSS` and
-  `AUDIOFOCUS_LOSS_TRANSIENT` to set `mPauseAfterPrepare` and clear
-  `mAutoStartOnPrepared`.
+- `activity_metadata_editor.xml` — Replaced `paddingTop` with `layout_marginTop="12dp"` for the "Title", "Artist", "Album" text views, and the "Year/Genre", "Track/Info", and "Lyrics" row containers.
+  Removed the `paddingTop` from the "Editable Fields" `LinearLayout`, removed the `paddingBottom` from the "Album Art Section" `LinearLayout`, and reduced the "Lyrics" label's `paddingBottom` to `4dp`.
+- `MusicService.java` — Updated `handleAudioFocusChange(int)` to call `mNotificationController.pokeAwareness()` on every branch.
+  Added handling for the `PREPARING` state during `AUDIOFOCUS_LOSS` and `AUDIOFOCUS_LOSS_TRANSIENT` to set `mPauseAfterPrepare` and clear `mAutoStartOnPrepared`.
 
 ## [1.3.5] - Oct 20, 2026
 
 ### Overview
 
-A visual alignment pass across every activity and dialog. String-based
-separators have been replaced with explicit 8dp start margins in headers
-and list rows, guaranteeing a visible, consistent gap across all screen
-sizes and languages. The Music Player timers, the Credits dialog version
-header, and the Equalizer frequency bands have been adjusted to anchor
-correctly to the 16dp edge and maintain consistent spacing in
-right-to-left languages like Arabic. A layout wrapping issue in the
-metadata editor's header has also been resolved.
+A visual alignment pass across every activity and dialog.
+String-based separators have been replaced with explicit 8dp start margins in headers and list rows, guaranteeing a visible, consistent gap across all screen sizes and languages.
+The Music Player timers, the Credits dialog version header, and the Equalizer frequency bands have been adjusted to anchor correctly to the 16dp edge and maintain consistent spacing in right-to-left languages like Arabic.
+A layout wrapping issue in the metadata editor's header has also been resolved.
 
 ### Fixed
 
-- **Music Player Timer Alignment** — The current time and total
-  duration text views now anchor flush to the left and right ends of
-  the seek bar in every language. A flexible spacer between them
-  ensures they remain separated without overflowing their bounding
-  boxes.
+- **Music Player Timer Alignment** — The current time and total duration text views now anchor flush to the left and right ends of the seek bar in every language.
+  A flexible spacer between them ensures they remain separated without overflowing their bounding boxes.
 
-- **Credits Dialog Version Header** — The `VERSION` label, the
-  language button, and the version number now use relative start and
-  end gravity. This anchors the version number to the 16dp trailing
-  edge in all languages, preventing it from pushing toward the
-  language button in right-to-left layouts.
+- **Credits Dialog Version Header** — The `VERSION` label, the language button, and the version number now use relative start and end gravity.
+  This anchors the version number to the 16dp trailing edge in all languages, preventing it from pushing toward the language button in right-to-left layouts.
 
-- **Equalizer Frequency Bands Spacing** — The dynamically generated
-  frequency bands now apply the same 8dp margin between the frequency
-  label and the value text (e.g., "60 Hz" and "+2.0 dB") that the
-  static effect controls carry.
+- **Equalizer Frequency Bands Spacing** — The dynamically generated frequency bands now apply the same 8dp margin between the frequency label and the value text (e.g., "60 Hz" and "+2.0 dB") that the static effect controls carry.
 
-- **Metadata Editor Header Wrapping** — The file format label
-  (e.g., "MP3 file") in the metadata editor's header now sizes itself
-  to its content and is anchored to the trailing edge with a consistent
-  8dp start margin.
+- **Metadata Editor Header Wrapping** — The file format label (e.g., "MP3 file") in the metadata editor's header now sizes itself to its content and is anchored to the trailing edge with a consistent 8dp start margin.
 
 ### Changed
 
-**Header and List Separators.** The codebase has moved away from
-string-based separators (`" "`) in Java and now uses explicit visual
-margins directly in the XML layouts and programmatic UI builders. This
-ensures the spacing is consistent and not subject to text-rendering
-quirks.
+**Header and List Separators.**
+The codebase has moved away from string-based separators (`" "`) in Java and now uses explicit visual margins directly in the XML layouts and programmatic UI builders.
+This ensures the spacing is consistent and not subject to text-rendering quirks.
 
-- **Playlist Header** — The song count and the `SORT` button now sit
-  after the sort mode label, separated by an 8dp start margin.
-- **Folder Manager Header** — The folder count now sits after the list
-  header, separated by an 8dp start margin.
-- **Folder List Rows** — The folder icon, the folder name, and the
-  `✕` button are now separated by 8dp start margins in
-  `item_folder.xml`.
-- **Metadata Editor Header** — The file format now sits after the
-  mode label, separated by an 8dp start margin.
-- **Credits Version Header** — The `VERSION` label, the language
-  button, and the version number are now visually separated by their
-  respective layout weights and gravity.
-- **Language Dialog Header** — The language count now sits after
-  the list header, separated by an 8dp start margin.
-- **Preset Dialog Header** — The preset count now sits after the
-  list header, separated by an 8dp start margin.
-- **Theme Dialog Header** — The theme count now sits after the
-  list header, separated by an 8dp start margin.
+- **Playlist Header** — The song count and the `SORT` button now sit after the sort mode label, separated by an 8dp start margin.
+- **Folder Manager Header** — The folder count now sits after the list header, separated by an 8dp start margin.
+- **Folder List Rows** — The folder icon, the folder name, and the `✕` button are now separated by 8dp start margins in `item_folder.xml`.
+- **Metadata Editor Header** — The file format now sits after the mode label, separated by an 8dp start margin.
+- **Credits Version Header** — The `VERSION` label, the language button, and the version number are now visually separated by their respective layout weights and gravity.
+- **Language Dialog Header** — The language count now sits after the list header, separated by an 8dp start margin.
+- **Preset Dialog Header** — The preset count now sits after the list header, separated by an 8dp start margin.
+- **Theme Dialog Header** — The theme count now sits after the list header, separated by an 8dp start margin.
 
 ### Under the Hood
 
-- `activity_playlist.xml`, `activity_folder_manager.xml`,
-  `item_folder.xml`, `activity_metadata_editor.xml` — Added
-  `android:layout_marginStart="8dp"` to adjacent elements in the
-  headers and list rows.
-- `activity_music_player.xml` — Replaced the weighted timer text
-  views with `wrap_content` text views and a flexible `<Space>`
-  element to separate them. Added `start` and `end` gravity to the
-  timers.
-- `EqualizerActivity.java` — Added `setMarginStart(dpToPx(8))` to the
-  value text in `createSingleBandControl` to match the XML effect
-  controls.
-- `CreditsDialog.java` — Changed the version header text views to use
-  relative `START`/`END` gravity and removed manual RTL view swapping
-  from `createVersionHeader()`.
-- `PlaylistActivity.java`, `FolderManager.java`, `FolderAdapter.java`,
-  `MetadataEditor.java`, `LanguageDialog.java`, `PresetDialog.java`,
-  `ThemeDialog.java` — Removed the string separator constants and
-  updated the view builders to use `LayoutParams.setMarginStart(8dp)`
-  instead.
+- `activity_playlist.xml`, `activity_folder_manager.xml`, `item_folder.xml`, `activity_metadata_editor.xml` — Added `android:layout_marginStart="8dp"` to adjacent elements in the headers and list rows.
+- `activity_music_player.xml` — Replaced the weighted timer text views with `wrap_content` text views and a flexible `<Space>` element to separate them.
+  Added `start` and `end` gravity to the timers.
+- `EqualizerActivity.java` — Added `setMarginStart(dpToPx(8))` to the value text in `createSingleBandControl` to match the XML effect controls.
+- `CreditsDialog.java` — Changed the version header text views to use relative `START`/`END` gravity and removed manual RTL view swapping from `createVersionHeader()`.
+- `PlaylistActivity.java`, `FolderManager.java`, `FolderAdapter.java`, `MetadataEditor.java`, `LanguageDialog.java`, `PresetDialog.java`, `ThemeDialog.java` — Removed the string separator constants and updated the view builders to use `LayoutParams.setMarginStart(8dp)` instead.
 
 ## [1.3.4] - Oct 15, 2026
 
 ### Overview
 
-An internal consistency pass. Sixteen places where the codebase's own
-conventions had not been applied were brought into line with the
-conventions the rest of the codebase uses. No user-visible behavior
-change, with one exception: four dialogs now log a warning when the
-app's localized context cannot be reached, in the same way the
-managers already do.
+An internal consistency pass.
+Sixteen places where the codebase's own conventions had not been applied were brought into line with the conventions the rest of the codebase uses.
+No user-visible behavior change, with one exception: four dialogs now log a warning when the app's localized context cannot be reached, in the same way the managers already do.
 
 ### Changed
 
-**Singleton shape.** Four classes were brought into the shape the
-codebase's own convention prescribes for their group. `EqualizerManager`
-and `PlaylistManager` had been using a synchronized method for classes
-with no construction-time side effects; both now use the
-double-checked locking pattern the lazy-access group uses.
-`ThemeHelper` had been carrying three protections for one invariant —
-a volatile field, a synchronized method, and an inner synchronized
-block — where the pattern calls for two; the redundant protection is
-removed. `OverlayManager` had a volatile field on a class whose
-`init` is a synchronized method and whose `getInstance` reads after
-the fact; the volatile is removed.
+**Singleton shape.**
+Four classes were brought into the shape the codebase's own convention prescribes for their group.
+`EqualizerManager` and `PlaylistManager` had been using a synchronized method for classes with no construction-time side effects; both now use the double-checked locking pattern the lazy-access group uses.
+`ThemeHelper` had been carrying three protections for one invariant — a volatile field, a synchronized method, and an inner synchronized block — where the pattern calls for two; the redundant protection is removed.
+`OverlayManager` had a volatile field on a class whose `init` is a synchronized method and whose `getInstance` reads after the fact; the volatile is removed.
 
-- `EqualizerManager.getInstance(Context)` — double-checked locking with
-  a volatile field, matching `AlbumArtCache`, `LanguageManager`,
-  `ThemeManager`, `StorageAccessHelper`, `SongDatabase`, and
-  `NotificationController`.
+- `EqualizerManager.getInstance(Context)` — double-checked locking with a volatile field, matching `AlbumArtCache`, `LanguageManager`, `ThemeManager`, `StorageAccessHelper`, `SongDatabase`, and `NotificationController`.
 - `PlaylistManager.getInstance(Context)` — same shape.
-- `ThemeHelper.getInstance(Context)` — same shape; the method-level
-  `synchronized` and the inner `synchronized` block are both removed,
-  keeping the double-checked pattern.
-- `OverlayManager.sInstance` — `volatile` removed. `init(Context)` stays
-  a `synchronized` method; `getInstance()` stays private.
+- `ThemeHelper.getInstance(Context)` — same shape; the method-level `synchronized` and the inner `synchronized` block are both removed, keeping the double-checked pattern.
+- `OverlayManager.sInstance` — `volatile` removed.
+  `init(Context)` stays a `synchronized` method; `getInstance()` stays private.
 
-**Names.** Five names were brought into line with the codebase's
-one-name-per-concept rule.
+**Names.**
+Five names were brought into line with the codebase's one-name-per-concept rule.
 
-- `ThemeHelper.mAppContext` → `mContext`. Every other class that holds
-  an application context names the field `mContext`.
-- `MetadataReader.closeQuietly` and `MetadataWriter.closeQuietly` →
-  `closeSafely`. The `*Safely` suffix is the codebase's contract for
-  "swallows the exception, the failure is not interesting".
-- `EqualizerManager.getBassBoostStrength()` →
-  `getAppliedBassBoostStrength()`; `getSurroundStrength()` →
-  `getAppliedSurroundStrength()`. The two getters read the effect
-  object's rounded value, not the persisted value; the new names make
-  the distinction visible at the call site.
-- `NavigationController.mCurrentState` → `mState`;
-  `ToastManager.mCurrentState` → `mState`. The codebase uses `mState`
-  for the primary state machine of a class that has one, and
-  `m<Domain>State` for the second machine in a class that has two.
+- `ThemeHelper.mAppContext` → `mContext`.
+  Every other class that holds an application context names the field `mContext`.
+- `MetadataReader.closeQuietly` and `MetadataWriter.closeQuietly` → `closeSafely`.
+  The `*Safely` suffix is the codebase's contract for "swallows the exception, the failure is not interesting".
+- `EqualizerManager.getBassBoostStrength()` → `getAppliedBassBoostStrength()`; `getSurroundStrength()` → `getAppliedSurroundStrength()`.
+  The two getters read the effect object's rounded value, not the persisted value; the new names make the distinction visible at the call site.
+- `NavigationController.mCurrentState` → `mState`; `ToastManager.mCurrentState` → `mState`.
+  The codebase uses `mState` for the primary state machine of a class that has one, and `m<Domain>State` for the second machine in a class that has two.
   Neither class has two.
-- `MusicService.mMachineHandler` → `mMainHandler`. The handler is bound
-  to the main looper; every other class names it `mMainHandler`.
+- `MusicService.mMachineHandler` → `mMainHandler`.
+  The handler is bound to the main looper; every other class names it `mMainHandler`.
 
-**Removals.** Three pieces of code that were a second name for a fact
-the codebase already names once.
+**Removals.**
+Three pieces of code that were a second name for a fact the codebase already names once.
 
-- `EqualizerManager.getPitchLevel()` — deleted. The method was
-  documented as "Equivalent to `getPitch()`" and had no callers.
-- `NavigationController.getCurrentState()` — deleted. The method
-  returned the internal state's name as a `String`; the state's name
-  is already available through `getDebugInfo()`, which is the class's
-  debug surface.
-- `MusicService.mIsPlaying` — deleted. The field was written in eight
-  methods and read in none. The authoritative answer to "is the
-  service playing right now?" is the `isPlaying()` method, which
-  derives from `mState`.
+- `EqualizerManager.getPitchLevel()` — deleted.
+  The method was documented as "Equivalent to `getPitch()`" and had no callers.
+- `NavigationController.getCurrentState()` — deleted.
+  The method returned the internal state's name as a `String`; the state's name is already available through `getDebugInfo()`, which is the class's debug surface.
+- `MusicService.mIsPlaying` — deleted.
+  The field was written in eight methods and read in none.
+  The authoritative answer to "is the service playing right now?" is the `isPlaying()` method, which derives from `mState`.
 
-**Helpers.** Four fixes that bring a helper and its callers into the
-shape the codebase's other helpers already take.
+**Helpers.**
+Four fixes that bring a helper and its callers into the shape the codebase's other helpers already take.
 
-- `LanguageManager.shutdown()` — added. Every other singleton in the
-  lazy-access group has one (`AlbumArtCache`, `OverlayManager`,
-  `ToastManager`, `NavigationController`, `NotificationController`);
-  `LanguageManager` was the one that was missing it. The new method
-  clears the cached localized context before clearing the singleton
-  reference.
-- `PlaybackWindow.pathsEqual(String, String)` — deleted; its call
-  sites in `equals(Object)` now use `Objects.equals(...)`. The
-  method's body was the definition of `Objects.equals`.
-- `MusicService.registerReceiverSafely(BroadcastReceiver, String)` and
-  `MusicPlayer.registerReceiverSafely(BroadcastReceiver, String)` —
-  the two helpers now take an `IntentFilter` rather than building one
-  from a `String` action. Every call site builds the filter inline,
-  so the filter's action list is visible at the call site.
-  `PlaylistActivity.registerReceiverSafely(BroadcastReceiver,
-  IntentFilter)` already had this signature; the other two classes now
-  match it.
-- `CreditsDialog.getLocaleContext()`, `LanguageDialog.getLocaleContext()`,
-  `PresetDialog.getLocaleContext()`, and `ThemeDialog.getLocaleContext()`
-  — each now logs a warning at `Log.w` before falling back to the
-  activity context, matching what `EqualizerManager`,
-  `NotificationController`, `PlaylistManager`, and
-  `StorageAccessHelper` already do. This is the one place in this
-  release where user-visible behavior changes: a failure to reach the
-  language manager now leaves a warning in logcat.
+- `LanguageManager.shutdown()` — added.
+  Every other singleton in the lazy-access group has one (`AlbumArtCache`, `OverlayManager`, `ToastManager`, `NavigationController`, `NotificationController`); `LanguageManager` was the one that was missing it.
+  The new method clears the cached localized context before clearing the singleton reference.
+- `PlaybackWindow.pathsEqual(String, String)` — deleted; its call sites in `equals(Object)` now use `Objects.equals(...)`.
+  The method's body was the definition of `Objects.equals`.
+- `MusicService.registerReceiverSafely(BroadcastReceiver, String)` and `MusicPlayer.registerReceiverSafely(BroadcastReceiver, String)` — the two helpers now take an `IntentFilter` rather than building one from a `String` action.
+  Every call site builds the filter inline, so the filter's action list is visible at the call site.
+  `PlaylistActivity.registerReceiverSafely(BroadcastReceiver, IntentFilter)` already had this signature; the other two classes now match it.
+- `CreditsDialog.getLocaleContext()`, `LanguageDialog.getLocaleContext()`, `PresetDialog.getLocaleContext()`, and `ThemeDialog.getLocaleContext()` — each now logs a warning at `Log.w` before falling back to the activity context, matching what `EqualizerManager`, `NotificationController`, `PlaylistManager`, and `StorageAccessHelper` already do.
+  This is the one place in this release where user-visible behavior changes: a failure to reach the language manager now leaves a warning in logcat.
 
 ### Under the Hood
 
-- `EqualizerManager.java` — singleton shape; `getBassBoostStrength`
-  and `getSurroundStrength` renamed; `getPitchLevel` deleted.
+- `EqualizerManager.java` — singleton shape; `getBassBoostStrength` and `getSurroundStrength` renamed; `getPitchLevel` deleted.
 - `PlaylistManager.java` — singleton shape.
-- `ThemeHelper.java` — singleton shape; `mAppContext` renamed to
-  `mContext`.
+- `ThemeHelper.java` — singleton shape; `mAppContext` renamed to `mContext`.
 - `OverlayManager.java` — `volatile` removed from `sInstance`.
 - `LanguageManager.java` — `shutdown()` added.
-- `MetadataReader.java`, `MetadataWriter.java` — `closeQuietly`
-  renamed to `closeSafely`; call sites updated.
-- `CreditsDialog.java`, `LanguageDialog.java`, `PresetDialog.java`,
-  `ThemeDialog.java` — `TAG` constants added; `getLocaleContext()` now
-  logs a warning on failure.
-- `PlaybackWindow.java` — `pathsEqual` deleted; `equals` uses
-  `Objects.equals`.
-- `NavigationController.java` — `mCurrentState` renamed to `mState`;
-  `getCurrentState()` deleted.
+- `MetadataReader.java`, `MetadataWriter.java` — `closeQuietly` renamed to `closeSafely`; call sites updated.
+- `CreditsDialog.java`, `LanguageDialog.java`, `PresetDialog.java`, `ThemeDialog.java` — `TAG` constants added; `getLocaleContext()` now logs a warning on failure.
+- `PlaybackWindow.java` — `pathsEqual` deleted; `equals` uses `Objects.equals`.
+- `NavigationController.java` — `mCurrentState` renamed to `mState`; `getCurrentState()` deleted.
 - `ToastManager.java` — `mCurrentState` renamed to `mState`.
-- `MusicService.java` — `mMachineHandler` renamed to `mMainHandler`;
-  `mIsPlaying` deleted; `registerReceiverSafely` now takes an
-  `IntentFilter`.
-- `MusicPlayer.java` — `registerReceiverSafely` now takes an
-  `IntentFilter`.
+- `MusicService.java` — `mMachineHandler` renamed to `mMainHandler`; `mIsPlaying` deleted; `registerReceiverSafely` now takes an `IntentFilter`.
+- `MusicPlayer.java` — `registerReceiverSafely` now takes an `IntentFilter`.
 
 ## [1.3.3] - Oct 13, 2026
 
 ### Overview
 
-Three layout corrections: the theme dialog's top bar geometry is
-aligned with the other dialogs, and two row-level margin issues in the
-theme and language dialogs are resolved for both LTR and RTL locales.
+Three layout corrections: the theme dialog's top bar geometry is aligned with the other dialogs, and two row-level margin issues in the theme and language dialogs are resolved for both LTR and RTL locales.
 
 ### Fixed
 
-- **Theme dialog's cancel button wraps its width correctly.** The
-  invisible placeholder button in the theme dialog's top bar was
-  configured with the Cancel string (`R.string.action_cancel`)
-  instead of the Themes string (`R.string.action_themes`). Because
-  the placeholder text matched the Cancel button rather than the
-  Themes button, the top bar's horizontal layout miscalculated the
-  space available for the Cancel button, preventing it from wrapping
-  its content correctly. The placeholder now uses the Themes string,
-  matching the Credits dialog and the Preset dialog exactly, so the
-  Cancel button's width resolves naturally and the title remains
-  centred.
+- **Theme dialog's cancel button wraps its width correctly.**
+  The invisible placeholder button in the theme dialog's top bar was configured with the Cancel string (`R.string.action_cancel`) instead of the Themes string (`R.string.action_themes`).
+  Because the placeholder text matched the Cancel button rather than the Themes button, the top bar's horizontal layout miscalculated the space available for the Cancel button, preventing it from wrapping its content correctly.
+  The placeholder now uses the Themes string, matching the Credits dialog and the Preset dialog exactly, so the Cancel button's width resolves naturally and the title remains centred.
 
-- **Language dialog row alignment in Arabic locale.** In the language
-  dialog, when a language is not the current one, the indicator text
-  is cleared, but the indicator view retained its `marginStart`. In
-  an RTL layout, this invisible margin pushed the language name away
-  from the leading edge, creating an unwanted gap. The indicator is
-  now set to `View.GONE` when it has no text to show, which removes
-  the view and its margin from the layout calculation entirely. The
-  language name now stretches to the edge, aligning correctly with
-  the current language row.
+- **Language dialog row alignment in Arabic locale.**
+  In the language dialog, when a language is not the current one, the indicator text is cleared, but the indicator view retained its `marginStart`.
+  In an RTL layout, this invisible margin pushed the language name away from the leading edge, creating an unwanted gap.
+  The indicator is now set to `View.GONE` when it has no text to show, which removes the view and its margin from the layout calculation entirely.
+  The language name now stretches to the edge, aligning correctly with the current language row.
 
-- **Theme dialog's colour circle extra margin.** Similar to the
-  language dialog issue, the theme dialog's indicator retained its
-  `marginStart` when the row was not selected, even though its text
-  was empty. This created an invisible gap between the colour
-  preview circle and the trailing edge of the row. Setting the
-  indicator to `View.GONE` when not selected removes this phantom
-  margin. The gap between the theme name and the colour circle is
-  preserved, and the circle now sits flush against the row's edge
-  padding.
+- **Theme dialog's colour circle extra margin.**
+  Similar to the language dialog issue, the theme dialog's indicator retained its `marginStart` when the row was not selected, even though its text was empty.
+  This created an invisible gap between the colour preview circle and the trailing edge of the row.
+  Setting the indicator to `View.GONE` when not selected removes this phantom margin.
+  The gap between the theme name and the colour circle is preserved, and the circle now sits flush against the row's edge padding.
 
 ### Under the Hood
 
-- `ThemeDialog.createPlaceholder()` now calls `setText` with
-  `R.string.action_themes` instead of `R.string.action_cancel`.
-- `LanguageDialog` and `ThemeDialog` now use `View.GONE` for their
-  indicator views when the row is not selected, replacing the
-  previous `setText("")` approach which left the view's margins in
-  the layout tree.
+- `ThemeDialog.createPlaceholder()` now calls `setText` with `R.string.action_themes` instead of `R.string.action_cancel`.
+- `LanguageDialog` and `ThemeDialog` now use `View.GONE` for their indicator views when the row is not selected, replacing the previous `setText("")` approach which left the view's margins in the layout tree.
 
 ## [1.3.2] - Oct 13, 2026
 
 ### Overview
 
-One resource correction for localization: the equalizer's zero-value
-strings for semitones and decibels are now parameterized so they
-format consistently with their positive and negative counterparts.
+One resource correction for localization: the equalizer's zero-value strings for semitones and decibels are now parameterized so they format consistently with their positive and negative counterparts.
 
 ### Fixed
 
 - **Equalizer zero-value strings are parameterized.**
-  `equalizer_semitones_zero` is now `%1$.1f st` and
-  `equalizer_db_zero` is now `%1$.1f dB`. Previously these strings
-  hardcoded `0.0 st` and `0.0 dB`. The format specifier replaces the
-  hardcoded value, so the zero value is formatted by the same code
-  path that formats the positive and negative variants, and the
-  decimal separator follows the app's language through the JVM
-  default locale. A translator no longer maintains a separate literal
-  for zero.
+  `equalizer_semitones_zero` is now `%1$.1f st` and `equalizer_db_zero` is now `%1$.1f dB`.
+  Previously these strings hardcoded `0.0 st` and `0.0 dB`.
+  The format specifier replaces the hardcoded value, so the zero value is formatted by the same code path that formats the positive and negative variants, and the decimal separator follows the app's language through the JVM default locale.
+  A translator no longer maintains a separate literal for zero.
 
 ### Under the Hood
 
-- `equalizer_semitones_zero` and `equalizer_db_zero` are updated to
-  use `%1$.1f` with their respective units in the locale files that
-  carried the hardcoded literals. The positive and negative variants
-  already used the specifier; the zero variants now match.
+- `equalizer_semitones_zero` and `equalizer_db_zero` are updated to use `%1$.1f` with their respective units in the locale files that carried the hardcoded literals.
+  The positive and negative variants already used the specifier; the zero variants now match.
 
 ## [1.3.1] - Oct 13, 2026
 
 ### Overview
 
-Two corrections to the language-change flow and one layout correction in
-the theme dialog.
+Two corrections to the language-change flow and one layout correction in the theme dialog.
 
-The language-change flow is simplified. The dialogs no longer carry
-their own `LANGUAGE_CHANGED` receivers, and `MusicPlayer` no longer
-defers its recreation until a dialog closes. A language change now
-closes every open dialog and recreates the activity on the same turn
-the broadcast is delivered. The next time a dialog is opened it is
-constructed against the new locale from the start, so its strings and
-its layout direction are correct on the first frame it renders.
+The language-change flow is simplified.
+The dialogs no longer carry their own `LANGUAGE_CHANGED` receivers, and `MusicPlayer` no longer defers its recreation until a dialog closes.
+A language change now closes every open dialog and recreates the activity on the same turn the broadcast is delivered.
+The next time a dialog is opened it is constructed against the new locale from the start, so its strings and its layout direction are correct on the first frame it renders.
 
-The theme dialog's row carries the same shape as the preset dialog's
-row. The row's own padding is symmetric and logical, and each child
-that sits inside the row carries at most a single logical start
-margin. The trailing inset on whichever child lands at the trailing
-edge is supplied by the row's own end padding, which is what keeps the
-row correct under LTR and RTL without any special-casing.
+The theme dialog's row carries the same shape as the preset dialog's row.
+The row's own padding is symmetric and logical, and each child that sits inside the row carries at most a single logical start margin.
+The trailing inset on whichever child lands at the trailing edge is supplied by the row's own end padding, which is what keeps the row correct under LTR and RTL without any special-casing.
 
 ### Fixed
 
-- **Language changes close the surface the choice was made from and
-  recreate the activity in one step.** The picker, the Credits
-  dialog, and the activity all reacted to the same
-  `LANGUAGE_CHANGED` broadcast in different ways. The picker
-  dismissed itself. The Credits dialog rebuilt its own content view
-  in place. The activity deferred its recreation until the Credits
-  dialog closed. The result was that the surface the user was on
-  survived the choice, and it was rendered against the new locale by
-  an in-place rebuild that could not pin every child's layout
-  direction before the frame in which the rebuild was installed.
-  The row whose `START`/`END` gravity resolved against the outgoing
-  direction first was the one that showed the misbehaviour — the
-  theme dialog's current row, whose indicator landed on the wrong
-  physical side until the next lifecycle event recreated the dialog
-  and corrected it.
+- **Language changes close the surface the choice was made from and recreate the activity in one step.**
+  The picker, the Credits dialog, and the activity all reacted to the same `LANGUAGE_CHANGED` broadcast in different ways.
+  The picker dismissed itself.
+  The Credits dialog rebuilt its own content view in place.
+  The activity deferred its recreation until the Credits dialog closed.
+  The result was that the surface the user was on survived the choice, and it was rendered against the new locale by an in-place rebuild that could not pin every child's layout direction before the frame in which the rebuild was installed.
+  The row whose `START`/`END` gravity resolved against the outgoing direction first was the one that showed the misbehaviour — the theme dialog's current row, whose indicator landed on the wrong physical side until the next lifecycle event recreated the dialog and corrected it.
 
-  The flow is now a single step. The dialogs dismiss themselves on
-  the broadcast and no longer attempt to rebuild their content view.
-  `MusicPlayer` recreates immediately on the same turn. Every surface
-  the user was on when the choice was made closes as part of the
-  choice, and the activity is rebuilt with a wrapped base context
-  that carries the new locale. The next time a dialog is opened, it
-  is constructed against the new locale, and every string, every
-  `START`/`END` gravity, and every weighted row resolves against the
-  correct direction from the first frame.
+The flow is now a single step.
+The dialogs dismiss themselves on the broadcast and no longer attempt to rebuild their content view.
+`MusicPlayer` recreates immediately on the same turn.
+Every surface the user was on when the choice was made closes as part of the choice, and the activity is rebuilt with a wrapped base context that carries the new locale.
+The next time a dialog is opened, it is constructed against the new locale, and every string, every `START`/`END` gravity, and every weighted row resolves against the correct direction from the first frame.
 
 - **Theme rows carry symmetric edge insets in both directions.**
-  The row's own padding was an asymmetric pair: sixteen dp on the
-  physical left, zero on the physical right. Under LTR the left is
-  the leading edge, so the name was inset and the trailing side was
-  spaced by the margins on the colour circle and the indicator.
-  Under RTL the two physical sides swap roles, and the row's leading
-  edge — now the right — carried no inset at all. The theme name sat
-  against the row's right edge for that reason. The row's padding is
-  now symmetric and logical: `setPaddingRelative` with the same
-  `LIST_ITEM_PADDING_HORIZONTAL_DP` on both sides, so the leading
-  and trailing edges carry the same inset in every locale.
+  The row's own padding was an asymmetric pair: sixteen dp on the physical left, zero on the physical right.
+  Under LTR the left is the leading edge, so the name was inset and the trailing side was spaced by the margins on the colour circle and the indicator.
+  Under RTL the two physical sides swap roles, and the row's leading edge — now the right — carried no inset at all.
+  The theme name sat against the row's right edge for that reason.
+  The row's padding is now symmetric and logical: `setPaddingRelative` with the same `LIST_ITEM_PADDING_HORIZONTAL_DP` on both sides, so the leading and trailing edges carry the same inset in every locale.
 
 - **The colour preview circle carries a single logical start margin.**
-  The circle had two margins, a start margin of eight dp and an end
-  margin of sixteen dp. Under RTL the two stacked with the
-  indicator's own margins on the same physical side of the row, so
-  the circle appeared to have roughly twice the space it was designed
-  to have on the side it sat closest to. The circle now carries only
-  its start margin — the gap between the name and the circle — and
-  lets the row's own end padding supply the trailing inset for
-  whichever child lands there. `COLOR_CIRCLE_MARGIN_END_DP` is
-  removed; the constant had no reader after the margin went away.
+  The circle had two margins, a start margin of eight dp and an end margin of sixteen dp.
+  Under RTL the two stacked with the indicator's own margins on the same physical side of the row, so the circle appeared to have roughly twice the space it was designed to have on the side it sat closest to.
+  The circle now carries only its start margin — the gap between the name and the circle — and lets the row's own end padding supply the trailing inset for whichever child lands there.
+  `COLOR_CIRCLE_MARGIN_END_DP` is removed; the constant had no reader after the margin went away.
 
 - **The `CURRENT` indicator carries a single logical start margin.**
-  The indicator had a start margin of eight dp and an end margin of
-  sixteen dp. The end margin was compensating for the row's missing
-  trailing padding, and it stacked with the circle's own end margin
-  under RTL in the same way the circle's did. The indicator now
-  carries only its start margin — the gap between the circle and the
-  indicator — and the row's own end padding supplies the trailing
-  inset on the side the indicator sits on.
-  `LIST_ITEM_PADDING_HORIZONTAL_DP` is the single writer for that
-  edge.
+  The indicator had a start margin of eight dp and an end margin of sixteen dp.
+  The end margin was compensating for the row's missing trailing padding, and it stacked with the circle's own end margin under RTL in the same way the circle's did.
+  The indicator now carries only its start margin — the gap between the circle and the indicator — and the row's own end padding supplies the trailing inset on the side the indicator sits on.
+  `LIST_ITEM_PADDING_HORIZONTAL_DP` is the single writer for that edge.
 
 ### Under the Hood
 
-- `ThemeDialog.createThemeItem()` calls `setPaddingRelative` with a
-  symmetric pair of horizontal insets — `LIST_ITEM_PADDING_HORIZONTAL_DP`
-  on both sides — instead of `setPadding` with a
-  `LIST_ITEM_PADDING_HORIZONTAL_DP` value on the left and zero on
-  the right.
+- `ThemeDialog.createThemeItem()` calls `setPaddingRelative` with a symmetric pair of horizontal insets — `LIST_ITEM_PADDING_HORIZONTAL_DP` on both sides — instead of `setPadding` with a `LIST_ITEM_PADDING_HORIZONTAL_DP` value on the left and zero on the right.
 
-- `ThemeDialog.createColorCircle()` sets only a start margin on the
-  circle's `LayoutParams`. The end margin is removed.
+- `ThemeDialog.createColorCircle()` sets only a start margin on the circle's `LayoutParams`.
+  The end margin is removed.
 
-- `ThemeDialog.createThemeItem()` sets only a start margin on the
-  indicator's `LayoutParams`. The end margin is removed. The row's
-  own end padding is the single writer for the trailing inset.
+- `ThemeDialog.createThemeItem()` sets only a start margin on the indicator's `LayoutParams`.
+  The end margin is removed.
+  The row's own end padding is the single writer for the trailing inset.
 
 - `ThemeDialog.COLOR_CIRCLE_MARGIN_END_DP` is removed.
 
-- `ThemeDialog`, `PresetDialog`, and `LanguageDialog` each lose their
-  `LANGUAGE_CHANGED` receiver, its registration, its unregistration,
-  its field, and the `BroadcastReceiver`, `Intent`, `IntentFilter`,
-  `ContextCompat`, and `Configuration` imports that had no other
-  reader. Each also loses its `rebuildForLocale()` and its
-  `pinContentLayoutDirection(View)` helper. `ThemeDialog` and
-  `PresetDialog` also lose their `dismiss()` override, because the
-  only thing it did was unregister the language receiver.
+- `ThemeDialog`, `PresetDialog`, and `LanguageDialog` each lose their `LANGUAGE_CHANGED` receiver, its registration, its unregistration, its field, and the `BroadcastReceiver`, `Intent`, `IntentFilter`, `ContextCompat`, and `Configuration` imports that had no other reader.
+  Each also loses its `rebuildForLocale()` and its `pinContentLayoutDirection(View)` helper.
+  `ThemeDialog` and `PresetDialog` also lose their `dismiss()` override, because the only thing it did was unregister the language receiver.
 
-- `CreditsDialog` loses `rebuildForLocale()` and
-  `pinContentLayoutDirection(View)`. Its `LANGUAGE_CHANGED` receiver
-  now calls `dismiss()` instead of rebuilding. Its theme receiver is
-  unaffected; the theme and the language are separate concerns.
+- `CreditsDialog` loses `rebuildForLocale()` and `pinContentLayoutDirection(View)`.
+  Its `LANGUAGE_CHANGED` receiver now calls `dismiss()` instead of rebuilding.
+  Its theme receiver is unaffected; the theme and the language are separate concerns.
 
-- `MusicPlayer.mLanguageChangedReceiver` calls `recreate()` directly
-  on the broadcast's turn. The `mPendingLanguageRecreate` field and
-  the `consumePendingLanguageRecreate()` method are removed, along
-  with the calls to the latter from `onResume()` and
-  `onWindowFocusChanged(boolean)`.
+- `MusicPlayer.mLanguageChangedReceiver` calls `recreate()` directly on the broadcast's turn.
+  The `mPendingLanguageRecreate` field and the `consumePendingLanguageRecreate()` method are removed, along with the calls to the latter from `onResume()` and `onWindowFocusChanged(boolean)`.
 
 ## [1.3.0] - Oct 12, 2026
 
 ### Overview
 
-Llama Music Player is now a multilingual app. Sixteen languages ship
-in this release, and every user-visible string the app shows is now a
-resource rather than a hardcoded English literal. Choosing a language
-from the new picker recreates the UI on the new locale in the first
-frame after the dialog dismisses; no restart of the app is needed.
+Llama Music Player is now a multilingual app.
+Sixteen languages ship in this release, and every user-visible string the app shows is now a resource rather than a hardcoded English literal.
+Choosing a language from the new picker recreates the UI on the new locale in the first frame after the dialog dismisses; no restart of the app is needed.
 
-The localization work touches every activity because every activity
-resolves its strings through `getString`, every layout now references
-`@string` rather than carrying English text, and every activity wraps
-its base context through `LanguageManager.wrap` in
-`attachBaseContext`. The set of supported languages is declared three
-times — in `LanguageManager.LANGUAGE_TAGS`, in
-`res/xml/locales_config.xml`, and in the `resourceConfigurations`
-block of the app module's build file — and the three lists describe
-the same set.
+The localization work touches every activity because every activity resolves its strings through `getString`, every layout now references `@string` rather than carrying English text, and every activity wraps its base context through `LanguageManager.wrap` in `attachBaseContext`.
+The set of supported languages is declared three times — in `LanguageManager.LANGUAGE_TAGS`, in `res/xml/locales_config.xml`, and in the `resourceConfigurations` block of the app module's build file — and the three lists describe the same set.
 
-Three user-visible corrections ride alongside the localization. The
-top bars in every activity and every dialog lay their title out with
-a weight, so a long translation truncates rather than overlapping a
-neighbouring button. The sort-mode header carries the space between
-the prefix and the mode label; the space is supplied by a constant on
-the activity rather than a trailing space on a string resource, which
-the resource compiler strips. And a language change made while the
-Credits dialog is on top reaches the player the moment the dialog
-closes rather than on the next lifecycle transition.
+Three user-visible corrections ride alongside the localization.
+The top bars in every activity and every dialog lay their title out with a weight, so a long translation truncates rather than overlapping a neighbouring button.
+The sort-mode header carries the space between the prefix and the mode label; the space is supplied by a constant on the activity rather than a trailing space on a string resource, which the resource compiler strips.
+And a language change made while the Credits dialog is on top reaches the player the moment the dialog closes rather than on the next lifecycle transition.
 
-A fourth correction belongs to the same release: the album-art cache
-is now process-scoped. The bitmaps are a fact about the songs, not
-about any activity. An activity-scoped cache is discarded on every
-recreate, and the carousel's next read then misses and schedules a
-fresh decode. `AlbumArtCache` is a singleton that outlives every
-activity, and both consumers — the carousel and the notification
-controller — hold a reference to its underlying `LruCache` rather
-than owning a cache of their own.
+A fourth correction belongs to the same release: the album-art cache is now process-scoped.
+The bitmaps are a fact about the songs, not about any activity.
+An activity-scoped cache is discarded on every recreate, and the carousel's next read then misses and schedules a fresh decode.
+`AlbumArtCache` is a singleton that outlives every activity, and both consumers — the carousel and the notification controller — hold a reference to its underlying `LruCache` rather than owning a cache of their own.
 
 ### Added
 
-- **`LanguageDialog`** — a scrollable picker with the same shape as
-  the Preset and Theme dialogs. Each row shows a language's endonym,
-  the language's name in its own script, so a speaker recognises
-  their language without first switching the app to it. The current
-  language's row carries a CURRENT indicator in the accent colour and
-  is scrolled into the vertical centre of the list when the dialog
-  opens.
-- **Language button in Credits** — the Credits dialog's version header
-  now carries the VERSION label at the leading edge, the language
-  button in the middle, and the version number at the trailing edge.
-  The button matches the playlist's SORT button in height, text size,
-  letter spacing, and border selector. Its label is the endonym of the
-  currently applied language and updates the moment a new language is
-  chosen.
-- **Sixteen languages** — English (default), Español, Français,
-  Deutsch, Italiano, Português, Русский, 中文, 日本語, 한국어, हिन्दी,
-  العربية, Türkçe, Bahasa Indonesia, Nederlands, Polski.
-- **`AlbumArtCache`** — a process-scoped singleton that owns the
-  decoded album art bitmaps, keyed by song path. Both
-  `MusicPlayer` and `NotificationController` hold a reference to its
-  underlying `LruCache`, so a recreate does not evict the bitmaps and
-  the carousel's first read after the recreate finds the entry the
-  previous instance decoded. Two consumers read and write it, and both
-  see the same bitmaps for the same path.
+- **`LanguageDialog`** — a scrollable picker with the same shape as the Preset and Theme dialogs.
+  Each row shows a language's endonym, the language's name in its own script, so a speaker recognises their language without first switching the app to it.
+  The current language's row carries a CURRENT indicator in the accent colour and is scrolled into the vertical centre of the list when the dialog opens.
+- **Language button in Credits** — the Credits dialog's version header now carries the VERSION label at the leading edge, the language button in the middle, and the version number at the trailing edge.
+  The button matches the playlist's SORT button in height, text size, letter spacing, and border selector.
+  Its label is the endonym of the currently applied language and updates the moment a new language is chosen.
+- **Sixteen languages** — English (default), Español, Français, Deutsch, Italiano, Português, Русский, 中文, 日本語, 한국어, हिन्दी, العربية, Türkçe, Bahasa Indonesia, Nederlands, Polski.
+- **`AlbumArtCache`** — a process-scoped singleton that owns the decoded album art bitmaps, keyed by song path.
+  Both `MusicPlayer` and `NotificationController` hold a reference to its underlying `LruCache`, so a recreate does not evict the bitmaps and the carousel's first read after the recreate finds the entry the previous instance decoded.
+  Two consumers read and write it, and both see the same bitmaps for the same path.
 
 ### Changed
 
-- **Every user-visible string is now a resource.** The app previously
-  held most of its user-visible text as hardcoded English literals
-  in Java source and in layout files. The entire set has been
-  extracted to `res/values/strings.xml` and translated into the
-  fifteen supported languages. Every string the app shows is now
-  read through `getString(R.string.…)` or referenced as
-  `@string/…` in a layout.
-- **Locale application through wrapped base context.** Each activity
-  overrides `attachBaseContext(Context)` and wraps the base context
-  with the selected locale before any activity state exists. A
-  locale change requires the activity to be recreated, which the
-  app does via a `LANGUAGE_CHANGED` broadcast that every activity
-  listens for and answers with `recreate()`.
-- **Sort labels in the playlist header.** The playlist's sort header
-  now reads from `playlist_sort_label_*` resources, so a translator
-  can localize the direction markers without changing the code.
-- **The sort-mode header carries its space.** The separator between
-  the sort-mode prefix and the mode label is a Java-side constant on
-  `PlaylistActivity`, not a trailing space on the prefix resource,
-  because the Android resource compiler strips trailing whitespace
-  from a non-formatted string. The header now reads `SORT MODE
-  [TITLE A-Z]` in every locale; no locale file carries a trailing
-  space.
-- **Layout attributes are relative.** Every padding, margin, and
-  alignment in the seven layout files uses the Start/End variants,
-  so the layouts mirror correctly under RTL locales.
-- **Equalizer band labels follow the app's language.** The label
-  above each equalizer band slider — the one that names the band's
-  center frequency — is produced by
-  `EqualizerManager.getFrequencyLabel(int)` and reads its unit symbol
-  from `equalizer_frequency_*` resources. Russian supplies the
-  designations GOST specifies, `Гц` and `кГц`; every other locale
-  supplies the SI symbols `Hz` and `kHz`. The decimal separator
-  between a kilohertz value and its tenths is not in the resource —
-  it comes from the JVM default locale, which `LanguageManager.wrap`
-  has already set to the app's selected language.
-- **Dialog top bars no longer overlap the title.** Every dialog's top
-  bar is a horizontal linear layout with the title weighted to the
-  space the two edge controls leave. The title is the only element
-  that can yield, so a long Cancel label — Dutch `ANNULEREN`, German
-  `ABBRECHEN` — and a long title — Dutch `VOORINSTELLINGEN`, German
-  `VOREINSTELLUNGEN` — cannot overlap. The language button in the
-  Credits dialog's version header follows the same rule, so a long
-  endonym truncates rather than reaching the version number.
-- **Activity top bars no longer overlap the title.** The top bar in
-  `PlaylistActivity`, `FolderManager`, `EqualizerActivity`, and
-  `MetadataEditor` uses the same shape. `MusicPlayer`'s top bar was
-  already a horizontal linear layout with three weighted buttons.
-- **A deferred language change reaches the player when the Credits
-  dialog closes.** When a language change arrives while a dialog
-  holds window focus against `MusicPlayer`, the recreate is
-  deferred. The deferral is consumed the moment the activity's
-  window regains focus, in `onWindowFocusChanged(boolean)`, so the
-  player picks up the new language on the same turn the dialog
-  closes. A fallback in `onResume()` covers lifecycle-driven cases
-  where the activity was paused while the flag was set.
-- **`Song`'s getters resolve placeholders through
-  `CharacterMapper`'s predicates.** A raw field that is null, or that
-  holds a placeholder written under a previous locale, is replaced
-  with the current language's value on the getter's own call. A
-  language change is reflected on every song the next time its
-  metadata is read; the song is not reconstructed.
-- **`PlaylistAdapter`'s subtitle assembly uses the placeholder
-  predicates.** The subtitle joins artist, album, and genre with a
-  bullet, and each field is checked against the corresponding
-  `CharacterMapper.isUnknownX(String)` predicate before it is
-  rendered. A field that carries a placeholder from any supported
-  locale renders the current locale's placeholder in its place.
-- **`StorageAccessHelper.getStorageType(String)` resolves its
-  labels from resources.** `[Internal]` and `[SD Card]` now read
-  through `getLocaleContext()`, so a German folder list shows
-  `[Intern]` and an Arabic one shows `[داخلي]`. The labels carry no
-  leading or trailing whitespace; the separator belongs to the
-  caller.
-- **`ThemeManager.loadColorNames()` reads through
-  `LanguageManager.getLocalizedContext()`.** The theme names resolve
-  against the app's selected language rather than the system locale,
-  so a device whose system language differs from the app's selection
-  presents the theme list in the app's language.
+- **Every user-visible string is now a resource.**
+  The app previously held most of its user-visible text as hardcoded English literals in Java source and in layout files.
+  The entire set has been extracted to `res/values/strings.xml` and translated into the fifteen supported languages.
+  Every string the app shows is now read through `getString(R.string.…)` or referenced as `@string/…` in a layout.
+- **Locale application through wrapped base context.**
+  Each activity overrides `attachBaseContext(Context)` and wraps the base context with the selected locale before any activity state exists.
+  A locale change requires the activity to be recreated, which the app does via a `LANGUAGE_CHANGED` broadcast that every activity listens for and answers with `recreate()`.
+- **Sort labels in the playlist header.**
+  The playlist's sort header now reads from `playlist_sort_label_*` resources, so a translator can localize the direction markers without changing the code.
+- **The sort-mode header carries its space.**
+  The separator between the sort-mode prefix and the mode label is a Java-side constant on `PlaylistActivity`, not a trailing space on the prefix resource, because the Android resource compiler strips trailing whitespace from a non-formatted string.
+  The header now reads `SORT MODE [TITLE A-Z]` in every locale; no locale file carries a trailing space.
+- **Layout attributes are relative.**
+  Every padding, margin, and alignment in the seven layout files uses the Start/End variants, so the layouts mirror correctly under RTL locales.
+- **Equalizer band labels follow the app's language.**
+  The label above each equalizer band slider — the one that names the band's center frequency — is produced by `EqualizerManager.getFrequencyLabel(int)` and reads its unit symbol from `equalizer_frequency_*` resources.
+  Russian supplies the designations GOST specifies, `Гц` and `кГц`; every other locale supplies the SI symbols `Hz` and `kHz`.
+  The decimal separator between a kilohertz value and its tenths is not in the resource — it comes from the JVM default locale, which `LanguageManager.wrap` has already set to the app's selected language.
+- **Dialog top bars no longer overlap the title.**
+  Every dialog's top bar is a horizontal linear layout with the title weighted to the space the two edge controls leave.
+  The title is the only element that can yield, so a long Cancel label — Dutch `ANNULEREN`, German `ABBRECHEN` — and a long title — Dutch `VOORINSTELLINGEN`, German `VOREINSTELLUNGEN` — cannot overlap.
+  The language button in the Credits dialog's version header follows the same rule, so a long endonym truncates rather than reaching the version number.
+- **Activity top bars no longer overlap the title.**
+  The top bar in `PlaylistActivity`, `FolderManager`, `EqualizerActivity`, and `MetadataEditor` uses the same shape.
+  `MusicPlayer`'s top bar was already a horizontal linear layout with three weighted buttons.
+- **A deferred language change reaches the player when the Credits dialog closes.**
+  When a language change arrives while a dialog holds window focus against `MusicPlayer`, the recreate is deferred.
+  The deferral is consumed the moment the activity's window regains focus, in `onWindowFocusChanged(boolean)`, so the player picks up the new language on the same turn the dialog closes.
+  A fallback in `onResume()` covers lifecycle-driven cases where the activity was paused while the flag was set.
+- **`Song`'s getters resolve placeholders through `CharacterMapper`'s predicates.**
+  A raw field that is null, or that holds a placeholder written under a previous locale, is replaced with the current language's value on the getter's own call.
+  A language change is reflected on every song the next time its metadata is read; the song is not reconstructed.
+- **`PlaylistAdapter`'s subtitle assembly uses the placeholder predicates.**
+  The subtitle joins artist, album, and genre with a bullet, and each field is checked against the corresponding `CharacterMapper.isUnknownX(String)` predicate before it is rendered.
+  A field that carries a placeholder from any supported locale renders the current locale's placeholder in its place.
+- **`StorageAccessHelper.getStorageType(String)` resolves its labels from resources.**
+  `[Internal]` and `[SD Card]` now read through `getLocaleContext()`, so a German folder list shows `[Intern]` and an Arabic one shows `[داخلي]`.
+  The labels carry no leading or trailing whitespace; the separator belongs to the caller.
+- **`ThemeManager.loadColorNames()` reads through `LanguageManager.getLocalizedContext()`.**
+  The theme names resolve against the app's selected language rather than the system locale, so a device whose system language differs from the app's selection presents the theme list in the app's language.
 - **`StorageObserver`'s overlay message resolves from resources.**
-  `library_syncing_playlist` is read at broadcast time through the
-  app's selected locale.
-- **`FolderAdapter`'s Loose Tracks label is resolved by the owning
-  activity.** The adapter renders the plural string the activity
-  obtained from `R.plurals.folder_manager_loose_tracks`; it does not
-  assemble the label from parts.
-- **`OverlayManager` gained `REASON_PLAYLIST_SORT`.** A fourth
-  process-wide reason token for the playlist's sort cycle, alongside
-  `REASON_COLD_START`, `REASON_METADATA_LOAD`, and
-  `REASON_FOLDER_UPDATE_CYCLE`. A sort on a large library is fast;
-  without a floor, the overlay would flash and vanish. The reason is
-  released on every exit path, including activity destruction.
-- **`AlbumArtCarousel` consumes the shared `LruCache` through
-  `AlbumArtCache`.** The carousel no longer owns a bitmap as
-  primary state; its cache is the process-scoped singleton the
-  activity hands it.
-- **`MusicPlayer` and `NotificationController` hold the shared
-  cache.** Both classes call `AlbumArtCache.getInstance(...).asLruCache()`
-  in their setup, so a recreate no longer discards the decoded
-  bitmaps.
+  `library_syncing_playlist` is read at broadcast time through the app's selected locale.
+- **`FolderAdapter`'s Loose Tracks label is resolved by the owning activity.**
+  The adapter renders the plural string the activity obtained from `R.plurals.folder_manager_loose_tracks`; it does not assemble the label from parts.
+- **`OverlayManager` gained `REASON_PLAYLIST_SORT`.**
+  A fourth process-wide reason token for the playlist's sort cycle, alongside `REASON_COLD_START`, `REASON_METADATA_LOAD`, and `REASON_FOLDER_UPDATE_CYCLE`.
+  A sort on a large library is fast; without a floor, the overlay would flash and vanish.
+  The reason is released on every exit path, including activity destruction.
+- **`AlbumArtCarousel` consumes the shared `LruCache` through `AlbumArtCache`.**
+  The carousel no longer owns a bitmap as primary state; its cache is the process-scoped singleton the activity hands it.
+- **`MusicPlayer` and `NotificationController` hold the shared cache.**
+  Both classes call `AlbumArtCache.getInstance(...).asLruCache()` in their setup, so a recreate no longer discards the decoded bitmaps.
 - **`BluetoothReceiver` no longer owns the pause on disconnect.**
-  The service owns the pause; the receiver broadcasts a
-  `BLUETOOTH_PAUSE` request that the service consumes. See the
-  1.2.8 entry for the full reasoning, which this release inherits.
+  The service owns the pause; the receiver broadcasts a `BLUETOOTH_PAUSE` request that the service consumes.
+  See the 1.2.8 entry for the full reasoning, which this release inherits.
 
 ### Under the Hood
 
-- **New classes** — `LanguageManager` owns the language set, the
-  current tag, and the `wrap(Context)` helper; `LanguageDialog` is
-  the picker itself, structured line for line like `PresetDialog`.
-  `AlbumArtCache` is a new process-scoped singleton that owns the
-  decoded album art bitmaps. `MusicPlayer` and
-  `NotificationController` hold a reference to the singleton's
-  underlying `LruCache` rather than owning a cache of their own, so a
-  recreate does not evict the bitmaps and the carousel's first read
-  after the recreate finds the entry the previous instance decoded.
-- **Modified classes** — `CreditsDialog` gained a three-child version
-  header, a `createLanguageButton`, a `showLanguageDialog`, and a
-  `LANGUAGE_CHANGED` broadcast on selection. `MusicPlayer`,
-  `PlaylistActivity`, `FolderManager`, `EqualizerActivity`, and
-  `MetadataEditor` each gained an `attachBaseContext` override, a
-  `LANGUAGE_CHANGED` receiver that answers with `recreate()`, and
-  the corresponding registration and unregistration.
-  `NotificationController`'s channel names, action labels, and
-  placeholders now read from resources. `PlaylistManager`'s overlay
-  messages now read from resources. `CharacterMapper`'s four
-  placeholder producers now resolve from string resources, and its
-  four predicates match against both the current locale's value and
-  the English base. `Song`'s four metadata getters now delegate the
-  placeholder decision to those predicates. `PlaylistAdapter`'s
-  subtitle assembly uses the same predicates. `StorageAccessHelper`'s
-  storage-type labels and `ThemeManager`'s theme names and
-  `StorageObserver`'s overlay message and `FolderAdapter`'s loose-track
-  label all read from resources in the app's selected language.
-  `OverlayManager` gained `REASON_PLAYLIST_SORT`. `AlbumArtCarousel`
-  consumes the shared `LruCache` through `AlbumArtCache`.
-- **`EqualizerManager.getFrequencyLabel(int)`** — the label above
-  each equalizer band slider resolves its unit symbol from
-  `equalizer_frequency_hz`, `equalizer_frequency_khz`, and
-  `equalizer_frequency_khz_decimal`. The method's signature and its
-  place in the band-control layout are unchanged; only the strings it
-  resolves from are resource-backed.
-- **`PresetDialog`, `ThemeDialog`, `LanguageDialog`, `CreditsDialog`** —
-  `createTopBar` returns `LinearLayout`; the title takes weight 1 and
-  truncates with an ellipsis; the Cancel and trailing controls take
-  their natural widths. `CreditsDialog`'s `createVersionHeader`
-  follows the same shape, with the language button weighted 1.
-- **`activity_playlist`, `activity_folder_manager`,
-  `activity_equalizer`, `activity_metadata_editor`** — the top bar in
-  each layout is a horizontal linear layout with the title weighted
-  to the space the two edge buttons leave.
-- **`PlaylistActivity`** — `SORT_MODE_LABEL_SEPARATOR` is the
-  constant that separates the sort-mode prefix from the mode label,
-  replacing the two implicit space-bearing concatenations in
-  `updateSortHeaderDisplay` and `updateTitleAndCount`.
-- **`MusicPlayer`** — `consumePendingLanguageRecreate()` replaces the
-  inline check in `onResume()` and is also called from
-  `onWindowFocusChanged(boolean)` when the window regains focus.
-- **New resources** — `res/values/strings.xml` (rewritten with the
-  full key set, including the three `equalizer_frequency_*` keys the
-  band labels read); `res/values-es`, `-fr`, `-de`, `-it`, `-pt`,
-  `-ru`, `-zh`, `-ja`, `-ko`, `-hi`, `-ar`, `-tr`, `-in`, `-nl`,
-  `-pl` (new directories, each with a `strings.xml`);
-  `res/xml/locales_config.xml` (new, points at the platform's per-app
-  language picker).
-- **`AndroidManifest.xml`** — `android:supportsRtl="true"` and
-  `android:localeConfig="@xml/locales_config"` added to the
-  `<application>` element.
-- **`app/build.gradle`** — `resourceConfigurations` bounds the
-  release artifact to the sixteen locales the picker offers, so
-  transitive AndroidX dependencies do not contribute their own
-  translations of library-internal strings.
-- **Note on translation quality** — the Latin-script and
-  Cyrillic-script locale files were produced with high confidence.
-  The Chinese, Japanese, Korean, Hindi, Arabic, Turkish, and
-  Indonesian files would benefit from a native speaker's review.
+- **New classes** — `LanguageManager` owns the language set, the current tag, and the `wrap(Context)` helper; `LanguageDialog` is the picker itself, structured line for line like `PresetDialog`.
+  `AlbumArtCache` is a new process-scoped singleton that owns the decoded album art bitmaps.
+  `MusicPlayer` and `NotificationController` hold a reference to the singleton's underlying `LruCache` rather than owning a cache of their own, so a recreate does not evict the bitmaps and the carousel's first read after the recreate finds the entry the previous instance decoded.
+- **Modified classes** — `CreditsDialog` gained a three-child version header, a `createLanguageButton`, a `showLanguageDialog`, and a `LANGUAGE_CHANGED` broadcast on selection.
+  `MusicPlayer`, `PlaylistActivity`, `FolderManager`, `EqualizerActivity`, and `MetadataEditor` each gained an `attachBaseContext` override, a `LANGUAGE_CHANGED` receiver that answers with `recreate()`, and the corresponding registration and unregistration.
+  `NotificationController`'s channel names, action labels, and placeholders now read from resources.
+  `PlaylistManager`'s overlay messages now read from resources.
+  `CharacterMapper`'s four placeholder producers now resolve from string resources, and its four predicates match against both the current locale's value and the English base.
+  `Song`'s four metadata getters now delegate the placeholder decision to those predicates.
+  `PlaylistAdapter`'s subtitle assembly uses the same predicates.
+  `StorageAccessHelper`'s storage-type labels and `ThemeManager`'s theme names and `StorageObserver`'s overlay message and `FolderAdapter`'s loose-track label all read from resources in the app's selected language.
+  `OverlayManager` gained `REASON_PLAYLIST_SORT`.
+  `AlbumArtCarousel` consumes the shared `LruCache` through `AlbumArtCache`.
+- **`EqualizerManager.getFrequencyLabel(int)`** — the label above each equalizer band slider resolves its unit symbol from `equalizer_frequency_hz`, `equalizer_frequency_khz`, and `equalizer_frequency_khz_decimal`.
+  The method's signature and its place in the band-control layout are unchanged; only the strings it resolves from are resource-backed.
+- **`PresetDialog`, `ThemeDialog`, `LanguageDialog`, `CreditsDialog`** — `createTopBar` returns `LinearLayout`; the title takes weight 1 and truncates with an ellipsis; the Cancel and trailing controls take their natural widths.
+  `CreditsDialog`'s `createVersionHeader` follows the same shape, with the language button weighted 1.
+- **`activity_playlist`, `activity_folder_manager`, `activity_equalizer`, `activity_metadata_editor`** — the top bar in each layout is a horizontal linear layout with the title weighted to the space the two edge buttons leave.
+- **`PlaylistActivity`** — `SORT_MODE_LABEL_SEPARATOR` is the constant that separates the sort-mode prefix from the mode label, replacing the two implicit space-bearing concatenations in `updateSortHeaderDisplay` and `updateTitleAndCount`.
+- **`MusicPlayer`** — `consumePendingLanguageRecreate()` replaces the inline check in `onResume()` and is also called from `onWindowFocusChanged(boolean)` when the window regains focus.
+- **New resources** — `res/values/strings.xml` (rewritten with the full key set, including the three `equalizer_frequency_*` keys the band labels read); `res/values-es`, `-fr`, `-de`, `-it`, `-pt`, `-ru`, `-zh`, `-ja`, `-ko`, `-hi`, `-ar`, `-tr`, `-in`, `-nl`, `-pl` (new directories, each with a `strings.xml`); `res/xml/locales_config.xml` (new, points at the platform's per-app language picker).
+- **`AndroidManifest.xml`** — `android:supportsRtl="true"` and `android:localeConfig="@xml/locales_config"` added to the `<application>` element.
+- **`app/build.gradle`** — `resourceConfigurations` bounds the release artifact to the sixteen locales the picker offers, so transitive AndroidX dependencies do not contribute their own translations of library-internal strings.
+- **Note on translation quality** — the Latin-script and Cyrillic-script locale files were produced with high confidence.
+  The Chinese, Japanese, Korean, Hindi, Arabic, Turkish, and Indonesian files would benefit from a native speaker's review.
 
 ## [1.2.9] - Oct 10, 2026
 
 ### Overview
 
-This release brings permission-aware state handling to folder management
-and playback. The required runtime permissions are defined in one place,
-and controls now reflect whether the app can perform the action they
-represent. Folder changes depend on permission and update state; playback
-controls depend on permission, service readiness, and the contents of the
-music library.
+This release brings permission-aware state handling to folder management and playback.
+The required runtime permissions are defined in one place, and controls now reflect whether the app can perform the action they represent.
+Folder changes depend on permission and update state; playback controls depend on permission, service readiness, and the contents of the music library.
 
 ### Fixed
 
-- **Folder actions reflect permission and update state** — UPDATE and
-  per-folder REMOVE buttons are disabled when the required permissions are
-  missing or an update is already running. IMPORT FOLDER button remains available
-  when no update is in progress, since the system folder picker provides a separate
-  way to grant folder access. When permissions are restored and the user
-  returns to the app, the folder controls are refreshed to reflect the
-  current state.
+- **Folder actions reflect permission and update state** — UPDATE and per-folder REMOVE buttons are disabled when the required permissions are missing or an update is already running.
+  IMPORT FOLDER button remains available when no update is in progress, since the system folder picker provides a separate way to grant folder access.
+  When permissions are restored and the user returns to the app, the folder controls are refreshed to reflect the current state.
 
-- **Playback controls reflect whether playback is available** — Play,
-  previous, next, repeat, shuffle, and seek are disabled when the app lacks
-  required permissions, the playback service is not bound, or the library
-  has no songs. This also prevents theme application or a stale in-memory
-  song count from re-enabling controls after permission revocation.
+- **Playback controls reflect whether playback is available** — Play, previous, next, repeat, shuffle, and seek are disabled when the app lacks required permissions, the playback service is not bound, or the library has no songs.
+  This also prevents theme application or a stale in-memory song count from re-enabling controls after permission revocation.
 
 ### Under the Hood
 
-- `PermissionChecker` is the single definition of the required
-  runtime-permission set. `getMissing(Context)` supplies permissions
-  for the request flow, and `allGranted(Context)` checks the same
-  version-gated set. `MusicPlayer.checkPermissionsAndInitialize()`,
-  `MusicPlayer.onResume()`, and `FolderManager` use this shared source
-  instead of maintaining separate permission lists or checks.
-  `MusicPlayer.hasAllRequiredPermissions()` was removed because it
-  only duplicated the shared check. The permission flag was renamed
-  from `mPermissionsBlocked` to `mPermissionsDenied`; when permissions
-  are granted again, the initialization-attempt state is reset as
-  needed so initialization can run from a clean state.
+- `PermissionChecker` is the single definition of the required runtime-permission set.
+  `getMissing(Context)` supplies permissions for the request flow, and `allGranted(Context)` checks the same version-gated set.
+  `MusicPlayer.checkPermissionsAndInitialize()`, `MusicPlayer.onResume()`, and `FolderManager` use this shared source instead of maintaining separate permission lists or checks.
+  `MusicPlayer.hasAllRequiredPermissions()` was removed because it only duplicated the shared check.
+  The permission flag was renamed from `mPermissionsBlocked` to `mPermissionsDenied`; when permissions are granted again, the initialization-attempt state is reset as needed so initialization can run from a clean state.
 
-- `FolderManager.areFolderChangesAllowed()` combines
-  `PermissionChecker.allGranted(this)` with `!isUpdating()`. The UPDATE
-  button and row-level REMOVE buttons use this same decision.
-  `updateFolderButtons()` refreshes the adapter against that answer,
-  while IMPORT FOLDER button continues to depend only on whether an
-  update is running.
-  `FolderAdapter` receives a `RemoveButtonStateSource` from
-  the activity and queries it when configuring each REMOVE button,
-  rather than reading the navigation controller's disabled-action
-  state or caching an earlier result.
+- `FolderManager.areFolderChangesAllowed()` combines `PermissionChecker.allGranted(this)` with `!isUpdating()`.
+  The UPDATE button and row-level REMOVE buttons use this same decision.
+  `updateFolderButtons()` refreshes the adapter against that answer, while IMPORT FOLDER button continues to depend only on whether an update is running.
+  `FolderAdapter` receives a `RemoveButtonStateSource` from the activity and queries it when configuring each REMOVE button, rather than reading the navigation controller's disabled-action state or caching an earlier result.
 
-- `MusicPlayer.canEnableTransportControls()` combines the permission
-  check, service availability and binding state, and library contents.
-  `MusicPlayer.refreshTransportControls()` is the single writer of
-  every transport control's enabled state, label, and active tint. When
-  controls are available, it reads the play state, repeat mode, and
-  shuffle state from `MusicService`. It also updates the seek bar's
-  enabled state and tint without resetting its progress or range, so a
-  refresh does not interrupt a seek gesture.
+- `MusicPlayer.canEnableTransportControls()` combines the permission check, service availability and binding state, and library contents.
+  `MusicPlayer.refreshTransportControls()` is the single writer of every transport control's enabled state, label, and active tint.
+  When controls are available, it reads the play state, repeat mode, and shuffle state from `MusicService`.
+  It also updates the seek bar's enabled state and tint without resetting its progress or range, so a refresh does not interrupt a seek gesture.
 
-- The previous separate writers —
-  `updatePlayPauseButton()`, `updateRepeatButton()`,
-  `updateShuffleButton()`, `updateControlButtonsState()`, and
-  `enableAllControls()` — were removed and their responsibilities
-  moved into `refreshTransportControls()`. Initialization, service
-  connection, resume, song/UI updates, empty-state handling, theme
-  application, playlist loading, player and library broadcasts, and
-  repeat/shuffle actions now refresh controls through that method.
-  `applyNoSongState()` retains responsibility for resetting the seek
-  bar's progress and range, then delegates control state to the shared
-  refresh. The field and class documentation now identify this single
-  ownership point and its permission check.
+- The previous separate writers — `updatePlayPauseButton()`, `updateRepeatButton()`, `updateShuffleButton()`, `updateControlButtonsState()`, and `enableAllControls()` — were removed and their responsibilities moved into `refreshTransportControls()`.
+  Initialization, service connection, resume, song/UI updates, empty-state handling, theme application, playlist loading, player and library broadcasts, and repeat/shuffle actions now refresh controls through that method.
+  `applyNoSongState()` retains responsibility for resetting the seek bar's progress and range, then delegates control state to the shared refresh.
+  The field and class documentation now identify this single ownership point and its permission check.
 
 ## [1.2.8] - Oct 10, 2026
 
 ### Overview
 
-Six changes ship in this release — the permission-denied path now
-leaves the app in a state the user can act on, the cold-start load
-recovers from a MediaStore index that has not yet catalogued the
-library, the play button never shows as live when the service is not
-bound, the permission toast is shortened to fit the normal duration,
-a headset disconnect pauses playback even when the player activity is
-not alive, and the persisted last-playing flag has a single writer.
+Six changes ship in this release — the permission-denied path now leaves the app in a state the user can act on, the cold-start load recovers from a MediaStore index that has not yet catalogued the library, the play button never shows as live when the service is not bound, the permission toast is shortened to fit the normal duration, a headset disconnect pauses playback even when the player activity is not alive, and the persisted last-playing flag has a single writer.
 
-The permission flow has two outcomes and both need an exit. On a
-grant, the app runs the initialization flow from the resume cycle
-that follows the dialog. On a denial, the app applies the same empty
-state it would show for a library with no songs, so the transport
-controls are disabled and the user is not presented with buttons that
-cannot do anything. A single resume-time gate owns "has initialization
-run," so the flow cannot run twice for one permission decision and
-cannot be stranded when the user grants the permission after an
-earlier denial.
+The permission flow has two outcomes and both need an exit.
+On a grant, the app runs the initialization flow from the resume cycle that follows the dialog.
+On a denial, the app applies the same empty state it would show for a library with no songs, so the transport controls are disabled and the user is not presented with buttons that cannot do anything.
+A single resume-time gate owns "has initialization run," so the flow cannot run twice for one permission decision and cannot be stranded when the user grants the permission after an earlier denial.
 
-The cold-start load runs a MediaStore query that returns what the
-index has catalogued. A file the index has not yet seen — a fresh
-download, a transfer after a factory reset, an SD card inserted
-minutes earlier — is not returned by that query. When the query comes
-back empty and the user has folders configured, the empty result is a
-gap in the index rather than an empty library. The same folder-update
-scan the UPDATE button runs is triggered in that case, and the
-cold-start overlay stays up across both stages so the user sees one
-continuous load.
+The cold-start load runs a MediaStore query that returns what the index has catalogued.
+A file the index has not yet seen — a fresh download, a transfer after a factory reset, an SD card inserted minutes earlier — is not returned by that query.
+When the query comes back empty and the user has folders configured, the empty result is a gap in the index rather than an empty library.
+The same folder-update scan the UPDATE button runs is triggered in that case, and the cold-start overlay stays up across both stages so the user sees one continuous load.
 
-The play button's enabled state now tracks the service, not just the
-library. Every tap on the button resolves to a service call; while the
-service is not bound, the call is a no-op. A button that looks live
-but does nothing is the wrong state to show.
+The play button's enabled state now tracks the service, not just the library.
+Every tap on the button resolves to a service call; while the service is not bound, the call is a no-op.
+A button that looks live but does nothing is the wrong state to show.
 
-The pause that a Bluetooth disconnect is meant to produce was owned by
-the activity, not the service. The activity unregisters its receivers
-in `onDestroy`, so the pause had no receiver once the activity had
-been reclaimed by the OS or swiped from recents, and the music kept
-playing through the phone's speaker with the headset gone. The service
-owns the audio, so the service now owns the pause.
+The pause that a Bluetooth disconnect is meant to produce was owned by the activity, not the service.
+The activity unregisters its receivers in `onDestroy`, so the pause had no receiver once the activity had been reclaimed by the OS or swiped from recents, and the music kept playing through the phone's speaker with the headset gone.
+The service owns the audio, so the service now owns the pause.
 
-The persisted `last_playing` flag had two writers on the disconnect
-path. A `GET_PLAYING_STATE` broadcast triggered a preference write from
-both the activity and the service, each calling `isPlaying()` on the
-same value. The value is derived from the state machine, and the state
-machine is the service's, so the service is the writer.
+The persisted `last_playing` flag had two writers on the disconnect path.
+A `GET_PLAYING_STATE` broadcast triggered a preference write from both the activity and the service, each calling `isPlaying()` on the same value.
+The value is derived from the state machine, and the state machine is the service's, so the service is the writer.
 
 ### Fixed
 
-- **Permissions denied now leaves the app in a state the user can
-  act on** — The permission-denied branch hid the cold-start overlay
-  and showed a toast, but never changed the UI state. The play button
-  and the seek bar were enabled by the layout and stayed enabled,
-  because the only method that disables them —
-  `applyNoSongState()` — was never reached. Tapping play did nothing;
-  the button looked live but had no destination.
+- **Permissions denied now leaves the app in a state the user can act on** — The permission-denied branch hid the cold-start overlay and showed a toast, but never changed the UI state.
+  The play button and the seek bar were enabled by the layout and stayed enabled, because the only method that disables them — `applyNoSongState()` — was never reached.
+  Tapping play did nothing; the button looked live but had no destination.
 
-  The denial branch now applies the empty state. The title and artist
-  slots carry their standard placeholders, the transport controls are
-  disabled, the carousel shows the placeholder, both clock texts reset
-  to `00:00`, and the cached last song is cleared. The screen is
-  identical to the empty-library state because the two conditions are
-  indistinguishable from the user's seat: in both cases the app cannot
-  play anything. The permission case is disambiguated by the toast
-  shown at the moment of the denial, not by a difference in the screen
-  itself.
+The denial branch now applies the empty state.
+The title and artist slots carry their standard placeholders, the transport controls are disabled, the carousel shows the placeholder, both clock texts reset to `00:00`, and the cached last song is cleared.
+The screen is identical to the empty-library state because the two conditions are indistinguishable from the user's seat: in both cases the app cannot play anything.
+The permission case is disambiguated by the toast shown at the moment of the denial, not by a difference in the screen itself.
 
-- **The cold-start load recovers from a MediaStore index gap** —
-  When the cold-start MediaStore query returned no songs but the user
-  had folders configured, the app landed in the empty state and
-  stopped. The user's folders were still selected, their songs were
-  still in the database, and the empty state was a lie about the
-  library's content — a gap in MediaStore's index, not an empty
-  library.
+- **The cold-start load recovers from a MediaStore index gap** — When the cold-start MediaStore query returned no songs but the user had folders configured, the app landed in the empty state and stopped.
+  The user's folders were still selected, their songs were still in the database, and the empty state was a lie about the library's content — a gap in MediaStore's index, not an empty library.
 
-  The load now runs the same folder-update scan the UPDATE button
-  runs, which reconciles the songs table against the paths found
-  under every kept folder. The scan broadcasts
-  `UPDATE_PLAYLIST_FROM_FOLDERS` on completion, which the activity
-  handles as the reload signal. The cold-start overlay stays up
-  across both stages — the cold-start load and the automatic update —
-  so the user sees one continuous load rather than a load followed by
-  a correction.
+The load now runs the same folder-update scan the UPDATE button runs, which reconciles the songs table against the paths found under every kept folder.
+The scan broadcasts `UPDATE_PLAYLIST_FROM_FOLDERS` on completion, which the activity handles as the reload signal.
+The cold-start overlay stays up across both stages — the cold-start load and the automatic update — so the user sees one continuous load rather than a load followed by a correction.
 
-- **The play button is no longer enabled when the service is not
-  bound** — Every tap on the play button resolves to a service call.
-  While the service is not bound, the call is a no-op. The button's
-  enabled state tracked only the library, so a user with a populated
-  library but no bound service saw a live-looking button that did
-  nothing when tapped. The button is now enabled only when the library
-  holds songs **and** the service is bound. The disabled state is the
-  honest one for both the empty library and the missing service.
+- **The play button is no longer enabled when the service is not bound** — Every tap on the play button resolves to a service call.
+  While the service is not bound, the call is a no-op.
+  The button's enabled state tracked only the library, so a user with a populated library but no bound service saw a live-looking button that did nothing when tapped.
+  The button is now enabled only when the library holds songs **and** the service is bound.
+  The disabled state is the honest one for both the empty library and the missing service.
 
-  The change also affects the brief window between `bindService`
-  returning and `onServiceConnected` firing, where the button was
-  previously enabled for a fraction of a second. The new state shows
-  it disabled until the service is truly ready.
+The change also affects the brief window between `bindService` returning and `onServiceConnected` firing, where the button was previously enabled for a fraction of a second.
+The new state shows it disabled until the service is truly ready.
 
-- **The permission toast is shortened** — The denial message is now
-  `Permissions required to read and play songs`, which fits within
-  the normal toast duration at the toast's default text size. The
-  previous message was longer and would have needed a longer
-  duration, which would have overstayed the state.
+- **The permission toast is shortened** — The denial message is now `Permissions required to read and play songs`, which fits within the normal toast duration at the toast's default text size.
+  The previous message was longer and would have needed a longer duration, which would have overstayed the state.
 
-- **A headset disconnect pauses playback even when the activity is
-  not alive** — `BluetoothReceiver` broadcasts a pause request when
-  the headset or A2DP profile disconnects. The request was consumed by
-  `MusicPlayer`'s `mBluetoothPauseReceiver`, which is unregistered in
-  `onDestroy()`. When the activity had been destroyed — the OS
-  reclaiming it, the user swiping it from recents — the request had no
-  receiver, and the music kept playing through the phone's speaker
-  with the headset gone. The service was running and held the audio;
-  it simply never registered for the pause.
+- **A headset disconnect pauses playback even when the activity is not alive** — `BluetoothReceiver` broadcasts a pause request when the headset or A2DP profile disconnects.
+  The request was consumed by `MusicPlayer`'s `mBluetoothPauseReceiver`, which is unregistered in `onDestroy()`.
+  When the activity had been destroyed — the OS reclaiming it, the user swiping it from recents — the request had no receiver, and the music kept playing through the phone's speaker with the headset gone.
+  The service was running and held the audio; it simply never registered for the pause.
 
-  `MusicService` now owns the pause. It registers a receiver for
-  `BLUETOOTH_PAUSE` in `onCreate()` and unregisters it in
-  `onDestroy()`, so the pause fires for the service's whole lifetime
-  rather than the activity's. The pause goes through the same
-  `pause()` method the transport button uses, so the state machine,
-  the persisted `last_playing` flag, the notification surface, and the
-  `UPDATE_PLAYER` broadcast all come out the normal way.
+`MusicService` now owns the pause.
+It registers a receiver for `BLUETOOTH_PAUSE` in `onCreate()` and unregisters it in `onDestroy()`, so the pause fires for the service's whole lifetime rather than the activity's.
+The pause goes through the same `pause()` method the transport button uses, so the state machine, the persisted `last_playing` flag, the notification surface, and the `UPDATE_PLAYER` broadcast all come out the normal way.
 
-- **The persisted last-playing flag has a single writer** —
-  `BluetoothReceiver` sent a `GET_PLAYING_STATE` broadcast before the
-  pause request. Two receivers in the process wrote
-  `LlamaPrefs.last_playing` from it:
-  `MusicPlayer.mGetPlayingStateReceiver` and
-  `MusicService.mGetPlayingStateReceiver`, each calling
-  `isPlaying()` on the same value. Two writers for one fact. The value
-  is derived from the state machine, and the state machine is the
-  service's, so the service is the writer. `MusicPlayer`'s
-  `GET_PLAYING_STATE` receiver — whose only effect was the duplicate
-  write — is removed. The service's own `GET_PLAYING_STATE` receiver
-  remains, because `MetadataEditor` uses it for its own handshake and
-  for the persistent write. `BluetoothReceiver` no longer sends
-  `GET_PLAYING_STATE` on disconnect at all: the pause it gated is now
-  handled by the service directly, and the metadata editor remains the
-  broadcast's only sender for its own use.
+- **The persisted last-playing flag has a single writer** — `BluetoothReceiver` sent a `GET_PLAYING_STATE` broadcast before the pause request.
+  Two receivers in the process wrote `LlamaPrefs.last_playing` from it: `MusicPlayer.mGetPlayingStateReceiver` and `MusicService.mGetPlayingStateReceiver`, each calling `isPlaying()` on the same value.
+  Two writers for one fact.
+  The value is derived from the state machine, and the state machine is the service's, so the service is the writer.
+  `MusicPlayer`'s `GET_PLAYING_STATE` receiver — whose only effect was the duplicate write — is removed.
+  The service's own `GET_PLAYING_STATE` receiver remains, because `MetadataEditor` uses it for its own handshake and for the persistent write.
+  `BluetoothReceiver` no longer sends `GET_PLAYING_STATE` on disconnect at all: the pause it gated is now handled by the service directly, and the metadata editor remains the broadcast's only sender for its own use.
 
 ### Under the Hood
 
-- `MusicPlayer` gained `mInitializationAttempted`, set at the entry
-  to `proceedWithInitialization()` and never cleared by the activity's
-  own flow. The resume-time retry checks it so the initialization
-  flow runs at most once per activity instance, whether the bind
-  succeeded, failed synchronously, or was never reached because the
-  permission check denied.
+- `MusicPlayer` gained `mInitializationAttempted`, set at the entry to `proceedWithInitialization()` and never cleared by the activity's own flow.
+  The resume-time retry checks it so the initialization flow runs at most once per activity instance, whether the bind succeeded, failed synchronously, or was never reached because the permission check denied.
 
-- `MusicPlayer` gained `mPermissionsBlocked`, latched when the
-  permission check first fails and cleared when it succeeds. When it
-  is cleared after having been set, `mInitializationAttempted` is
-  also reset so the initialization flow runs again from a clean
-  slate. This is the path that recovers a launch where the user
-  denied the request and later granted it in the system settings.
+- `MusicPlayer` gained `mPermissionsBlocked`, latched when the permission check first fails and cleared when it succeeds.
+  When it is cleared after having been set, `mInitializationAttempted` is also reset so the initialization flow runs again from a clean slate.
+  This is the path that recovers a launch where the user denied the request and later granted it in the system settings.
 
-- `MusicPlayer.hasAllRequiredPermissions()` mirrors the permission
-  set requested by `checkPermissionsAndInitialize()`, without
-  requesting anything. A user who has already denied is not shown
-  another dialog on every resume; the check simply reports whether
-  the flow may proceed.
+- `MusicPlayer.hasAllRequiredPermissions()` mirrors the permission set requested by `checkPermissionsAndInitialize()`, without requesting anything.
+  A user who has already denied is not shown another dialog on every resume; the check simply reports whether the flow may proceed.
 
-- `MusicPlayer.onRequestPermissionsResult` records the outcome. On a
-  grant it clears `mPermissionsBlocked`; on a denial it shows the
-  shortened toast, hides the overlay, sets `mPermissionsBlocked`, and
-  applies the empty state. The callback does not advance the
-  initialization flow — the resume owns that.
+- `MusicPlayer.onRequestPermissionsResult` records the outcome.
+  On a grant it clears `mPermissionsBlocked`; on a denial it shows the shortened toast, hides the overlay, sets `mPermissionsBlocked`, and applies the empty state.
+  The callback does not advance the initialization flow — the resume owns that.
 
-- `MusicPlayer.onResume` reads the outcome on the same turn the
-  permission dialog dismisses and drives the flow. When permissions
-  are not held it applies the empty state once and returns. When
-  they are held and the block latch was set, it resets the attempt
-  (only when the flow had already run) so the flow re-runs from a
-  clean slate. When the flow has not been attempted it runs it.
+- `MusicPlayer.onResume` reads the outcome on the same turn the permission dialog dismisses and drives the flow.
+  When permissions are not held it applies the empty state once and returns.
+  When they are held and the block latch was set, it resets the attempt (only when the flow had already run) so the flow re-runs from a clean slate.
+  When the flow has not been attempted it runs it.
 
-- `MusicPlayer.proceedWithInitialization()` sets
-  `mInitializationAttempted` at entry. When the service is already
-  bound — the recovery path after a runtime permission restore — it
-  skips the bind and calls `loadFullPlaylistInBackground` directly,
-  because `bindService` would be a no-op that never re-fires the
-  connection callback.
+- `MusicPlayer.proceedWithInitialization()` sets `mInitializationAttempted` at entry.
+  When the service is already bound — the recovery path after a runtime permission restore — it skips the bind and calls `loadFullPlaylistInBackground` directly, because `bindService` would be a no-op that never re-fires the connection callback.
 
-- `MusicPlayer.loadFullPlaylistInBackground()` triggers the automatic
-  folder update on an empty result with folders configured, and
-  returns without hiding the overlay. The overlay is hidden by the
-  auto-update's own completion or error callback.
+- `MusicPlayer.loadFullPlaylistInBackground()` triggers the automatic folder update on an empty result with folders configured, and returns without hiding the overlay.
+  The overlay is hidden by the auto-update's own completion or error callback.
 
-- `MusicPlayer.triggerAutomaticFolderUpdate()` runs
-  `PlaylistManager.updatePlaylist`, hides the overlay on completion or
-  error, and broadcasts `ACTION_UPDATE_PLAYLIST_FROM_FOLDERS`. The
-  activity's own receiver handles the broadcast as the reload signal
-  and hands the refreshed library to the service.
+- `MusicPlayer.triggerAutomaticFolderUpdate()` runs `PlaylistManager.updatePlaylist`, hides the overlay on completion or error, and broadcasts `ACTION_UPDATE_PLAYLIST_FROM_FOLDERS`.
+  The activity's own receiver handles the broadcast as the reload signal and hands the refreshed library to the service.
 
-- `MusicPlayer.updatePlayPauseButton()` checks both the library and
-  the service. The button is enabled only when the library holds songs
-  and the service is bound.
+- `MusicPlayer.updatePlayPauseButton()` checks both the library and the service.
+  The button is enabled only when the library holds songs and the service is bound.
 
-- `ACTION_UPDATE_PLAYLIST_FROM_FOLDERS` is lifted to a named constant
-  on `MusicPlayer`, replacing the inline string literal that was
-  duplicated in the receiver registration and the auto-update
-  broadcast.
+- `ACTION_UPDATE_PLAYLIST_FROM_FOLDERS` is lifted to a named constant on `MusicPlayer`, replacing the inline string literal that was duplicated in the receiver registration and the auto-update broadcast.
 
-- `MusicPlayer.MESSAGE_PERMISSIONS_REQUIRED` is the new shortened
-  denial message.
+- `MusicPlayer.MESSAGE_PERMISSIONS_REQUIRED` is the new shortened denial message.
 
-- `MusicService` gained `ACTION_BLUETOOTH_PAUSE` and the field
-  `mBluetoothPauseReceiver`. `registerBluetoothPauseReceiver()`
-  registers it in `onCreate()` after `registerLibraryResetReceiver()`;
-  `unregisterReceiverSafely(mBluetoothPauseReceiver)` clears it in
-  `onDestroy()`. The receiver's `onReceive` calls `pause()` when the
-  action matches.
+- `MusicService` gained `ACTION_BLUETOOTH_PAUSE` and the field `mBluetoothPauseReceiver`.
+  `registerBluetoothPauseReceiver()` registers it in `onCreate()` after `registerLibraryResetReceiver()`; `unregisterReceiverSafely(mBluetoothPauseReceiver)` clears it in `onDestroy()`.
+  The receiver's `onReceive` calls `pause()` when the action matches.
 
-- `MusicPlayer` dropped the field `mBluetoothPauseReceiver` and the
-  field `mGetPlayingStateReceiver`; dropped their
-  `registerReceiverSafely` calls in `registerReceivers()`; dropped
-  their `unregisterReceiverSafely` calls in `onDestroy()`; and
-  dropped the `KEY_LAST_PLAYING` constant, which the get-state
-  receiver had been the only writer of.
+- `MusicPlayer` dropped the field `mBluetoothPauseReceiver` and the field `mGetPlayingStateReceiver`; dropped their `registerReceiverSafely` calls in `registerReceivers()`; dropped their `unregisterReceiverSafely` calls in `onDestroy()`; and dropped the `KEY_LAST_PLAYING` constant, which the get-state receiver had been the only writer of.
 
-- `BluetoothReceiver.handleBluetoothDisconnect()` no longer sends
-  `GET_PLAYING_STATE`. The `ACTION_GET_PLAYING_STATE` constant is
-  removed.
+- `BluetoothReceiver.handleBluetoothDisconnect()` no longer sends `GET_PLAYING_STATE`.
+  The `ACTION_GET_PLAYING_STATE` constant is removed.
 
 ## [1.2.7] - Oct 9, 2026
 
 ### Overview
 
-Three changes ship in this release — removing a folder no longer
-wipes the playlist, the reveal never shows the placeholder during its
-cross-fade, and the cold-start overlay can no longer be left up by a
-library load that never completes.
+Three changes ship in this release — removing a folder no longer wipes the playlist, the reveal never shows the placeholder during its cross-fade, and the cold-start overlay can no longer be left up by a library load that never completes.
 
-The songs table holds song paths. The selected-folder set holds
-folder URIs. The folder-update cycle's completion callback passed the
-folder URIs to a deletion that reconciles against song paths, so no
-row's path ever matched a keep entry and every row was removed. The
-completion callback no longer deletes songs; the scan that runs
-inside the update cycle is the single reconciler of the songs table,
-and it operates on song paths, which are the values the table stores.
+The songs table holds song paths.
+The selected-folder set holds folder URIs.
+The folder-update cycle's completion callback passed the folder URIs to a deletion that reconciles against song paths, so no row's path ever matched a keep entry and every row was removed.
+The completion callback no longer deletes songs; the scan that runs inside the update cycle is the single reconciler of the songs table, and it operates on song paths, which are the values the table stores.
 
-The reveal — the cross-fade the carousel runs when the incoming
-current path is neither of the previous window's neighbours — now
-waits for the incoming art to resolve before it begins. While it
-waits, the outgoing art stays on screen. The moment the incoming art
-resolves, the cross-fade runs from the outgoing art to the incoming
-art in one transition. The user never sees the placeholder between
-the two.
+The reveal — the cross-fade the carousel runs when the incoming current path is neither of the previous window's neighbours — now waits for the incoming art to resolve before it begins.
+While it waits, the outgoing art stays on screen.
+The moment the incoming art resolves, the cross-fade runs from the outgoing art to the incoming art in one transition.
+The user never sees the placeholder between the two.
 
-The cold-start overlay is kept alive by a heartbeat that re-posts
-itself while the `LIBRARY_LOAD` operation is on the stack. The
-heartbeat now stops after a bounded deadline. When it stops, the
-overlay is torn down and the user is told the library could not be
-loaded. The service bind's synchronous return value is checked for
-the same reason: a refused bind cannot be allowed to leave the
-overlay up with no callback ever coming to hide it.
+The cold-start overlay is kept alive by a heartbeat that re-posts itself while the `LIBRARY_LOAD` operation is on the stack.
+The heartbeat now stops after a bounded deadline.
+When it stops, the overlay is torn down and the user is told the library could not be loaded.
+The service bind's synchronous return value is checked for the same reason: a refused bind cannot be allowed to leave the overlay up with no callback ever coming to hide it.
 
 ### Fixed
 
-- **Removing a folder no longer wipes the playlist** — The songs
-  table holds song paths: strings of the form
-  `/storage/emulated/0/Music/song.mp3`. The selected-folder set
-  holds folder URIs: strings of the form
-  `content://com.android.externalstorage.documents/tree/primary%3AMusic`.
-  The folder-update cycle's completion callback passed the folder
-  URIs to a deletion that reconciles against song paths, so no row's
-  path ever matched a keep entry and every row was removed. The
-  callback fired only when the user had staged the Loose Tracks
-  entry for removal — the loose clear runs in the same branch — but
-  the deletion inside it targeted the songs table, not the loose
-  table, so removing any folder under that combination wiped the
-  library.
+- **Removing a folder no longer wipes the playlist** — The songs table holds song paths: strings of the form `/storage/emulated/0/Music/song.mp3`.
+  The selected-folder set holds folder URIs: strings of the form `content://com.android.externalstorage.documents/tree/primary%3AMusic`.
+  The folder-update cycle's completion callback passed the folder URIs to a deletion that reconciles against song paths, so no row's path ever matched a keep entry and every row was removed.
+  The callback fired only when the user had staged the Loose Tracks entry for removal — the loose clear runs in the same branch — but the deletion inside it targeted the songs table, not the loose table, so removing any folder under that combination wiped the library.
 
-  The completion callback no longer deletes songs. The scan that
-  runs inside the folder-update cycle already reconciles the songs
-  table against the paths it found under the kept folders: it finds
-  every song under every remaining folder and removes any row whose
-  path it did not find. When the user has staged the Loose Tracks
-  entry for removal, the loose-songs table is cleared before the
-  scan runs, so the scan's reconciliation leaves the songs table
-  holding exactly the songs under the kept folders. The scan
-  operates on song paths, which are the values the songs table
-  stores, so its reconciliation is the single correct write path for
-  the songs table.
+The completion callback no longer deletes songs.
+The scan that runs inside the folder-update cycle already reconciles the songs table against the paths it found under the kept folders: it finds every song under every remaining folder and removes any row whose path it did not find.
+When the user has staged the Loose Tracks entry for removal, the loose-songs table is cleared before the scan runs, so the scan's reconciliation leaves the songs table holding exactly the songs under the kept folders.
+The scan operates on song paths, which are the values the songs table stores, so its reconciliation is the single correct write path for the songs table.
 
-  Removing a folder now removes the songs under that folder and
-  leaves every other folder's songs and every loose track alone.
-  Removing the Loose Tracks entry removes the loose tracks and
-  leaves folder songs alone.
+Removing a folder now removes the songs under that folder and leaves every other folder's songs and every loose track alone.
+Removing the Loose Tracks entry removes the loose tracks and leaves folder songs alone.
 
-- **The reveal never shows the placeholder mid-transition** — The
-  reveal is a cross-fade: the outgoing art fades out as the incoming
-  art fades in, with a small overlap. For that shape to hold, both
-  bitmaps must be available on the frame the cross-fade begins. They
-  were not always both available. A file opened from another app is
-  pre-decoded in parallel with the playlist rebuild that produces
-  the reveal's window, and whichever finished last was the one the
-  reveal waited on. When the preload had not finished, the incoming
-  path's bitmap was not in the cache, and the cross-fade ran on the
-  placeholder. When the preload resolved a moment later, the
-  carousel swapped the overlay's bitmap from placeholder to real
-  art mid-fade. The user saw three states — old art, placeholder,
-  new art — for what should have been one transition.
+- **The reveal never shows the placeholder mid-transition** — The reveal is a cross-fade: the outgoing art fades out as the incoming art fades in, with a small overlap.
+  For that shape to hold, both bitmaps must be available on the frame the cross-fade begins.
+  They were not always both available.
+  A file opened from another app is pre-decoded in parallel with the playlist rebuild that produces the reveal's window, and whichever finished last was the one the reveal waited on.
+  When the preload had not finished, the incoming path's bitmap was not in the cache, and the cross-fade ran on the placeholder.
+  When the preload resolved a moment later, the carousel swapped the overlay's bitmap from placeholder to real art mid-fade.
+  The user saw three states — old art, placeholder, new art — for what should have been one transition.
 
-  The carousel now gates the reveal on the incoming path's art being
-  *resolved*. Resolved means one of two things: the path's bitmap is
-  in the shared cache, or the path's decode has completed and
-  produced no bitmap because the file has no embedded art. Until one
-  of those is true, the carousel enters a pending state: the
-  outgoing art stays on screen, no overlay is created, and the
-  strip's middle slot is not written with the placeholder. The
-  cross-fade begins the moment the incoming art resolves, either
-  through the external preload's handoff or through the carousel's
-  own decode. A short safety-net timeout covers the case where
-  neither ever resolves: the cross-fade then begins with the
-  placeholder, which is the honest end state for a path whose art
-  cannot be read.
+The carousel now gates the reveal on the incoming path's art being *resolved*.
+Resolved means one of two things: the path's bitmap is in the shared cache, or the path's decode has completed and produced no bitmap because the file has no embedded art.
+Until one of those is true, the carousel enters a pending state: the outgoing art stays on screen, no overlay is created, and the strip's middle slot is not written with the placeholder.
+The cross-fade begins the moment the incoming art resolves, either through the external preload's handoff or through the carousel's own decode.
+A short safety-net timeout covers the case where neither ever resolves: the cross-fade then begins with the placeholder, which is the honest end state for a path whose art cannot be read.
 
-  A broadcast arriving while the reveal is pending is adopted as
-  usual, and if its current path differs from the one being waited
-  on, the wait is retargeted to the newest path through the same
-  gate. The cross-fade still begins only when the newest pending
-  path's art resolves.
+A broadcast arriving while the reveal is pending is adopted as usual, and if its current path differs from the one being waited on, the wait is retargeted to the newest path through the same gate.
+The cross-fade still begins only when the newest pending path's art resolves.
 
-  The cross-fade itself is unchanged. It uses the same outgoing and
-  incoming fractions, the same curves, the same duration, and the
-  same small incoming scale-up it has always used. Only the moment
-  it begins has moved.
+The cross-fade itself is unchanged.
+It uses the same outgoing and incoming fractions, the same curves, the same duration, and the same small incoming scale-up it has always used.
+Only the moment it begins has moved.
 
-- **The cold-start overlay cannot be left up by a load that never
-  completes** — The "Just a moment..." toast and its dim spinner are
-  owned by the `LIBRARY_LOAD` operation on the `ToastManager` stack.
-  The operation is shown from `onResume` and from the library load's
-  entry point, and is hidden by the load's completion callback, the
-  load's error callback, or the permission request's denial branch.
-  A heartbeat runnable re-posts itself every 500 ms while the
-  operation is on the stack, so `ToastManager`'s stuck detector
-  knows the operation is alive.
+- **The cold-start overlay cannot be left up by a load that never completes** — The "Just a moment..." toast and its dim spinner are owned by the `LIBRARY_LOAD` operation on the `ToastManager` stack.
+  The operation is shown from `onResume` and from the library load's entry point, and is hidden by the load's completion callback, the load's error callback, or the permission request's denial branch.
+  A heartbeat runnable re-posts itself every 500 ms while the operation is on the stack, so `ToastManager`'s stuck detector knows the operation is alive.
 
-  There was one path with no exit. If the service bind were accepted
-  but `onServiceConnected` never fired — the service process
-  crashing in `onCreate` before returning its binder, an OOM kill
-  between the bind and the callback — `loadFullPlaylistInBackground`
-  would never run, `onLoadComplete` and `onLoadError` would never
-  fire, and the heartbeat would re-post itself forever. The stuck
-  detector watched the heartbeat and saw a live operation; it
-  watched the overlay and saw a valid holder. Neither of its two
-  stuck conditions could fire.
+There was one path with no exit.
+If the service bind were accepted but `onServiceConnected` never fired — the service process crashing in `onCreate` before returning its binder, an OOM kill between the bind and the callback — `loadFullPlaylistInBackground` would never run, `onLoadComplete` and `onLoadError` would never fire, and the heartbeat would re-post itself forever.
+The stuck detector watched the heartbeat and saw a live operation; it watched the overlay and saw a valid holder.
+Neither of its two stuck conditions could fire.
 
-  The heartbeat is now bounded. After 60 seconds have passed since
-  the first heartbeat, the runnable stops and calls the same abandon
-  path a load error uses: the overlay and the spinner are hidden
-  under the `LIBRARY_LOAD` operation, and a short toast tells the
-  user the library could not be loaded. The operation is removed
-  from the stack, so the next cold-start attempt starts clean.
+The heartbeat is now bounded.
+After 60 seconds have passed since the first heartbeat, the runnable stops and calls the same abandon path a load error uses: the overlay and the spinner are hidden under the `LIBRARY_LOAD` operation, and a short toast tells the user the library could not be loaded.
+The operation is removed from the stack, so the next cold-start attempt starts clean.
 
-  The bind's synchronous return value is checked as well. A refused
-  bind is reported through the same abandon path immediately, without
-  waiting for the deadline. The incoming-file hand-off is dispatched
-  only when the bind was accepted: a refused bind means the service
-  cannot be reached, so parking a path would only leave it orphaned.
+The bind's synchronous return value is checked as well.
+A refused bind is reported through the same abandon path immediately, without waiting for the deadline.
+The incoming-file hand-off is dispatched only when the bind was accepted: a refused bind means the service cannot be reached, so parking a path would only leave it orphaned.
 
 ### Under the Hood
 
-- `FolderManager.performPlaylistUpdate()`'s completion callback no
-  longer clears the loose-songs table and no longer calls
-  `SongDatabase.deleteSongsNotInSet` with the selected-folder set.
-  The loose-songs table is cleared once, in `saveChanges`, before
-  the update is dispatched; the songs table is reconciled once, by
-  `PlaylistManager.performScan`, against the song paths the scan
-  found under the kept folders. Each table has one write path for
-  the update cycle.
+- `FolderManager.performPlaylistUpdate()`'s completion callback no longer clears the loose-songs table and no longer calls `SongDatabase.deleteSongsNotInSet` with the selected-folder set.
+  The loose-songs table is cleared once, in `saveChanges`, before the update is dispatched; the songs table is reconciled once, by `PlaylistManager.performScan`, against the song paths the scan found under the kept folders.
+  Each table has one write path for the update cycle.
 
-- `AlbumArtCarousel.SwipeState` gained `REVEAL_PENDING`. The state
-  is entered when a reveal is deferred because the incoming path's
-  art has not yet resolved. While in this state the outgoing art
-  stays on screen; no overlay is created and `render()` is not
-  called for the incoming window, so the strip's middle slot cannot
-  be written with the placeholder mid-transition.
+- `AlbumArtCarousel.SwipeState` gained `REVEAL_PENDING`.
+  The state is entered when a reveal is deferred because the incoming path's art has not yet resolved.
+  While in this state the outgoing art stays on screen; no overlay is created and `render()` is not called for the incoming window, so the strip's middle slot cannot be written with the placeholder mid-transition.
 
-- `AlbumArtCarousel` gained `mPendingRevealPath`, holding the path
-  the pending reveal is waiting for, and
-  `mPendingRevealTimeoutRunnable`, the safety-net timeout that fires
-  when the art never resolves. Both are cleared by `cancelSwipe`,
-  and `mPendingRevealPath` is retargeted by `setWindow`'s
-  `REVEAL_PENDING` branch, which routes the retarget through
-  `startReveal(String)` so the new path gets its own wait: the
-  cross-fade starts immediately when the new path's art is already
-  cached, and a fresh safety-net timeout is armed when it is not.
+- `AlbumArtCarousel` gained `mPendingRevealPath`, holding the path the pending reveal is waiting for, and `mPendingRevealTimeoutRunnable`, the safety-net timeout that fires when the art never resolves.
+  Both are cleared by `cancelSwipe`, and `mPendingRevealPath` is retargeted by `setWindow`'s `REVEAL_PENDING` branch, which routes the retarget through `startReveal(String)` so the new path gets its own wait: the cross-fade starts immediately when the new path's art is already cached, and a fresh safety-net timeout is armed when it is not.
 
-- `AlbumArtCarousel` gained `mDecodedPaths`, a set of paths whose
-  decode has resolved — whether or not a bitmap was produced. A
-  path in this set with no bitmap in the shared cache has been read
-  and confirmed to have no embedded art.
+- `AlbumArtCarousel` gained `mDecodedPaths`, a set of paths whose decode has resolved — whether or not a bitmap was produced.
+  A path in this set with no bitmap in the shared cache has been read and confirmed to have no embedded art.
 
-- `AlbumArtCarousel` gained `startReveal(String)`,
-  `beginPendingReveal(String)`, and `cancelPendingRevealTimeout()`.
-  `adoptInIdle`'s reveal branch calls `startReveal` instead of
-  `startFade` directly. `scheduleIfMissing`'s decode callback and
-  `onArtReady` both resolve a pending reveal whose pending path
-  matches the one they resolved.
+- `AlbumArtCarousel` gained `startReveal(String)`, `beginPendingReveal(String)`, and `cancelPendingRevealTimeout()`.
+  `adoptInIdle`'s reveal branch calls `startReveal` instead of `startFade` directly.
+  `scheduleIfMissing`'s decode callback and `onArtReady` both resolve a pending reveal whose pending path matches the one they resolved.
 
-- `AlbumArtCarousel.REVEAL_OUTGOING_FRACTION` is `0.45f`,
-  `REVEAL_OVERLAP_FRACTION` is `0.15f`,
-  `REVEAL_INCOMING_START_SCALE` is `0.96f`, and
-  `REVEAL_DURATION_MS` is `500L`, matching `COMMIT_DURATION_MS`.
-  The reveal runs the same shape it has always run; only the moment
-  it begins has moved.
+- `AlbumArtCarousel.REVEAL_OUTGOING_FRACTION` is `0.45f`, `REVEAL_OVERLAP_FRACTION` is `0.15f`, `REVEAL_INCOMING_START_SCALE` is `0.96f`, and `REVEAL_DURATION_MS` is `500L`, matching `COMMIT_DURATION_MS`.
+  The reveal runs the same shape it has always run; only the moment it begins has moved.
 
-- `AlbumArtCarousel.REVEAL_ART_TIMEOUT_MS` is the new safety-net
-  timeout for a pending reveal, in milliseconds.
+- `AlbumArtCarousel.REVEAL_ART_TIMEOUT_MS` is the new safety-net timeout for a pending reveal, in milliseconds.
 
-- `MusicPlayer.ensureLibraryLoadHeartbeat()` bounds the heartbeat
-  with `LIBRARY_LOAD_HEARTBEAT_DEADLINE_MS`. The runnable stops when
-  the deadline is exceeded and calls
-  `abandonLibraryLoadOverlay(String)`, which hides the persistent
-  overlay under `OPERATION_LIBRARY_LOAD`, hides the
-  `REASON_COLD_START` spinner, and shows a failure toast.
+- `MusicPlayer.ensureLibraryLoadHeartbeat()` bounds the heartbeat with `LIBRARY_LOAD_HEARTBEAT_DEADLINE_MS`.
+  The runnable stops when the deadline is exceeded and calls `abandonLibraryLoadOverlay(String)`, which hides the persistent overlay under `OPERATION_LIBRARY_LOAD`, hides the `REASON_COLD_START` spinner, and shows a failure toast.
 
-- `MusicPlayer.proceedWithInitialization()` checks the return value
-  of `bindService`. A refused bind calls the same
-  `abandonLibraryLoadOverlay(String)` path with a bind-specific
-  message, and the incoming-file hand-off is skipped because there
-  is no service to hand it to.
+- `MusicPlayer.proceedWithInitialization()` checks the return value of `bindService`.
+  A refused bind calls the same `abandonLibraryLoadOverlay(String)` path with a bind-specific message, and the incoming-file hand-off is skipped because there is no service to hand it to.
 
-- The three strings the abandon and refusal paths display —
-  `MESSAGE_LIBRARY_LOAD_FAILED` and `MESSAGE_SERVICE_BIND_FAILED` —
-  are private constants on `MusicPlayer`.
+- The three strings the abandon and refusal paths display — `MESSAGE_LIBRARY_LOAD_FAILED` and `MESSAGE_SERVICE_BIND_FAILED` — are private constants on `MusicPlayer`.
 
 ## [1.2.6] - Oct 8, 2026
 
 ### Overview
 
-Three changes ship in this release — a unified animation source for
-the transport buttons, a stable shuffle neighbour for the carousel,
-and a reduced main-thread cost for the notification commit.
+Three changes ship in this release — a unified animation source for the transport buttons, a stable shuffle neighbour for the carousel, and a reduced main-thread cost for the notification commit.
 
-Every transition — a transport button, a headset key, an automatic
-advance, a committed swipe, an incoming file — reaches the album-art
-carousel through one signal: the service's `UPDATE_PLAYER` broadcast.
-The broadcast carries the window the carousel renders, the direction
-of the transition that produced it, and whether the transition
-restarts the current song. The carousel renders exactly the animation
-those three values describe. The strip's first frame and the audio's
-transition are the same event, on the same main-thread turn, against
-an idle main thread.
+Every transition — a transport button, a headset key, an automatic advance, a committed swipe, an incoming file — reaches the album-art carousel through one signal: the service's `UPDATE_PLAYER` broadcast.
+The broadcast carries the window the carousel renders, the direction of the transition that produced it, and whether the transition restarts the current song.
+The carousel renders exactly the animation those three values describe.
+The strip's first frame and the audio's transition are the same event, on the same main-thread turn, against an idle main thread.
 
-Under shuffle, the neighbour the carousel renders and the target the
-next commit advances to are the same value by construction. The two
-peek functions hold independent memos, so both directions' answers
-survive a window read, and a subsequent commit that consumes either
-direction returns the index the window advertised in that slot. The
-service's window producer is also memoised for the current state, so
-two consecutive reads with the same state return the same three
-paths.
+Under shuffle, the neighbour the carousel renders and the target the next commit advances to are the same value by construction.
+The two peek functions hold independent memos, so both directions' answers survive a window read, and a subsequent commit that consumes either direction returns the index the window advertised in that slot.
+The service's window producer is also memoised for the current state, so two consecutive reads with the same state return the same three paths.
 
-The notification commit's main-thread work is the builder
-construction and the notification IPC. The controller caches its
-themed action icons — three of the four use constant tints and are
-identical across every commit, and the fourth depends only on the
-theme color — and caches the content, close, and delete intents.
+The notification commit's main-thread work is the builder construction and the notification IPC.
+The controller caches its themed action icons — three of the four use constant tints and are identical across every commit, and the fourth depends only on the theme color — and caches the content, close, and delete intents.
 
 ### Fixed
 
-- **Transport buttons animate identically to automatic transitions**
-  — A next or previous press is a plain request: it asks the service
-  to advance, and the carousel's slide begins on the turn the
-  service's broadcast reaches the activity. The service names the
-  direction and the restart of every transition it begins, as
-  properties of the generation that produces the window, and
-  publishes both on the `UPDATE_PLAYER` broadcast that carries the
-  window. The carousel reads them from the broadcast and renders the
-  animation they describe. There is no prediction for the service to
-  contradict and no second broadcast for the carousel to absorb. The
-  reveal is reachable from a button press under shuffle.
+- **Transport buttons animate identically to automatic transitions** — A next or previous press is a plain request: it asks the service to advance, and the carousel's slide begins on the turn the service's broadcast reaches the activity.
+  The service names the direction and the restart of every transition it begins, as properties of the generation that produces the window, and publishes both on the `UPDATE_PLAYER` broadcast that carries the window.
+  The carousel reads them from the broadcast and renders the animation they describe.
+  There is no prediction for the service to contradict and no second broadcast for the carousel to absorb.
+  The reveal is reachable from a button press under shuffle.
 
-- **The shuffle neighbour slots are stable** — Under shuffle, the
-  neighbour the carousel renders and the target the next commit
-  advances to are the same value. The two peek functions hold
-  independent memos, so both directions' answers survive a window
-  read; previously a single shared memo was overwritten by whichever
-  peek ran last, and a subsequent commit that consumed the other
-  direction's peek resolved to a fresh random index rather than the
-  one the window showed. The problem was most visible when the
-  shuffle history was exhausted, where the previous peek falls back
-  to a fresh random pick: the window's previous slot and a Previous
-  press would resolve to two different random indices, and the left
-  slot would show one path's placeholder while the animation settled
-  on another. The service's window producer is also memoised for the
-  current state, so two consecutive reads with the same state return
-  the same three paths.
+- **The shuffle neighbour slots are stable** — Under shuffle, the neighbour the carousel renders and the target the next commit advances to are the same value.
+  The two peek functions hold independent memos, so both directions' answers survive a window read; previously a single shared memo was overwritten by whichever peek ran last, and a subsequent commit that consumed the other direction's peek resolved to a fresh random index rather than the one the window showed.
+  The problem was most visible when the shuffle history was exhausted, where the previous peek falls back to a fresh random pick: the window's previous slot and a Previous press would resolve to two different random indices, and the left slot would show one path's placeholder while the animation settled on another.
+  The service's window producer is also memoised for the current state, so two consecutive reads with the same state return the same three paths.
 
-- **The transport restart nudge is preserved** — Under repeat-one, on
-  a single-song playlist, or on a shuffle re-pick that cannot avoid
-  the current index, the service names the transition's direction and
-  sets its restart flag. The carousel adopts the incoming window and
-  runs the same below-threshold nudge the automatic restart runs. The
-  two paths share the spring force, the outward distance, and the
-  `RESTARTING` branch of `setWindow`, so a press and an involuntary
-  restart look the same. Both legs of the nudge run on the same
-  spring constants, so the out-move and the return share their motion
-  model.
+- **The transport restart nudge is preserved** — Under repeat-one, on a single-song playlist, or on a shuffle re-pick that cannot avoid the current index, the service names the transition's direction and sets its restart flag.
+  The carousel adopts the incoming window and runs the same below-threshold nudge the automatic restart runs.
+  The two paths share the spring force, the outward distance, and the `RESTARTING` branch of `setWindow`, so a press and an involuntary restart look the same.
+  Both legs of the nudge run on the same spring constants, so the out-move and the return share their motion model.
 
-- **The notification commit is bounded by the notification IPC** —
-  The four themed action icons and the three `PendingIntent` objects
-  are served from caches. The main-thread work a commit performs is
-  the notification builder construction and the notification IPC.
+- **The notification commit is bounded by the notification IPC** — The four themed action icons and the three `PendingIntent` objects are served from caches.
+  The main-thread work a commit performs is the notification builder construction and the notification IPC.
 
 ### Under the Hood
 
-- `MusicService` names the direction and the restart of every
-  transition as properties of the generation. Four fields carry them:
-  `mGenerationDirection` and `mGenerationRestart` hold the values of
-  the current generation, and `mNotedDirection` and `mNotedRestart`
-  hold the values noted for the next transition to begin.
-  `noteTransition(int, boolean)` writes the notes;
-  `beginTransition(int, int)` consumes them into the generation it
-  creates; `broadcastUpdate()` publishes them alongside the window;
-  `clearNotedTransition()` clears them when `reconcile()` decides no
-  transition is warranted.
+- `MusicService` names the direction and the restart of every transition as properties of the generation.
+  Four fields carry them: `mGenerationDirection` and `mGenerationRestart` hold the values of the current generation, and `mNotedDirection` and `mNotedRestart` hold the values noted for the next transition to begin.
+  `noteTransition(int, boolean)` writes the notes; `beginTransition(int, int)` consumes them into the generation it creates; `broadcastUpdate()` publishes them alongside the window; `clearNotedTransition()` clears them when `reconcile()` decides no transition is warranted.
 
-- Every transition entry point notes the direction and restart at the
-  moment it decides the target. `playNextSong()` and
-  `playPreviousSong()` note `+1` and `-1` respectively, with the
-  restart flag set when the request resolves to a restart.
-  `onCompletion()` notes `+1`, with the flag set when the automatic
-  advance restarts the same song under repeat-one or on a
-  single-song playlist. `onStall()` notes `+1` for an advance and
-  `0` for a reprepare of the same song. `onPlayerError()`,
-  `onPrepareFailed()`, and the three failure paths inside
-  `beginTransition` note `+1` and clear the restart flag. The
-  explicit-selection entry points — `playSong()`,
-  `playSongAtPosition()`, `playSongByPath()`,
-  `playPendingSongIfExists()` — do not note; their transitions carry
-  direction `0` and the carousel runs the reveal when the song
-  changes.
+- Every transition entry point notes the direction and restart at the moment it decides the target.
+  `playNextSong()` and `playPreviousSong()` note `+1` and `-1` respectively, with the restart flag set when the request resolves to a restart.
+  `onCompletion()` notes `+1`, with the flag set when the automatic advance restarts the same song under repeat-one or on a single-song playlist.
+  `onStall()` notes `+1` for an advance and `0` for a reprepare of the same song.
+  `onPlayerError()`, `onPrepareFailed()`, and the three failure paths inside `beginTransition` note `+1` and clear the restart flag.
+  The explicit-selection entry points — `playSong()`, `playSongAtPosition()`, `playSongByPath()`, `playPendingSongIfExists()` — do not note; their transitions carry direction `0` and the carousel runs the reveal when the song changes.
 
-- `MusicService.broadcastUpdate()` publishes the two values as
-  `transition_direction` and `transition_restart` extras on the
-  `UPDATE_PLAYER` broadcast. They travel with the window and the
-  generation, so a receiver that has the window has the transition
-  that produced it. `transitionToIdle()` and `stop()` clear both the
-  current and the noted values, so an abandoned request does not
-  leave a direction for a later, unrelated transition to pick up.
+- `MusicService.broadcastUpdate()` publishes the two values as `transition_direction` and `transition_restart` extras on the `UPDATE_PLAYER` broadcast.
+  They travel with the window and the generation, so a receiver that has the window has the transition that produced it.
+  `transitionToIdle()` and `stop()` clear both the current and the noted values, so an abandoned request does not leave a direction for a later, unrelated transition to pick up.
 
 - `MusicService` holds two shuffle peek memos, one per direction.
-  `mShuffleNextPeekValid`, `mShuffleNextPeekFromIndex`, and
-  `mShuffleNextPeekResult` hold the next peek's answer;
-  `mShufflePrevPeekValid`, `mShufflePrevPeekFromIndex`, and
-  `mShufflePrevPeekResult` hold the previous peek's answer. The two
-  memos have independent lifetimes: a window read that computes both
-  peeks preserves both, so a commit that consumes either direction
-  returns the index the window advertised in that slot. A single
-  shared memo would be overwritten by whichever peek ran last, and a
-  commit that consumed the other direction's peek would resolve to a
-  fresh random index rather than the one the window showed.
+  `mShuffleNextPeekValid`, `mShuffleNextPeekFromIndex`, and `mShuffleNextPeekResult` hold the next peek's answer; `mShufflePrevPeekValid`, `mShufflePrevPeekFromIndex`, and `mShufflePrevPeekResult` hold the previous peek's answer.
+  The two memos have independent lifetimes: a window read that computes both peeks preserves both, so a commit that consumes either direction returns the index the window advertised in that slot.
+  A single shared memo would be overwritten by whichever peek ran last, and a commit that consumed the other direction's peek would resolve to a fresh random index rather than the one the window showed.
 
-- `MusicService.getWindowSnapshot()` memoises the window for the
-  current `(generation, current path)` pair. The two peek functions
-  are not idempotent on their own — each one recomputes the neighbour
-  the corresponding memo returns — so two consecutive calls with the
-  same state would produce two windows with different neighbour paths
-  in the shuffle fallback case. The cache holds the window the last
-  call produced, so every consumer in the same state sees the same
-  three paths. This is what keeps the neighbour slot the carousel
-  renders stable across the broadcast that produced it and any
-  refresh that follows, and what keeps the window's neighbours in
-  agreement with the shuffle picks the next commit will consume. The
-  cache is cleared by `clearShufflePeek()`, which every operation
-  that changes what an index means already calls, and by
-  `transitionToIdle()` and `stop()`.
+- `MusicService.getWindowSnapshot()` memoises the window for the current `(generation, current path)` pair.
+  The two peek functions are not idempotent on their own — each one recomputes the neighbour the corresponding memo returns — so two consecutive calls with the same state would produce two windows with different neighbour paths in the shuffle fallback case.
+  The cache holds the window the last call produced, so every consumer in the same state sees the same three paths.
+  This is what keeps the neighbour slot the carousel renders stable across the broadcast that produced it and any refresh that follows, and what keeps the window's neighbours in agreement with the shuffle picks the next commit will consume.
+  The cache is cleared by `clearShufflePeek()`, which every operation that changes what an index means already calls, and by `transitionToIdle()` and `stop()`.
 
-- `AlbumArtCarousel.setWindow(PlaybackWindow, int, boolean)` reads
-  the two values alongside the window. Its `adoptInIdle` method uses
-  the direction directly — `startCommit(int, boolean)` for a
-  neighbour advance, `startBelowThreshold(int)` for a restart,
-  `startFade()` when the direction is zero and the current song
-  changed — and snaps to rest with no animation when the generation
-  is unchanged, the current path is empty, or the direction is zero
-  and the song is unchanged. The service's answer is the only source
-  of the direction.
+- `AlbumArtCarousel.setWindow(PlaybackWindow, int, boolean)` reads the two values alongside the window.
+  Its `adoptInIdle` method uses the direction directly — `startCommit(int, boolean)` for a neighbour advance, `startBelowThreshold(int)` for a restart, `startFade()` when the direction is zero and the current song changed — and snaps to rest with no animation when the generation is unchanged, the current path is empty, or the direction is zero and the song is unchanged.
+  The service's answer is the only source of the direction.
 
-- Every motion the carousel runs toward a rest position runs on one
-  spring: the restart nudge's outward leg, the restart nudge's return
-  leg, and every return from a partial commit — the spring-back after
-  a below-threshold swipe, the refusal path of a committed swipe, the
-  mismatch path of an in-flight commit, the snapshot timeout. The
-  damping ratio and stiffness are shared, so every settle has the
-  same time to come to rest and the same small overshoot regardless
-  of the distance travelled. The strip's motion spreads across the
-  whole spring settle, so the arrival at rest is gentle.
+- Every motion the carousel runs toward a rest position runs on one spring: the restart nudge's outward leg, the restart nudge's return leg, and every return from a partial commit — the spring-back after a below-threshold swipe, the refusal path of a committed swipe, the mismatch path of an in-flight commit, the snapshot timeout.
+  The damping ratio and stiffness are shared, so every settle has the same time to come to rest and the same small overshoot regardless of the distance travelled.
+  The strip's motion spreads across the whole spring settle, so the arrival at rest is gentle.
 
-- `MusicService.playNextSong()` and `MusicService.playPreviousSong()`
-  are the transport entry points. They assign the target, note the
-  direction and restart, and call `reconcile()`. The service
-  publishes the transition alongside the window on the
-  `UPDATE_PLAYER` broadcast, so a caller that requests a change does
-  not need a second return channel.
+- `MusicService.playNextSong()` and `MusicService.playPreviousSong()` are the transport entry points.
+  They assign the target, note the direction and restart, and call `reconcile()`.
+  The service publishes the transition alongside the window on the `UPDATE_PLAYER` broadcast, so a caller that requests a change does not need a second return channel.
 
-- `MusicPlayer`'s `UPDATE_PLAYER` receiver reads
-  `transition_direction` and `transition_restart` from the broadcast
-  and forwards both to the carousel's `setWindow`. The
-  `refreshCarouselFromService()` and `applyNoSongState()` callers
-  pass `0` and `false`, because a re-publication is not a fresh
-  transition.
+- `MusicPlayer`'s `UPDATE_PLAYER` receiver reads `transition_direction` and `transition_restart` from the broadcast and forwards both to the carousel's `setWindow`.
+  The `refreshCarouselFromService()` and `applyNoSongState()` callers pass `0` and `false`, because a re-publication is not a fresh transition.
 
-- `MusicPlayer.playNextSong()` and `MusicPlayer.playPreviousSong()`
-  are plain requests. A button press dispatches the service request
-  on the tap and the strip starts moving on the turn the service's
-  broadcast reaches the receiver — the same turn an automatic
-  transition's slide starts on.
+- `MusicPlayer.playNextSong()` and `MusicPlayer.playPreviousSong()` are plain requests.
+  A button press dispatches the service request on the tap and the strip starts moving on the turn the service's broadcast reaches the receiver — the same turn an automatic transition's slide starts on.
 
-- The swipe commit listener installed in `MusicPlayer.initializeViews`
-  routes a committed swipe through the same two methods. A swipe's
-  commit slide is a continuation of the drag and begins at the
-  release, because the strip is already displaced under the finger;
-  the service's broadcast arrives during the slide and is absorbed
-  by the commit state.
+- The swipe commit listener installed in `MusicPlayer.initializeViews` routes a committed swipe through the same two methods.
+  A swipe's commit slide is a continuation of the drag and begins at the release, because the strip is already displaced under the finger; the service's broadcast arrives during the slide and is absorbed by the commit state.
 
-- `NotificationController` holds `mThemedIconCache`, a map keyed by
-  the pair of the drawable resource and the tint, and three cached
-  `PendingIntent` fields for the content, close, and delete intents.
-  `getThemedIcon(int, int)` builds on a miss and serves from the
-  cache on every subsequent call; `getContentIntent()`,
-  `getCloseIntent()`, and `getDeleteIntent()` build on first use and
-  return the cached instance thereafter. The theme-color dependency
-  of the play/pause icon is expressed through the key: a theme change
-  alters the tint, which alters the key, which produces a fresh entry
-  on the next commit alongside the old. The cache is cleared in
-  `shutdown()`.
+- `NotificationController` holds `mThemedIconCache`, a map keyed by the pair of the drawable resource and the tint, and three cached `PendingIntent` fields for the content, close, and delete intents.
+  `getThemedIcon(int, int)` builds on a miss and serves from the cache on every subsequent call; `getContentIntent()`, `getCloseIntent()`, and `getDeleteIntent()` build on first use and return the cached instance thereafter.
+  The theme-color dependency of the play/pause icon is expressed through the key: a theme change alters the tint, which alters the key, which produces a fresh entry on the next commit alongside the old.
+  The cache is cleared in `shutdown()`.
 
-- `NotificationController.buildPlaybackNotification` reads its four
-  action icons and its three intents through the getters. The
-  `buildContentIntent(int flags)` helper is folded into
-  `getContentIntent()`, since every caller reads the cached instance.
-  `buildLibraryNotification` reads the content intent through the
-  same getter.
+- `NotificationController.buildPlaybackNotification` reads its four action icons and its three intents through the getters.
+  The `buildContentIntent(int flags)` helper is folded into `getContentIntent()`, since every caller reads the cached instance.
+  `buildLibraryNotification` reads the content intent through the same getter.
 
 ---
 
@@ -5541,230 +3084,103 @@ theme color — and caches the content, close, and delete intents.
 
 ### Overview
 
-Four changes ship in this release — a Material Design 3 motion system
-for the album-art carousel, a unified commit turn that lands every
-surface of the app from one frame, a single-song playlist resolution
-for the transport buttons, and a preservation pass over the
-incoming-file pathway.
+Four changes ship in this release — a Material Design 3 motion system for the album-art carousel, a unified commit turn that lands every surface of the app from one frame, a single-song playlist resolution for the transport buttons, and a preservation pass over the incoming-file pathway.
 
-The album-art carousel now uses the platform's motion tokens. The
-commit slide runs on the emphasized decelerate curve over 500 ms. The
-non-neighbour reveal — which is what an incoming file opened from
-another app produces — is a staggered cross-fade: the outgoing art
-fades out on the emphasized accelerate curve over the first 45 % of a
-600 ms window, and the incoming art fades in on the emphasized
-decelerate curve with a 0.96→1.0 scale over the remaining 55 %,
-overlapping the outgoing leg by 15 % of the total duration. The
-repeat-one nudge is driven by a `SpringAnimation` with a low-bouncy
-damping ratio, so the strip overshoots its target slightly and
-settles back with a short oscillation — a physical acknowledgement
-of the restart rather than a linear bounce.
+The album-art carousel now uses the platform's motion tokens.
+The commit slide runs on the emphasized decelerate curve over 500 ms.
+The non-neighbour reveal — which is what an incoming file opened from another app produces — is a staggered cross-fade: the outgoing art fades out on the emphasized accelerate curve over the first 45 % of a 600 ms window, and the incoming art fades in on the emphasized decelerate curve with a 0.96→1.0 scale over the remaining 55 %, overlapping the outgoing leg by 15 % of the total duration.
+The repeat-one nudge is driven by a `SpringAnimation` with a low-bouncy damping ratio, so the strip overshoots its target slightly and settles back with a short oscillation — a physical acknowledgement of the restart rather than a linear bounce.
 
-Every transition the user can cause now commits every surface of the
-app from one main-thread frame. The carousel's `setWindow` method
-reports whether the window landed synchronously, and the activity's
-`UPDATE_PLAYER` receiver builds one commit runnable that writes the
-notification, the media session, the transport glyph, the seek bar's
-range, the title, and the artist. When the carousel is animating, the
-runnable runs on the settle frame; when it is not, the runnable runs
-in the receiver's turn. Either way, the album art and the text land
-on the same frame.
+Every transition the user can cause now commits every surface of the app from one main-thread frame.
+The carousel's `setWindow` method reports whether the window landed synchronously, and the activity's `UPDATE_PLAYER` receiver builds one commit runnable that writes the notification, the media session, the transport glyph, the seek bar's range, the title, and the artist.
+When the carousel is animating, the runnable runs on the settle frame; when it is not, the runnable runs in the receiver's turn.
+Either way, the album art and the text land on the same frame.
 
-On a single-song playlist, the next and previous buttons now restart
-the song on every repeat mode. Previously they did nothing under
-repeat-off and repeat-all: the wrap landed on the current index, the
-target did not change, and the state machine did not transition. The
-service exposes two pure methods, `willNextRestartCurrent()` and
-`willPreviousRestartCurrent()`, and the activity uses the answer to
-choose between the carousel's below-threshold nudge and the full
-commit slide.
+On a single-song playlist, the next and previous buttons now restart the song on every repeat mode.
+Previously they did nothing under repeat-off and repeat-all: the wrap landed on the current index, the target did not change, and the state machine did not transition.
+The service exposes two pure methods, `willNextRestartCurrent()` and `willPreviousRestartCurrent()`, and the activity uses the answer to choose between the carousel's below-threshold nudge and the full commit slide.
 
-Two rapid incoming files now resolve in order even when their inserts
-overlap, and a request that arrives during an in-flight transition is
-no longer lost to a failure-recovery heuristic. Three related gaps
-are closed: the insert's completion no longer re-fires the hand-off
-that parks the pending path, the service's `setPlaylist` no longer
-falls back to index 0 when the pending path is not yet findable, and
-the service gained a `mDeferredReconcile` flag that preserves the
-newest target through a prepare failure.
+Two rapid incoming files now resolve in order even when their inserts overlap, and a request that arrives during an in-flight transition is no longer lost to a failure-recovery heuristic.
+Three related gaps are closed: the insert's completion no longer re-fires the hand-off that parks the pending path, the service's `setPlaylist` no longer falls back to index 0 when the pending path is not yet findable, and the service gained a `mDeferredReconcile` flag that preserves the newest target through a prepare failure.
 
 ### Fixed
 
-- **The album art and the text land on the same frame** — Previously
-  the `UPDATE_PLAYER` receiver wrote the seek bar, the title, the
-  artist, and the transport glyph immediately while the carousel was
-  still animating. Those writes triggered a measure-and-layout pass
-  that landed on a frame between the animation's own frames, which
-  the eye read as a stutter in the slide and as the art landing
-  before the text. The receiver now builds one commit runnable and
-  dispatches it through the carousel's commit contract, so the work
-  and the carousel's own re-render land in the same layout pass.
+- **The album art and the text land on the same frame** — Previously the `UPDATE_PLAYER` receiver wrote the seek bar, the title, the artist, and the transport glyph immediately while the carousel was still animating.
+  Those writes triggered a measure-and-layout pass that landed on a frame between the animation's own frames, which the eye read as a stutter in the slide and as the art landing before the text.
+  The receiver now builds one commit runnable and dispatches it through the carousel's commit contract, so the work and the carousel's own re-render land in the same layout pass.
 
-- **The next and previous buttons no longer schedule a delayed glyph
-  update** — Both methods scheduled
-  `postDelayed(updatePlayPauseButton, 100)`, which landed a layout
-  pass on a mid-slide frame. The glyph is delivered by the
-  `UPDATE_PLAYER` receiver through the carousel's settle hook, on
-  the same frame the strip's new bitmaps are installed. The delayed
-  call and the `NEXT_PREV_UPDATE_DELAY_MS` constant are gone.
+- **The next and previous buttons no longer schedule a delayed glyph update** — Both methods scheduled `postDelayed(updatePlayPauseButton, 100)`, which landed a layout pass on a mid-slide frame.
+  The glyph is delivered by the `UPDATE_PLAYER` receiver through the carousel's settle hook, on the same frame the strip's new bitmaps are installed.
+  The delayed call and the `NEXT_PREV_UPDATE_DELAY_MS` constant are gone.
 
-- **The album-art carousel uses Material Design 3 motion** — The
-  commit slide, the reveal, and the nudge now use the platform's
-  motion tokens. The commit slide runs on the emphasized decelerate
-  curve (`PathInterpolator(0.05, 0.7, 0.1, 1.0)`). The reveal is a
-  staggered cross-fade: the outgoing art fades out on the emphasized
-  accelerate curve (`PathInterpolator(0.3, 0.0, 0.8, 0.15)`) over
-  the first 45 % of a 600 ms window, and the incoming art fades in
-  on the emphasized decelerate curve with a 0.96→1.0 scale over the
-  remaining 55 %, overlapping the outgoing leg by 15 % of the total
-  duration. The nudge is driven by a `SpringAnimation` with a
-  low-bouncy damping ratio (0.75) and low stiffness (200.0), so the
-  strip overshoots its target slightly and settles back with a
-  short oscillation. The reveal's overlay is composited on a
-  hardware layer for the duration of the fade, cleared on the end
-  frame.
+- **The album-art carousel uses Material Design 3 motion** — The commit slide, the reveal, and the nudge now use the platform's motion tokens.
+  The commit slide runs on the emphasized decelerate curve (`PathInterpolator(0.05, 0.7, 0.1, 1.0)`).
+  The reveal is a staggered cross-fade: the outgoing art fades out on the emphasized accelerate curve (`PathInterpolator(0.3, 0.0, 0.8, 0.15)`) over the first 45 % of a 600 ms window, and the incoming art fades in on the emphasized decelerate curve with a 0.96→1.0 scale over the remaining 55 %, overlapping the outgoing leg by 15 % of the total duration.
+  The nudge is driven by a `SpringAnimation` with a low-bouncy damping ratio (0.75) and low stiffness (200.0), so the strip overshoots its target slightly and settles back with a short oscillation.
+  The reveal's overlay is composited on a hardware layer for the duration of the fade, cleared on the end frame.
 
-- **Single-song playlist transport buttons restart the song** — On
-  a playlist with one song, the next and previous buttons did
-  nothing under repeat-off and repeat-all: the wrap landed on the
-  current index, the target did not change, and the state machine
-  did not transition. The buttons now restart the song on every
-  repeat mode. `willNextRestartCurrent()` and
-  `willPreviousRestartCurrent()` answer the activity's question
-  about the intent, and the carousel's nudge now accepts a
-  neighbour whose path equals the current path, so the restart has
-  somewhere to slide.
+- **Single-song playlist transport buttons restart the song** — On a playlist with one song, the next and previous buttons did nothing under repeat-off and repeat-all: the wrap landed on the current index, the target did not change, and the state machine did not transition.
+  The buttons now restart the song on every repeat mode.
+  `willNextRestartCurrent()` and `willPreviousRestartCurrent()` answer the activity's question about the intent, and the carousel's nudge now accepts a neighbour whose path equals the current path, so the restart has somewhere to slide.
 
-- **A request that arrives during an in-flight transition is not
-  lost** — The service's `reconcile()` bails when the state is
-  PREPARING, and the only re-entry point was a comparison of the
-  target index against the current index in the prepare callbacks.
-  That comparison does not fire when a failure-recovery heuristic
-  has already reset the target to a positional successor. A new
-  `mDeferredReconcile` flag is set on every PREPARING bail, cleared
-  before a new transition starts, and checked by both prepare
-  callbacks. A request that arrived while a transition was in
-  flight re-enters reconciliation with the newest target even
-  after a prepare failure.
+- **A request that arrives during an in-flight transition is not lost** — The service's `reconcile()` bails when the state is PREPARING, and the only re-entry point was a comparison of the target index against the current index in the prepare callbacks.
+  That comparison does not fire when a failure-recovery heuristic has already reset the target to a positional successor.
+  A new `mDeferredReconcile` flag is set on every PREPARING bail, cleared before a new transition starts, and checked by both prepare callbacks.
+  A request that arrived while a transition was in flight re-enters reconciliation with the newest target even after a prepare failure.
 
-- **A rebuild during an in-flight transition no longer redirects
-  the target** — When the state is PREPARING and a playlist
-  rebuild runs, the rebuild used to reset `mTargetIndex` from the
-  anchor. By that point the pending path had already been consumed
-  by the successful resolution of the first request, so the anchor
-  was the currently bound song, and the rebuild silently
-  redirected the transition to it. The rebuild now re-resolves the
-  target's path against the new playlist, so the same song is
-  named and the transition in flight is preserved.
+- **A rebuild during an in-flight transition no longer redirects the target** — When the state is PREPARING and a playlist rebuild runs, the rebuild used to reset `mTargetIndex` from the anchor.
+  By that point the pending path had already been consumed by the successful resolution of the first request, so the anchor was the currently bound song, and the rebuild silently redirected the transition to it.
+  The rebuild now re-resolves the target's path against the new playlist, so the same song is named and the transition in flight is preserved.
 
-- **Two rapid loose-track opens resolve in order** — When a user
-  opens two audio files in quick succession, each file is inserted
-  as a loose track and its own playlist rebuild follows.
-  Previously `MusicService.setPlaylist` cleared `mPendingSongPath`
-  unconditionally, so the first rebuild — running before the
-  second file's insert had committed — cleared the slot even
-  though the path it named was not yet in the playlist. The second
-  rebuild fell through to the persisted last-played path, and the
-  second file never played. The slot is now consumed only when it
-  was resolved by its own path in the rebuilt playlist, and the
-  insert's completion no longer re-fires the hand-off, so a newer
-  request is not overwritten by an older one.
+- **Two rapid loose-track opens resolve in order** — When a user opens two audio files in quick succession, each file is inserted as a loose track and its own playlist rebuild follows.
+  Previously `MusicService.setPlaylist` cleared `mPendingSongPath` unconditionally, so the first rebuild — running before the second file's insert had committed — cleared the slot even though the path it named was not yet in the playlist.
+  The second rebuild fell through to the persisted last-played path, and the second file never played.
+  The slot is now consumed only when it was resolved by its own path in the rebuilt playlist, and the insert's completion no longer re-fires the hand-off, so a newer request is not overwritten by an older one.
 
-- **The notification surface no longer drifts from the media
-  session** — Three fixes. The rendered-state advance is now gated
-  on the notification post actually landing, so a revoked
-  permission or a failed IPC rolls back the rendered state and
-  retries on the next sync. Art retention across a re-render of
-  the same song is gated on the decode still being in flight, so
-  a resolved "no art" clears both surfaces together. And a theme
-  change re-applies the session metadata from the last committed
-  snapshot, so the session's placeholder picks up the new tint on
-  the same turn as the notification's.
+- **The notification surface no longer drifts from the media session** — Three fixes.
+  The rendered-state advance is now gated on the notification post actually landing, so a revoked permission or a failed IPC rolls back the rendered state and retries on the next sync.
+  Art retention across a re-render of the same song is gated on the decode still being in flight, so a resolved "no art" clears both surfaces together.
+  And a theme change re-applies the session metadata from the last committed snapshot, so the session's placeholder picks up the new tint on the same turn as the notification's.
 
 ### Under the Hood
 
-- `AlbumArtCarousel` gained the Material Design 3 motion constants
-  (`EMPHASIZED_DECELERATE`, `EMPHASIZED_ACCELERATE`,
-  `NUDGE_SPRING_DAMPING_RATIO`, `NUDGE_SPRING_STIFFNESS`,
-  `COMMIT_DURATION_MS = 500`, `RETURN_DURATION_MS = 350`,
-  `REVEAL_DURATION_MS = 600`,
-  `REVEAL_OUTGOING_FRACTION = 0.45`,
-  `REVEAL_INCOMING_START_SCALE = 0.96`,
-  `REVEAL_OVERLAP_FRACTION = 0.15`). The commit slide, the
-  return-to-rest glide, and the reveal's incoming leg use the
-  emphasized decelerate curve; the reveal's outgoing leg uses the
-  emphasized accelerate curve. The below-threshold nudge is driven
-  by a `SpringAnimation` with a low-bouncy `SpringForce`. The
-  reveal's overlay is composited on a hardware layer for the
-  duration of the fade. `setWindow(PlaybackWindow)` and
-  `adoptInIdle(PlaybackWindow, long)` now return a boolean — the
-  commit contract — and `isAnimating()` reports true while
-  `mReturningToRest` is set, so a return-to-rest glide is honestly
-  reported to callers that gate work on the strip's motion.
-  `nudgeToNeighbour(int)` accepts a neighbour whose path equals the
-  current path, so a single-song playlist's restart has somewhere
-  to slide. The `SWIPE_ANIMATION_MS` constant and the two
-  interpolator imports were removed.
+- `AlbumArtCarousel` gained the Material Design 3 motion constants (`EMPHASIZED_DECELERATE`, `EMPHASIZED_ACCELERATE`, `NUDGE_SPRING_DAMPING_RATIO`, `NUDGE_SPRING_STIFFNESS`, `COMMIT_DURATION_MS = 500`, `RETURN_DURATION_MS = 350`, `REVEAL_DURATION_MS = 600`, `REVEAL_OUTGOING_FRACTION = 0.45`, `REVEAL_INCOMING_START_SCALE = 0.96`, `REVEAL_OVERLAP_FRACTION = 0.15`).
+  The commit slide, the return-to-rest glide, and the reveal's incoming leg use the emphasized decelerate curve; the reveal's outgoing leg uses the emphasized accelerate curve.
+  The below-threshold nudge is driven by a `SpringAnimation` with a low-bouncy `SpringForce`.
+  The reveal's overlay is composited on a hardware layer for the duration of the fade.
+  `setWindow(PlaybackWindow)` and `adoptInIdle(PlaybackWindow, long)` now return a boolean — the commit contract — and `isAnimating()` reports true while `mReturningToRest` is set, so a return-to-rest glide is honestly reported to callers that gate work on the strip's motion.
+  `nudgeToNeighbour(int)` accepts a neighbour whose path equals the current path, so a single-song playlist's restart has somewhere to slide.
+  The `SWIPE_ANIMATION_MS` constant and the two interpolator imports were removed.
 
-- `MusicPlayer`. The `UPDATE_PLAYER` receiver adopts the window,
-  then dispatches one commit runnable through the carousel's commit
-  contract. `playNextSong()` and `playPreviousSong()` ask the
-  service through `willNextRestartCurrent()` and
-  `willPreviousRestartCurrent()` and choose the carousel's nudge or
-  commit accordingly. `insertLooseTrackAndHandOff`'s completion
-  callback no longer re-fires `handOffIncomingPath` — the initial
-  hand-off in `handleIncomingFile` is the only writer of the
-  pending slot. The `mUpdatePlaylistReceiver` and
-  `mUpdatePlaylistFromFoldersReceiver` no longer call
-  `refreshCarouselFromService`; the carousel is updated by the
-  service's own `UPDATE_PLAYER` broadcast, so a second path cannot
-  show the target song's art while the previous song is still
-  playing. The `postDelayed(updatePlayPauseButton, 100)` calls and
-  the `NEXT_PREV_UPDATE_DELAY_MS` constant were removed.
+- `MusicPlayer`.
+  The `UPDATE_PLAYER` receiver adopts the window, then dispatches one commit runnable through the carousel's commit contract.
+  `playNextSong()` and `playPreviousSong()` ask the service through `willNextRestartCurrent()` and `willPreviousRestartCurrent()` and choose the carousel's nudge or commit accordingly.
+  `insertLooseTrackAndHandOff`'s completion callback no longer re-fires `handOffIncomingPath` — the initial hand-off in `handleIncomingFile` is the only writer of the pending slot.
+  The `mUpdatePlaylistReceiver` and `mUpdatePlaylistFromFoldersReceiver` no longer call `refreshCarouselFromService`; the carousel is updated by the service's own `UPDATE_PLAYER` broadcast, so a second path cannot show the target song's art while the previous song is still playing.
+  The `postDelayed(updatePlayPauseButton, 100)` calls and the `NEXT_PREV_UPDATE_DELAY_MS` constant were removed.
 
-- `MusicService` gained `mDeferredReconcile` and the two pure
-  methods `willNextRestartCurrent()` and
-  `willPreviousRestartCurrent()`. `reconcile()` sets
-  `mDeferredReconcile` when it bails on PREPARING and clears it
-  before `beginTransition`. `onPrepared` and `onPlaybackStarted`
-  re-check on `mDeferredReconcile || mTargetIndex != mCurrentIndex
-  || mForceReprepare`. `onPrepareFailed` respects the deferred flag
-  and re-enters reconciliation with the newest target instead of
-  overwriting it with a positional successor. `playNextSong` and
-  `playPreviousSong` force a reprepare when the wrap lands on the
-  current index, matching what the automatic advance already does
-  at the end of a track. `setPlaylist` captures the target path
-  before the playlist swap, preserves the target through a rebuild
-  that runs while the state is PREPARING, and returns without
-  falling back to index 0 when the anchor is the pending path and
-  the path was not found. `broadcastUpdate` pokes the notification
-  controller after dispatch. `transitionToIdle` and `stop` clear
-  the deferred flag.
+- `MusicService` gained `mDeferredReconcile` and the two pure methods `willNextRestartCurrent()` and `willPreviousRestartCurrent()`.
+  `reconcile()` sets `mDeferredReconcile` when it bails on PREPARING and clears it before `beginTransition`.
+  `onPrepared` and `onPlaybackStarted` re-check on `mDeferredReconcile || mTargetIndex != mCurrentIndex || mForceReprepare`.
+  `onPrepareFailed` respects the deferred flag and re-enters reconciliation with the newest target instead of overwriting it with a positional successor.
+  `playNextSong` and `playPreviousSong` force a reprepare when the wrap lands on the current index, matching what the automatic advance already does at the end of a track.
+  `setPlaylist` captures the target path before the playlist swap, preserves the target through a rebuild that runs while the state is PREPARING, and returns without falling back to index 0 when the anchor is the pending path and the path was not found.
+  `broadcastUpdate` pokes the notification controller after dispatch.
+  `transitionToIdle` and `stop` clear the deferred flag.
 
-- `PlaybackWindow`. The Null Semantics paragraph was corrected to
-  describe what the service actually produces: null neighbours only
-  when the playlist is empty; the current path as its own neighbour
-  on a single-song playlist or an unavoidable shuffle re-pick.
+- `PlaybackWindow`.
+  The Null Semantics paragraph was corrected to describe what the service actually produces: null neighbours only when the playlist is empty; the current path as its own neighbour on a single-song playlist or an unavoidable shuffle re-pick.
 
-- `NotificationController` gained `commitNow()`, which runs one
-  sync synchronously on the calling main-thread turn; the activity
-  calls it from the carousel's settle frame. `syncOnce` advances
-  `mLastRenderedSnapshot` only when the post landed. `applySnapshot`
-  returns a boolean and rolls back `mPlaybackState` on a failed
-  post. `performPlaybackUpdate` returns a boolean. Art retention
-  across a re-render of the same song is gated on
-  `!snapshot.artResolved`. `onThemeChanged` re-applies the media
-  session metadata from the last committed snapshot before
-  rebuilding the notification.
+- `NotificationController` gained `commitNow()`, which runs one sync synchronously on the calling main-thread turn; the activity calls it from the carousel's settle frame.
+  `syncOnce` advances `mLastRenderedSnapshot` only when the post landed.
+  `applySnapshot` returns a boolean and rolls back `mPlaybackState` on a failed post.
+  `performPlaybackUpdate` returns a boolean.
+  Art retention across a re-render of the same song is gated on `!snapshot.artResolved`.
+  `onThemeChanged` re-applies the media session metadata from the last committed snapshot before rebuilding the notification.
 
-- The commit slide and the return-to-rest glide use
-  `COMMIT_DURATION_MS = 500` and `RETURN_DURATION_MS = 350`
-  respectively, both on the emphasized decelerate curve. The
-  reveal uses `REVEAL_DURATION_MS = 600` split into an outgoing
-  leg of 45 % and an incoming leg of the remaining 55 % with a 15 %
-  overlap. The nudge uses the platform's
-  `SpringForce.DAMPING_RATIO_LOW_BOUNCY` and
-  `SpringForce.STIFFNESS_LOW` constants.
+- The commit slide and the return-to-rest glide use `COMMIT_DURATION_MS = 500` and `RETURN_DURATION_MS = 350` respectively, both on the emphasized decelerate curve.
+  The reveal uses `REVEAL_DURATION_MS = 600` split into an outgoing leg of 45 % and an incoming leg of the remaining 55 % with a 15 % overlap.
+  The nudge uses the platform's `SpringForce.DAMPING_RATIO_LOW_BOUNCY` and `SpringForce.STIFFNESS_LOW` constants.
 
 ---
 
@@ -5772,167 +3188,80 @@ newest target through a prepare failure.
 
 ### Overview
 
-Two fixes ship in this release: one in the player's split-screen
-layout, one in the incoming-file pathway. A supporting change to the
-toast position follows the split-screen fix because the two are
-inseparable: the same padding reduction that makes room for the artist
-line moves the gap the toast is centered in.
+Two fixes ship in this release: one in the player's split-screen layout, one in the incoming-file pathway.
+A supporting change to the toast position follows the split-screen fix because the two are inseparable: the same padding reduction that makes room for the artist line moves the gap the toast is centered in.
 
-In split-screen mode, when the album art hides to make room for the
-title, artist, seek bar, and controls, the title and artist group now
-moves up to occupy the space the album art vacated. Previously a
-padding band survived above the group after the album art was hidden,
-and the artist line was pushed past the visible portion of the window.
-The wrapper is now hidden together with the album-art viewport, the
-group is pinned to the top of its slot at the album-art top's Y
-offset, and the transport row's bottom padding is reduced so the
-group's weight slot gains the height the artist line needs. The toast
-position follows the same reduction so the toast stays centered in the
-visible gap between the transport row and the metadata row.
+In split-screen mode, when the album art hides to make room for the title, artist, seek bar, and controls, the title and artist group now moves up to occupy the space the album art vacated.
+Previously a padding band survived above the group after the album art was hidden, and the artist line was pushed past the visible portion of the window.
+The wrapper is now hidden together with the album-art viewport, the group is pinned to the top of its slot at the album-art top's Y offset, and the transport row's bottom padding is reduced so the group's weight slot gains the height the artist line needs.
+The toast position follows the same reduction so the toast stays centered in the visible gap between the transport row and the metadata row.
 
-When a user opens an audio file from another app, the file is added
-as a loose track, the playlist rebuilds from the database, and the
-song plays through the same transition path a transport request
-uses. Previously the loose-track insertion announced the change with
-a broadcast no component listened for, so the service's playlist was
-never rebuilt, the pending song path was never resolved, and the
-song appeared in the folder list but not in the playlist. The
-insertion now announces the change with `UPDATE_PLAYLIST`, the
-vocabulary every actor in the process already listens for.
+When a user opens an audio file from another app, the file is added as a loose track, the playlist rebuilds from the database, and the song plays through the same transition path a transport request uses.
+Previously the loose-track insertion announced the change with a broadcast no component listened for, so the service's playlist was never rebuilt, the pending song path was never resolved, and the song appeared in the folder list but not in the playlist.
+The insertion now announces the change with `UPDATE_PLAYLIST`, the vocabulary every actor in the process already listens for.
 
 ### Fixed
 
-- **Title and artist fill the space the album art vacates in
-  split-screen** — When the window dropped below the minimum height
-  that supports the album art, the album-art viewport was set to
-  `GONE`, but the wrapper around it kept contributing its top and
-  bottom padding. That padding survived as a visible band above the
-  song-info group, and the group's centre-gravity layout pushed the
-  artist line past the bottom of the visible window. Two changes
-  fix both halves of the problem.
+- **Title and artist fill the space the album art vacates in split-screen** — When the window dropped below the minimum height that supports the album art, the album-art viewport was set to `GONE`, but the wrapper around it kept contributing its top and bottom padding.
+  That padding survived as a visible band above the song-info group, and the group's centre-gravity layout pushed the artist line past the bottom of the visible window.
+  Two changes fix both halves of the problem.
 
-  The wrapper is now hidden together with the viewport, so its
-  padding is not laid out. The title-and-artist group is pinned to
-  the top of its weight slot and given a top offset equal to the
-  wrapper's declared top padding — the same offset the album-art
-  top carries in full-screen mode — so the title lands where the
-  album art used to begin.
+The wrapper is now hidden together with the viewport, so its padding is not laid out.
+The title-and-artist group is pinned to the top of its weight slot and given a top offset equal to the wrapper's declared top padding — the same offset the album-art top carries in full-screen mode — so the title lands where the album art used to begin.
 
-  The transport row's bottom padding is reduced from 64 dp to 48 dp
-  at the same time. The reduction passes 16 dp of slot height to
-  the title-and-artist group, which is what the artist line needs
-  in a short split window; without it the artist would extend past
-  the group's bottom and be clipped. The reduced value keeps the
-  transport buttons clear of the temporary volume toast, which
-  sits at a fixed offset from the window bottom.
+The transport row's bottom padding is reduced from 64 dp to 48 dp at the same time.
+The reduction passes 16 dp of slot height to the title-and-artist group, which is what the artist line needs in a short split window; without it the artist would extend past the group's bottom and be clipped.
+The reduced value keeps the transport buttons clear of the temporary volume toast, which sits at a fixed offset from the window bottom.
 
-  Every view below the group — the seek bar, the transport controls,
-  and the metadata row — keeps its position relative to the bottom
-  of the window, because the group's weight slot absorbs the
-  difference. Full-screen and shrunk-album-art layouts are
-  unchanged: the wrapper, the group, and the transport row all
-  return to their layout-declared gravity, padding, and margins.
+Every view below the group — the seek bar, the transport controls, and the metadata row — keeps its position relative to the bottom of the window, because the group's weight slot absorbs the difference.
+Full-screen and shrunk-album-art layouts are unchanged: the wrapper, the group, and the transport row all return to their layout-declared gravity, padding, and margins.
 
-- **Toasts stay centred in the visible gap in both window modes** —
-  The toast is anchored to the window bottom by a fixed margin. That
-  margin was tuned against the full-screen layout's gap between the
-  transport row and the metadata row: 80 dp of visible space, with
-  the toast centred at 76 dp. When the split-screen fix reduced the
-  transport row's bottom padding, the gap shrank to 64 dp and the
-  toast's centre moved eight dp off from where the smaller gap
-  expects it. The mismatch read as a small vertical asymmetry.
+- **Toasts stay centred in the visible gap in both window modes** — The toast is anchored to the window bottom by a fixed margin.
+  That margin was tuned against the full-screen layout's gap between the transport row and the metadata row: 80 dp of visible space, with the toast centred at 76 dp.
+  When the split-screen fix reduced the transport row's bottom padding, the gap shrank to 64 dp and the toast's centre moved eight dp off from where the smaller gap expects it.
+  The mismatch read as a small vertical asymmetry.
 
-  `ToastManager` now chooses its bottom margin from the window's
-  current height. In a full window it uses the original 76 dp; at or
-  below the threshold at which the player hides its album art, it
-  uses 68 dp — the same value shifted by exactly half the padding
-  reduction, so the toast follows the centre of the smaller gap. The
-  choice is made from `Configuration.screenHeightDp`, which every
-  activity sees for the same window, so the correct margin is used
-  in every activity without any activity having to announce its own
-  layout state. Only one number changed in `createOverlayInView`;
-  the rest of the toast's presentation — padding, corner radius,
-  elevation, fade, auto-dismiss, operation ownership — is untouched.
+`ToastManager` now chooses its bottom margin from the window's current height.
+In a full window it uses the original 76 dp; at or below the threshold at which the player hides its album art, it uses 68 dp — the same value shifted by exactly half the padding reduction, so the toast follows the centre of the smaller gap.
+The choice is made from `Configuration.screenHeightDp`, which every activity sees for the same window, so the correct margin is used in every activity without any activity having to announce its own layout state.
+Only one number changed in `createOverlayInView`; the rest of the toast's presentation — padding, corner radius, elevation, fade, auto-dismiss, operation ownership — is untouched.
 
-- **Incoming files play through the state machine and appear in the
-  playlist** — Opening an audio file from another app added the file
-  to the loose-tracks table and broadcast `SOFT_UPDATE_PLAYLIST`,
-  which no receiver in the codebase handles. The service's playlist
-  was therefore never rebuilt, the pending song path was never
-  resolved, and the state machine was never asked to transition.
-  The song appeared in the folder list — which reads the
-  loose-tracks table — but not in the playlist — which the service
-  owns — and it never played. The loose-track insertion now
-  announces the change with `UPDATE_PLAYLIST`, the same broadcast a
-  folder scan and every other playlist-changing operation already
-  uses. The service's receiver refreshes its library, rebuilds its
-  playlist, resolves the pending song path as the anchor, and drives
-  the state machine to the new song. The incoming file is played
-  through the same transition path a next or previous request uses.
+- **Incoming files play through the state machine and appear in the playlist** — Opening an audio file from another app added the file to the loose-tracks table and broadcast `SOFT_UPDATE_PLAYLIST`, which no receiver in the codebase handles.
+  The service's playlist was therefore never rebuilt, the pending song path was never resolved, and the state machine was never asked to transition.
+  The song appeared in the folder list — which reads the loose-tracks table — but not in the playlist — which the service owns — and it never played.
+  The loose-track insertion now announces the change with `UPDATE_PLAYLIST`, the same broadcast a folder scan and every other playlist-changing operation already uses.
+  The service's receiver refreshes its library, rebuilds its playlist, resolves the pending song path as the anchor, and drives the state machine to the new song.
+  The incoming file is played through the same transition path a next or previous request uses.
 
-  Every state the state machine can be in when the incoming file
-  arrives is handled by the code the app already runs for every
-  other playlist rebuild: playing, paused, `PREPARING`, `IDLE` with
-  no current song, unbound service, file already in the library,
-  file already a loose track, insert failure, and the case where the
-  resulting playlist is empty.
+Every state the state machine can be in when the incoming file arrives is handled by the code the app already runs for every other playlist rebuild: playing, paused, `PREPARING`, `IDLE` with no current song, unbound service, file already in the library, file already a loose track, insert failure, and the case where the resulting playlist is empty.
 
-  A related change accompanies the fix: a pending song path is now
-  treated as an explicit play request. On a fresh session — no
-  current song, the state machine in `IDLE` — the anchor song
-  normally sits in `READY` waiting for the play button, because
-  there is no prior playback signal to honour. An incoming file is
-  different: the user asked for it to play. The pause-after-prepare
-  is therefore not applied when the anchor came from the pending
-  path, and the incoming file auto-plays rather than loading paused.
+A related change accompanies the fix: a pending song path is now treated as an explicit play request.
+On a fresh session — no current song, the state machine in `IDLE` — the anchor song normally sits in `READY` waiting for the play button, because there is no prior playback signal to honour.
+An incoming file is different: the user asked for it to play.
+The pause-after-prepare is therefore not applied when the anchor came from the pending path, and the incoming file auto-plays rather than loading paused.
 
 ### Under the Hood
 
-- `res/layout/activity_music_player.xml` gained three identifiers:
-  `albumArtWrapper` on the album-art padding container,
-  `songInfoGroup` on the title-and-artist group, and `transportRow`
-  on the row that holds the shuffle, previous, play, next, and
-  repeat buttons. Nothing else in the layout moved.
+- `res/layout/activity_music_player.xml` gained three identifiers: `albumArtWrapper` on the album-art padding container, `songInfoGroup` on the title-and-artist group, and `transportRow` on the row that holds the shuffle, previous, play, next, and repeat buttons.
+  Nothing else in the layout moved.
 
-- `MusicPlayer.initializeViews()` resolves the three new views and
-  captures the group's layout-declared gravity and top padding, and
-  the transport row's layout-declared bottom padding.
-  `MusicPlayer.applyAlbumArtSize()` calls a new
-  `applySongInfoLayout(boolean)` after the album-art viewport's size
-  and visibility have been applied. The new method hides or restores
-  the wrapper, pins or restores the group's gravity and top padding,
-  and reduces or restores the transport row's bottom padding.
+- `MusicPlayer.initializeViews()` resolves the three new views and captures the group's layout-declared gravity and top padding, and the transport row's layout-declared bottom padding.
+  `MusicPlayer.applyAlbumArtSize()` calls a new `applySongInfoLayout(boolean)` after the album-art viewport's size and visibility have been applied.
+  The new method hides or restores the wrapper, pins or restores the group's gravity and top padding, and reduces or restores the transport row's bottom padding.
 
-- `TRANSPORT_ROW_SPLIT_BOTTOM_DP = 48` is the split-screen bottom
-  padding of the transport row, sixteen dp less than the layout's
-  declared value. The constant is separate from the layout's own
-  value so the split-screen reduction is expressed in the activity,
-  not in the layout, and the full-screen padding is never touched by
-  the split-screen code path.
+- `TRANSPORT_ROW_SPLIT_BOTTOM_DP = 48` is the split-screen bottom padding of the transport row, sixteen dp less than the layout's declared value.
+  The constant is separate from the layout's own value so the split-screen reduction is expressed in the activity, not in the layout, and the full-screen padding is never touched by the split-screen code path.
 
-- `ToastManager` gained a `TOAST_BOTTOM_MARGIN_COMPACT_DP = 68`
-  constant and a `COMPACT_LAYOUT_HEIGHT_DP = 400` threshold. The
-  original `TOAST_BOTTOM_MARGIN_DP = 76` is kept unchanged.
-  `ToastManager.resolveBottomMarginDp()` reads the window height from
-  the application resources at toast-creation time and returns one of
-  the two constants. `createOverlayInView` uses that value for the
-  container's `bottomMargin` instead of the fixed constant. Every
-  caller keeps its current signature; the choice is made in the
-  manager, from a value every activity shares for the same window.
+- `ToastManager` gained a `TOAST_BOTTOM_MARGIN_COMPACT_DP = 68` constant and a `COMPACT_LAYOUT_HEIGHT_DP = 400` threshold.
+  The original `TOAST_BOTTOM_MARGIN_DP = 76` is kept unchanged.
+  `ToastManager.resolveBottomMarginDp()` reads the window height from the application resources at toast-creation time and returns one of the two constants.
+  `createOverlayInView` uses that value for the container's `bottomMargin` instead of the fixed constant.
+  Every caller keeps its current signature; the choice is made in the manager, from a value every activity shares for the same window.
 
-- `PlaylistManager.addLooseTrackAndUpdate` broadcasts
-  `UPDATE_PLAYLIST` in place of the unhandled
-  `SOFT_UPDATE_PLAYLIST`, ordered before `DISPLAY_PLAYLIST` so the
-  playlist activity's refresh reads the rebuilt playlist rather than
-  the pre-rebuild one. The `SET_PENDING_SONG` broadcast and the
-  `MusicService.setPendingSongPath` call are unchanged; the service
-  already resolves a pending song path as the preferred anchor during
-  a playlist rebuild.
+- `PlaylistManager.addLooseTrackAndUpdate` broadcasts `UPDATE_PLAYLIST` in place of the unhandled `SOFT_UPDATE_PLAYLIST`, ordered before `DISPLAY_PLAYLIST` so the playlist activity's refresh reads the rebuilt playlist rather than the pre-rebuild one.
+  The `SET_PENDING_SONG` broadcast and the `MusicService.setPendingSongPath` call are unchanged; the service already resolves a pending song path as the preferred anchor during a playlist rebuild.
 
-- `MusicService.setPlaylist(ArrayList<Song>, boolean)` gained one
-  condition in its cold-start branch: the pause-after-prepare is
-  applied only when the anchor came from persisted state, not when it
-  came from a pending song path.
+- `MusicService.setPlaylist(ArrayList<Song>, boolean)` gained one condition in its cold-start branch: the pause-after-prepare is applied only when the anchor came from persisted state, not when it came from a pending song path.
 
 ---
 
@@ -5942,243 +3271,126 @@ vocabulary every actor in the process already listens for.
 
 Six fixes ship in this release, all in the playback layer.
 
-The music-stream volume receiver is now registered only after the user
-has opened the player. Previously the receiver was armed as soon as
-the service was created, including on paths where the service starts
-without the user opening the app — a Bluetooth connect, a sticky
-restart, a media button. On one of those paths the service could be
-left holding a prepared song in the `READY` state, and the next
-hardware volume press started playback. The receiver is now registered
-on bind and unregistered on destroy, so it exists only after the user
-has opened the player.
+The music-stream volume receiver is now registered only after the user has opened the player.
+Previously the receiver was armed as soon as the service was created, including on paths where the service starts without the user opening the app — a Bluetooth connect, a sticky restart, a media button.
+On one of those paths the service could be left holding a prepared song in the `READY` state, and the next hardware volume press started playback.
+The receiver is now registered on bind and unregistered on destroy, so it exists only after the user has opened the player.
 
-A transient audio-focus loss is now remembered. When another app takes
-focus for a bounded interval — a phone call, a navigation prompt, a
-WhatsApp video status — the service pauses and remembers that it did
-so. When focus is returned, playback resumes from where it paused. A
-permanent loss is still respected: the service pauses and does not
-resume on its own.
+A transient audio-focus loss is now remembered.
+When another app takes focus for a bounded interval — a phone call, a navigation prompt, a WhatsApp video status — the service pauses and remembers that it did so.
+When focus is returned, playback resumes from where it paused.
+A permanent loss is still respected: the service pauses and does not resume on its own.
 
-An interruption that offers to share the output — a navigation
-prompt, a notification tone, a voice assistant reply — now ducks the
-music instead of pausing it. The music keeps playing underneath at a
-lower output level and returns to full volume when the interruption
-ends. The system volume slider does not move.
+An interruption that offers to share the output — a navigation prompt, a notification tone, a voice assistant reply — now ducks the music instead of pausing it.
+The music keeps playing underneath at a lower output level and returns to full volume when the interruption ends.
+The system volume slider does not move.
 
-The volume-up key now resumes playback from the foreground even when
-the volume is already at the device maximum. At the maximum, the
-framework emits no `VOLUME_CHANGED_ACTION`, so the service receiver
-never fires; the volume key press is intercepted at the activity
-level instead.
+The volume-up key now resumes playback from the foreground even when the volume is already at the device maximum.
+At the maximum, the framework emits no `VOLUME_CHANGED_ACTION`, so the service receiver never fires; the volume key press is intercepted at the activity level instead.
 
-Two supporting changes ride alongside. The volume handler now reads
-the current music-stream volume at the handling moment rather than
-trusting the value carried by the broadcast. The storage observer no
-longer starts a playlist scan when a non-audio file is written.
+Two supporting changes ride alongside.
+The volume handler now reads the current music-stream volume at the handling moment rather than trusting the value carried by the broadcast.
+The storage observer no longer starts a playlist scan when a non-audio file is written.
 
 ### Fixed
 
-- **The volume key no longer affects playback before the app has been
-  opened** — The receiver was registered in `onCreate()`, so every
-  path that created the service armed it. One of those paths —
-  `handleBluetoothResume` — can leave the service holding a prepared
-  song in `READY` without the user ever opening the player: it calls
-  `setPlaylist(...)` and then `resume()` before the async prepare has
-  completed, so `resume()` sees `PREPARING` and does nothing, and the
-  state settles in `READY` when the prepare finishes. With the
-  receiver armed, a later hardware volume press ran the `READY` →
-  `PLAYING` transition and started music. The receiver is now
-  registered in `onBind(Intent)` and unregistered in `onDestroy()`.
-  Its presence is the session state. A service created without a
-  bound client never registers it, so a hardware volume press on
-  those paths does nothing.
+- **The volume key no longer affects playback before the app has been opened** — The receiver was registered in `onCreate()`, so every path that created the service armed it.
+  One of those paths — `handleBluetoothResume` — can leave the service holding a prepared song in `READY` without the user ever opening the player: it calls `setPlaylist(...)` and then `resume()` before the async prepare has completed, so `resume()` sees `PREPARING` and does nothing, and the state settles in `READY` when the prepare finishes.
+  With the receiver armed, a later hardware volume press ran the `READY` → `PLAYING` transition and started music.
+  The receiver is now registered in `onBind(Intent)` and unregistered in `onDestroy()`.
+  Its presence is the session state.
+  A service created without a bound client never registers it, so a hardware volume press on those paths does nothing.
 
-  Once the user opens the player the receiver is armed, and the
-  behaviour is preserved in every respect. On a cold start the
-  anchor song sits in `READY` waiting for the play button, and a
-  hardware volume press — or the album-art volume gesture — starts
-  playback through the same transition the play button uses. The
-  receiver stays registered for the life of the service, so
-  background playback, headset keys, and the settings slider all
-  continue to work exactly as before. The fix narrows *when the
-  receiver exists*; it does not change *what the receiver does once
-  it exists*.
+Once the user opens the player the receiver is armed, and the behaviour is preserved in every respect.
+On a cold start the anchor song sits in `READY` waiting for the play button, and a hardware volume press — or the album-art volume gesture — starts playback through the same transition the play button uses.
+The receiver stays registered for the life of the service, so background playback, headset keys, and the settings slider all continue to work exactly as before.
+The fix narrows *when the receiver exists*; it does not change *what the receiver does once it exists*.
 
-- **Playback resumes when a transient audio-focus loss ends** — When
-  another app requested focus with `AUDIOFOCUS_GAIN_TRANSIENT` — a
-  phone call, a navigation prompt, a WhatsApp video status — the
-  service paused but did not remember why, so when focus returned it
-  stayed paused. The interrupting app's end was a silent event that
-  left the song sitting where it had stopped. The service now sets
-  `mPausedByTransientLoss` on a transient loss and, when
-  `AUDIOFOCUS_GAIN` arrives while that flag is still set, resumes
-  from the paused position. A permanent loss (`AUDIOFOCUS_LOSS`)
-  does not set the flag: the user has moved to another app or
-  another permanent audio source, and playback does not restart on
-  its own. The flag is cleared by any user action — resume, pause,
-  seek, stop, or a volume drop to zero — so a stale flag cannot
-  resume playback after the user has moved on.
+- **Playback resumes when a transient audio-focus loss ends** — When another app requested focus with `AUDIOFOCUS_GAIN_TRANSIENT` — a phone call, a navigation prompt, a WhatsApp video status — the service paused but did not remember why, so when focus returned it stayed paused.
+  The interrupting app's end was a silent event that left the song sitting where it had stopped.
+  The service now sets `mPausedByTransientLoss` on a transient loss and, when `AUDIOFOCUS_GAIN` arrives while that flag is still set, resumes from the paused position.
+  A permanent loss (`AUDIOFOCUS_LOSS`) does not set the flag: the user has moved to another app or another permanent audio source, and playback does not restart on its own.
+  The flag is cleared by any user action — resume, pause, seek, stop, or a volume drop to zero — so a stale flag cannot resume playback after the user has moved on.
 
-- **Music ducks instead of pausing when an interruption offers to
-  share the output** — Some interrupting apps request focus with
-  `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK`. The framework delivers this
-  to the losing app as
-  `AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK`. A navigation prompt, a
-  notification tone, or a voice assistant reply is what sends this:
-  the interrupting app is willing to share the output at a lower
-  level, and would rather the music keep playing underneath than
-  pause and resume around the interruption. The service previously
-  ignored this code, so the music kept playing at full volume while
-  the interruption played over it. The service now lowers the
-  MediaPlayer's own output volume to `DUCK_VOLUME_FRACTION = 0.2f`
-  for the duration of the interruption, and restores it to full when
-  `AUDIOFOCUS_GAIN` arrives. Playback is not paused and the position
-  is not lost. The system stream volume is not touched, so the
-  volume slider does not move and the music-stream receiver does not
-  fire.
+- **Music ducks instead of pausing when an interruption offers to share the output** — Some interrupting apps request focus with `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK`.
+  The framework delivers this to the losing app as `AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK`.
+  A navigation prompt, a notification tone, or a voice assistant reply is what sends this: the interrupting app is willing to share the output at a lower level, and would rather the music keep playing underneath than pause and resume around the interruption.
+  The service previously ignored this code, so the music kept playing at full volume while the interruption played over it.
+  The service now lowers the MediaPlayer's own output volume to `DUCK_VOLUME_FRACTION = 0.2f` for the duration of the interruption, and restores it to full when `AUDIOFOCUS_GAIN` arrives.
+  Playback is not paused and the position is not lost.
+  The system stream volume is not touched, so the volume slider does not move and the music-stream receiver does not fire.
 
-- **Volume up at the device maximum resumes from the foreground** —
-  When the music volume is already at the device maximum and the
-  user presses volume up, the framework emits no
-  `VOLUME_CHANGED_ACTION`: no value changed, so no broadcast fires.
-  The service's receiver therefore never runs, and the resume path
-  was unreachable in that case. `MusicPlayer` now overrides
-  `dispatchKeyEvent` to observe `KEYCODE_VOLUME_UP` before the
-  window system consumes it. When the volume is at the device
-  maximum and the song is bound but paused, the activity resumes
-  the song directly. The event is not consumed, so the system still
-  processes the key as it normally does.
+- **Volume up at the device maximum resumes from the foreground** — When the music volume is already at the device maximum and the user presses volume up, the framework emits no `VOLUME_CHANGED_ACTION`: no value changed, so no broadcast fires.
+  The service's receiver therefore never runs, and the resume path was unreachable in that case.
+  `MusicPlayer` now overrides `dispatchKeyEvent` to observe `KEYCODE_VOLUME_UP` before the window system consumes it.
+  When the volume is at the device maximum and the song is bound but paused, the activity resumes the song directly.
+  The event is not consumed, so the system still processes the key as it normally does.
 
-  The activity path covers the foreground case only. The framework
-  does not deliver volume keys to a backgrounded activity, and no
-  broadcast fires at the device maximum because no value changed.
-  Every non-intrusive background channel has the same limitation:
-  `VOLUME_CHANGED_ACTION` fires on a change that does not occur,
-  `ContentObserver` on the volume setting has the same problem, and
-  the media button action carries `KEYCODE_MEDIA_*`, not
-  `KEYCODE_VOLUME_*`. The framework-supported paths that would reach
-  a backgrounded app are all heavier than the case warrants — an
-  accessibility service, a system overlay window, or a `MediaSession`
-  remote volume provider that would move volume control away from the
-  system stream. When the player is backgrounded and the song is
-  deliberately paused, resuming goes through the notification's play
-  action, which is delivered to the service through the media session
-  in every screen state. That is the platform's intended affordance
-  for the case, and it works from the lock screen and from the shade.
+The activity path covers the foreground case only.
+The framework does not deliver volume keys to a backgrounded activity, and no broadcast fires at the device maximum because no value changed.
+Every non-intrusive background channel has the same limitation: `VOLUME_CHANGED_ACTION` fires on a change that does not occur, `ContentObserver` on the volume setting has the same problem, and the media button action carries `KEYCODE_MEDIA_*`, not `KEYCODE_VOLUME_*`.
+The framework-supported paths that would reach a backgrounded app are all heavier than the case warrants — an accessibility service, a system overlay window, or a `MediaSession` remote volume provider that would move volume control away from the system stream.
+When the player is backgrounded and the song is deliberately paused, resuming goes through the notification's play action, which is delivered to the service through the media session in every screen state.
+That is the platform's intended affordance for the case, and it works from the lock screen and from the shade.
 
-- **Volume decisions read the current system volume** — Some devices
-  deliver `VOLUME_CHANGED_ACTION` after a follow-up change has
-  already landed. The broadcast's `EXTRA_VOLUME_STREAM_VALUE` extra
-  then describes a value the user has already moved past, and the
-  pause-or-resume decision was made from that stale value. The
-  handler now reads `getStreamVolume(STREAM_MUSIC)` at the handling
-  moment, clamps it to the range the platform reports, and falls back
-  to the broadcast extra only when the read fails. The gate is
-  unchanged: zero pauses, above zero resumes or starts.
+- **Volume decisions read the current system volume** — Some devices deliver `VOLUME_CHANGED_ACTION` after a follow-up change has already landed.
+  The broadcast's `EXTRA_VOLUME_STREAM_VALUE` extra then describes a value the user has already moved past, and the pause-or-resume decision was made from that stale value.
+  The handler now reads `getStreamVolume(STREAM_MUSIC)` at the handling moment, clamps it to the range the platform reports, and falls back to the broadcast extra only when the read fails.
+  The gate is unchanged: zero pauses, above zero resumes or starts.
 
-- **Storage observer no longer fires on non-audio writes** —
-  `StorageObserver` registered two content observers, one for
-  `MediaStore.Audio.Media.EXTERNAL_CONTENT_URI` and one for
-  `MediaStore.Files.getContentUri("external")`. The second fires for
-  every non-audio file write on external storage, and its URI
-  contains `external`, so the filter — `contains("audio") &&
-  contains("external")` — could never drop it. Every image save,
-  video write, or download triggered a quiet period and a playlist
-  scan. The `Files` observer is removed, and the filter is now
-  `contains("/audio/")`. Audio additions, removals, and metadata
-  edits — including the app's own edits, which are flagged as self
-  changes — still trigger the scan. Image, video, and download
-  writes do not.
+- **Storage observer no longer fires on non-audio writes** — `StorageObserver` registered two content observers, one for `MediaStore.Audio.Media.EXTERNAL_CONTENT_URI` and one for `MediaStore.Files.getContentUri("external")`.
+  The second fires for every non-audio file write on external storage, and its URI contains `external`, so the filter — `contains("audio") && contains("external")` — could never drop it.
+  Every image save, video write, or download triggered a quiet period and a playlist scan.
+  The `Files` observer is removed, and the filter is now `contains("/audio/")`.
+  Audio additions, removals, and metadata edits — including the app's own edits, which are flagged as self changes — still trigger the scan.
+  Image, video, and download writes do not.
 
 ### Under the Hood
 
-- `MusicService.registerMusicVolumeReceiver()` is called from
-  `onBind(Intent)` and nowhere else. It is idempotent, so a repeat
-  bind is a no-op, and a registration failure leaves
-  `mMusicVolumeReceiver` null so the next bind retries.
-  `MusicService.unregisterMusicVolumeReceiver()` in `onDestroy()`
-  remains the single teardown path. There is no separate session
-  flag: the receiver's own field is the session state, so there is
-  nothing for a second representation to drift against.
+- `MusicService.registerMusicVolumeReceiver()` is called from `onBind(Intent)` and nowhere else.
+  It is idempotent, so a repeat bind is a no-op, and a registration failure leaves `mMusicVolumeReceiver` null so the next bind retries.
+  `MusicService.unregisterMusicVolumeReceiver()` in `onDestroy()` remains the single teardown path.
+  There is no separate session flag: the receiver's own field is the session state, so there is nothing for a second representation to drift against.
 
-- `MusicService.handleAudioFocusChange(int)` distinguishes four
-  cases. A permanent loss pauses and does not set any resume
-  intent. A transient loss pauses and sets
-  `mPausedByTransientLoss`. A duck request sets `mIsDucked` and
-  applies the duck volume to the current player.
-  `AUDIOFOCUS_GAIN` clears both flags: it restores the player's
-  output volume if a duck was active, and resumes from the paused
-  position if a transient pause was remembered and the state is
-  still `PAUSED`. The resume flag is cleared at the top of
-  `doResume()`, at the top of `pause()`, in the `PLAYING` arm of
-  `togglePlayPause()`, in the zero-target arm of
-  `onMusicVolumeChanged(int)`, in the `KEYCODE_MEDIA_PAUSE` arm of
-  `handleMediaButton(int)`, and in the `onPause` and `onStop`
-  callbacks of the `MediaSessionCompat`. Every user-initiated
-  transition through any of those paths supersedes a pending
-  auto-resume.
+- `MusicService.handleAudioFocusChange(int)` distinguishes four cases.
+  A permanent loss pauses and does not set any resume intent.
+  A transient loss pauses and sets `mPausedByTransientLoss`.
+  A duck request sets `mIsDucked` and applies the duck volume to the current player.
+  `AUDIOFOCUS_GAIN` clears both flags: it restores the player's output volume if a duck was active, and resumes from the paused position if a transient pause was remembered and the state is still `PAUSED`.
+  The resume flag is cleared at the top of `doResume()`, at the top of `pause()`, in the `PLAYING` arm of `togglePlayPause()`, in the zero-target arm of `onMusicVolumeChanged(int)`, in the `KEYCODE_MEDIA_PAUSE` arm of `handleMediaButton(int)`, and in the `onPause` and `onStop` callbacks of the `MediaSessionCompat`.
+  Every user-initiated transition through any of those paths supersedes a pending auto-resume.
 
-- `MusicService.applyDuckVolume(MediaPlayer)` is the single point
-  that reads `mIsDucked` and writes the resulting volume to a
-  player. It runs on the player thread. It is called from
-  `handleAudioFocusChange(int)` when a duck begins or ends, and from
-  `beginTransition(int, int)` after each new MediaPlayer is created,
-  so a track change that happens mid-duck does not momentarily
-  restore the volume to full. The duck is a scale applied to the
-  MediaPlayer's own output through `setVolume(float, float)`, not a
-  change to the system stream volume, so the framework's
-  `VOLUME_CHANGED_ACTION` does not fire and the music-stream
-  receiver is not involved.
+- `MusicService.applyDuckVolume(MediaPlayer)` is the single point that reads `mIsDucked` and writes the resulting volume to a player.
+  It runs on the player thread.
+  It is called from `handleAudioFocusChange(int)` when a duck begins or ends, and from `beginTransition(int, int)` after each new MediaPlayer is created, so a track change that happens mid-duck does not momentarily restore the volume to full.
+  The duck is a scale applied to the MediaPlayer's own output through `setVolume(float, float)`, not a change to the system stream volume, so the framework's `VOLUME_CHANGED_ACTION` does not fire and the music-stream receiver is not involved.
 
-- `MusicService.isPausedOrReady()` returns true when the state
-  machine holds a bound song that is not currently playing. It is
-  the case a volume-key press starts playback from: the song is
-  paused at a position, or prepared at its start and waiting for the
-  play button. `MusicPlayer` reads it from the at-maximum volume-up
-  path.
+- `MusicService.isPausedOrReady()` returns true when the state machine holds a bound song that is not currently playing.
+  It is the case a volume-key press starts playback from: the song is paused at a position, or prepared at its start and waiting for the play button.
+  `MusicPlayer` reads it from the at-maximum volume-up path.
 
-- `MusicPlayer.dispatchKeyEvent(KeyEvent)` observes
-  `KEYCODE_VOLUME_UP` before the window system consumes it, and
-  performs one side effect: when the volume is at the device maximum
-  and the service reports `isPausedOrReady()`, the activity calls
-  `MusicService.resume()`. The event is not consumed. Volume changes
-  below the maximum are handled by the receiver in `MusicService`,
-  which fires on the broadcast the system emits when the value
-  changes. The activity path exists solely for the case where no
-  value changes, and therefore no broadcast fires. It runs only
-  while the activity is visible: the framework does not deliver key
-  events to a backgrounded activity. The background resume path for
-  a deliberately paused song is the notification's play action,
-  which reaches `MediaSessionCompat.Callback.onPlay` and runs the
-  same `doResume()` the activity path runs.
+- `MusicPlayer.dispatchKeyEvent(KeyEvent)` observes `KEYCODE_VOLUME_UP` before the window system consumes it, and performs one side effect: when the volume is at the device maximum and the service reports `isPausedOrReady()`, the activity calls `MusicService.resume()`.
+  The event is not consumed.
+  Volume changes below the maximum are handled by the receiver in `MusicService`, which fires on the broadcast the system emits when the value changes.
+  The activity path exists solely for the case where no value changes, and therefore no broadcast fires.
+  It runs only while the activity is visible: the framework does not deliver key events to a backgrounded activity.
+  The background resume path for a deliberately paused song is the notification's play action, which reaches `MediaSessionCompat.Callback.onPlay` and runs the same `doResume()` the activity path runs.
 
-- `MusicService.onMusicVolumeChanged(int)` reads
-  `getStreamVolume(STREAM_MUSIC)` at the handling moment and clamps
-  it to `[0, getStreamMaxVolume(STREAM_MUSIC)]`. The broadcast extra
-  is used only as a fallback when the read fails. The decision is a
-  single test on the clamped target: zero pauses, above zero
-  resumes or starts. It is not gated on a delta, on the value having
-  changed, or on the new value being greater than the old one.
+- `MusicService.onMusicVolumeChanged(int)` reads `getStreamVolume(STREAM_MUSIC)` at the handling moment and clamps it to `[0, getStreamMaxVolume(STREAM_MUSIC)]`.
+  The broadcast extra is used only as a fallback when the read fails.
+  The decision is a single test on the clamped target: zero pauses, above zero resumes or starts.
+  It is not gated on a delta, on the value having changed, or on the new value being greater than the old one.
 
-- `MusicService.onMusicVolumeChanged(int)` retains the `READY` branch
-  introduced in 1.2.2. Raising the volume while the song is loaded
-  and waiting in `READY` calls `togglePlayPause()`, which runs the
-  `READY` → `PLAYING` transition on the player thread through the
-  start-token guard and the `onPlaybackStarted` commit. Once the
-  user has opened the player this case is reached exactly as it was
-  in the previous release. The session gate introduced in this
-  release does not affect it, because the receiver is registered as
-  soon as the player binds.
+- `MusicService.onMusicVolumeChanged(int)` retains the `READY` branch introduced in 1.2.2.
+  Raising the volume while the song is loaded and waiting in `READY` calls `togglePlayPause()`, which runs the `READY` → `PLAYING` transition on the player thread through the start-token guard and the `onPlaybackStarted` commit.
+  Once the user has opened the player this case is reached exactly as it was in the previous release.
+  The session gate introduced in this release does not affect it, because the receiver is registered as soon as the player binds.
 
-- `StorageObserver.startObserving()` registers a single content
-  observer, for `MediaStore.Audio.Media.EXTERNAL_CONTENT_URI`.
+- `StorageObserver.startObserving()` registers a single content observer, for `MediaStore.Audio.Media.EXTERNAL_CONTENT_URI`.
 
-- `StorageObserver.handleChange(Uri)` filters on the `/audio/` path
-  segment. Every timeout — `SYNC_COOLDOWN_MS`, `QUIET_PERIOD_MS`,
-  `GENRE_LOAD_DELAY_MS`, `OPERATION_END_DELAY_MS` — is unchanged.
-  The cooldown check, the update-in-progress check, the
-  `selfChange` handling, and the quiet-period scheduling are
-  unchanged.
+- `StorageObserver.handleChange(Uri)` filters on the `/audio/` path segment.
+  Every timeout — `SYNC_COOLDOWN_MS`, `QUIET_PERIOD_MS`, `GENRE_LOAD_DELAY_MS`, `OPERATION_END_DELAY_MS` — is unchanged.
+  The cooldown check, the update-in-progress check, the `selfChange` handling, and the quiet-period scheduling are unchanged.
 
 ---
 
@@ -6186,65 +3398,39 @@ longer starts a playlist scan when a non-audio file is written.
 
 ### Overview
 
-The album-art volume gesture now starts playback from the moment
-a song loads, not only after the first tap on the play button. The folder
-list scrolls naturally in a short split-screen window instead of being
-hidden. Two click-debounce timers that were still reading wall-clock
-time have been moved to the monotonic clock the rest of the app uses.
+The album-art volume gesture now starts playback from the moment a song loads, not only after the first tap on the play button.
+The folder list scrolls naturally in a short split-screen window instead of being hidden.
+Two click-debounce timers that were still reading wall-clock time have been moved to the monotonic clock the rest of the app uses.
 
 ### Fixed
 
-- **Volume gesture works from the moment a song loads** — On a cold
-  start, the service prepares the anchor song and waits for the play
-  button before starting playback. The album-art volume gesture did
-  not start playback in that window: raising the volume changed the
-  stream volume but left the song sitting in `READY`. The gesture now
-  starts playback through the same transition the play button uses, so
-  raising the volume after a cold start is enough to begin listening.
-  The rule stays symmetric with the paused case: a drop to zero
-  pauses, a raise from zero resumes or starts.
+- **Volume gesture works from the moment a song loads** — On a cold start, the service prepares the anchor song and waits for the play button before starting playback.
+  The album-art volume gesture did not start playback in that window: raising the volume changed the stream volume but left the song sitting in `READY`.
+  The gesture now starts playback through the same transition the play button uses, so raising the volume after a cold start is enough to begin listening.
+  The rule stays symmetric with the paused case: a drop to zero pauses, a raise from zero resumes or starts.
 
-- **Folder list stays visible in split-screen** — The folder list used
-  to be hidden whenever the window dropped below a fixed height, on
-  the theory that its rows could not be usefully compressed. The
-  list's layout already handles a shorter window: its RecyclerView
-  carries weight and scrolls, so hiding it solved a problem the layout
-  had already solved. The list now stays visible and scrolls in every
-  window size. The empty-state placeholder appears only when the list
-  is actually empty, not as a response to the window shrinking.
+- **Folder list stays visible in split-screen** — The folder list used to be hidden whenever the window dropped below a fixed height, on the theory that its rows could not be usefully compressed.
+  The list's layout already handles a shorter window: its RecyclerView carries weight and scrolls, so hiding it solved a problem the layout had already solved.
+  The list now stays visible and scrolls in every window size.
+  The empty-state placeholder appears only when the list is actually empty, not as a response to the window shrinking.
 
 ### Under the Hood
 
-- `MusicService.onMusicVolumeChanged` gained a `READY` branch in the
-  non-zero arm. `READY` is the cold-start state: a song has been
-  prepared and is waiting for the play button. Raising the volume
-  calls `togglePlayPause()`, which already contains the correct
-  `READY` → `PLAYING` transition on the player thread, the
-  start-token guard, and the `onPlaybackStarted` commit. No new state
-  and no new code path is introduced. `IDLE` and `STOPPING` remain
-  no-ops because neither has a song bound.
+- `MusicService.onMusicVolumeChanged` gained a `READY` branch in the non-zero arm.
+  `READY` is the cold-start state: a song has been prepared and is waiting for the play button.
+  Raising the volume calls `togglePlayPause()`, which already contains the correct `READY` → `PLAYING` transition on the player thread, the start-token guard, and the `onPlaybackStarted` commit.
+  No new state and no new code path is introduced.
+  `IDLE` and `STOPPING` remain no-ops because neither has a song bound.
 
-- `FolderManager` no longer carries a split-screen branch. The
-  `SPLIT_SCREEN_MIN_HEIGHT_DP` constant, the
-  `applyFolderManagerSplitLayout(int)` method, and the call sites that
-  invoked it from `onCreate` and `onConfigurationChanged` are removed.
-  `onConfigurationChanged` now calls a new
-  `updateLayoutForConfiguration()` method whose only decision is
-  whether the adapter is empty: the empty-state placeholder is shown
-  when it is, and hidden when it is not. Empty-state visibility is
-  therefore determined solely by adapter item count, matching the
-  design rule that XML owns layout and Java owns data.
+- `FolderManager` no longer carries a split-screen branch.
+  The `SPLIT_SCREEN_MIN_HEIGHT_DP` constant, the `applyFolderManagerSplitLayout(int)` method, and the call sites that invoked it from `onCreate` and `onConfigurationChanged` are removed.
+  `onConfigurationChanged` now calls a new `updateLayoutForConfiguration()` method whose only decision is whether the adapter is empty: the empty-state placeholder is shown when it is, and hidden when it is not.
+  Empty-state visibility is therefore determined solely by adapter item count, matching the design rule that XML owns layout and Java owns data.
 
-- Two click-debounce timestamps that still used
-  `System.currentTimeMillis()` now use
-  `SystemClock.elapsedRealtime()`. The folder manager's cancel button
-  and the equalizer's preset button were the last two call sites on
-  the wall clock; every other debounce site in the app was already
-  monotonic. A wall-clock timestamp can move backwards — on a
-  daylight-saving transition, a manual clock change, or an NTP
-  correction — and a backwards move can either suppress a legitimate
-  click or admit a duplicate one. The monotonic clock is immune to
-  both.
+- Two click-debounce timestamps that still used `System.currentTimeMillis()` now use `SystemClock.elapsedRealtime()`.
+  The folder manager's cancel button and the equalizer's preset button were the last two call sites on the wall clock; every other debounce site in the app was already monotonic.
+  A wall-clock timestamp can move backwards — on a daylight-saving transition, a manual clock change, or an NTP correction — and a backwards move can either suppress a legitimate click or admit a duplicate one.
+  The monotonic clock is immune to both.
 
 ---
 
@@ -6252,635 +3438,343 @@ time have been moved to the monotonic clock the rest of the app uses.
 
 ### Overview
 
-The album-art carousel now animates on every kind of song transition —
-a track ending on its own, a headset media button, a shuffle pick, a
-repeat-one restart — with the same visuals a swipe or a button press
-produces. Repeat-one has a dedicated animation that matches its
-behaviour: a small glide toward the neighbour and back, whether the
-restart came from the user's press or the track looping on its own. The
-playlist sort has been moved off the main thread in both the service
-and the adapter, so the sort overlay's spinner rotates freely
-throughout the operation, and the overlay now waits for the
-RecyclerView to settle with the new ordering before it dismisses.
+The album-art carousel now animates on every kind of song transition — a track ending on its own, a headset media button, a shuffle pick, a repeat-one restart — with the same visuals a swipe or a button press produces.
+Repeat-one has a dedicated animation that matches its behaviour: a small glide toward the neighbour and back, whether the restart came from the user's press or the track looping on its own.
+The playlist sort has been moved off the main thread in both the service and the adapter, so the sort overlay's spinner rotates freely throughout the operation, and the overlay now waits for the RecyclerView to settle with the new ordering before it dismisses.
 
 ### What's New
 
-- **Carousel animates on automatic transitions** — A song ending on
-  its own, a headset media button skip, a shuffle pick, or a repeat-one
-  restart all now animate the album-art strip exactly as a transport
-  button press does. Previously these transitions arrived as
-  instantaneous snaps: the audio changed, the strip's slots updated,
-  but nothing moved. The animation is now the default, and only a
-  re-publication of the same window — a pause, a resume, a seek, a
-  metadata poke — leaves the strip still.
-- **Repeat-one has its own animation** — Under repeat-one, a next or
-  previous press restarts the current song rather than advancing. The
-  strip's response matches that behaviour: instead of the full commit
-  slide a normal advance produces, it runs a below-threshold nudge — a
-  small glide toward the neighbour position and back to rest. The
-  animation reads as an acknowledgement that the song restarted, not
-  as the beginning of an advance. The same animation runs when the
-  track loops on its own, so a deliberate press and an involuntary
-  restart are visually identical.
-- **Rejected button presses glide back** — Previously, under
-  repeat-one, a next or previous press started the full commit slide
-  toward the neighbour and then jumped straight back to rest when the
-  service refused to advance. The return is now a glide using the same
-  method a below-threshold swipe uses, so the press and the release of
-  a committed swipe under the same mode produce the same visible shape.
-- **Sort reveals a settled list** — The sort overlay no longer hides
-  on a timer measured from the sort's start. It hides only after the
-  RecyclerView has laid out and drawn the frame containing the sorted
-  list, so the moment the overlay disappears is the moment the user
-  sees the final ordering. Nothing repaints after the overlay's exit.
-- **Sort no longer stalls the spinner** — The playlist reorder ran in
-  two places on the main thread. The service's sort-mode receiver
-  sorted the authoritative playlist inline in its broadcast callback,
-  and the playlist adapter ran `DiffUtil` on the fully reordered list
-  when the activity handed it back. Both are now off the main thread.
+- **Carousel animates on automatic transitions** — A song ending on its own, a headset media button skip, a shuffle pick, or a repeat-one restart all now animate the album-art strip exactly as a transport button press does.
+  Previously these transitions arrived as instantaneous snaps: the audio changed, the strip's slots updated, but nothing moved.
+  The animation is now the default, and only a re-publication of the same window — a pause, a resume, a seek, a metadata poke — leaves the strip still.
+- **Repeat-one has its own animation** — Under repeat-one, a next or previous press restarts the current song rather than advancing.
+  The strip's response matches that behaviour: instead of the full commit slide a normal advance produces, it runs a below-threshold nudge — a small glide toward the neighbour position and back to rest.
+  The animation reads as an acknowledgement that the song restarted, not as the beginning of an advance.
+  The same animation runs when the track loops on its own, so a deliberate press and an involuntary restart are visually identical.
+- **Rejected button presses glide back** — Previously, under repeat-one, a next or previous press started the full commit slide toward the neighbour and then jumped straight back to rest when the service refused to advance.
+  The return is now a glide using the same method a below-threshold swipe uses, so the press and the release of a committed swipe under the same mode produce the same visible shape.
+- **Sort reveals a settled list** — The sort overlay no longer hides on a timer measured from the sort's start.
+  It hides only after the RecyclerView has laid out and drawn the frame containing the sorted list, so the moment the overlay disappears is the moment the user sees the final ordering.
+  Nothing repaints after the overlay's exit.
+- **Sort no longer stalls the spinner** — The playlist reorder ran in two places on the main thread.
+  The service's sort-mode receiver sorted the authoritative playlist inline in its broadcast callback, and the playlist adapter ran `DiffUtil` on the fully reordered list when the activity handed it back.
+  Both are now off the main thread.
   The spinner rotates freely for the entire sort window.
 
 ### Fixed
 
-- **Shuffle auto-advance disagreed with the button and the window** —
-  Under shuffle with repeat off, the automatic advance at the end of a
-  track used the positional next index, while the transport button and
-  the carousel's window both used the shuffle-chosen pick. The
-  carousel therefore snapped without animating on every natural track
-  end under that mode combination, because the incoming current path
-  matched neither of the previous window's neighbours. The
-  auto-advance now uses the same picker the button and the window use,
-  so all three agree on the destination.
-- **Repeat-one auto-loop did not return** — Under repeat-one, when a
-  track looped on its own, the strip used to slide the neighbour fully
-  into the viewport and then cut back to the current song. The visual
-  suggested an advance had happened and been reversed. The animation
-  is now the below-threshold nudge, matching what a press under the
-  same mode produces.
-- **Repeat-one next/prev button had no matching animation** — The
-  window used to publish null neighbours under repeat-one, so the
-  carousel had nowhere to slide. A next or previous press showed no
-  animation while the audio restarted. The window now publishes the
-  positional neighbours — the songs a next or previous request would
-  advance to if repeat-one were off — and the carousel slides toward
-  one of them before returning.
+- **Shuffle auto-advance disagreed with the button and the window** — Under shuffle with repeat off, the automatic advance at the end of a track used the positional next index, while the transport button and the carousel's window both used the shuffle-chosen pick.
+  The carousel therefore snapped without animating on every natural track end under that mode combination, because the incoming current path matched neither of the previous window's neighbours.
+  The auto-advance now uses the same picker the button and the window use, so all three agree on the destination.
+- **Repeat-one auto-loop did not return** — Under repeat-one, when a track looped on its own, the strip used to slide the neighbour fully into the viewport and then cut back to the current song.
+  The visual suggested an advance had happened and been reversed.
+  The animation is now the below-threshold nudge, matching what a press under the same mode produces.
+- **Repeat-one next/prev button had no matching animation** — The window used to publish null neighbours under repeat-one, so the carousel had nowhere to slide.
+  A next or previous press showed no animation while the audio restarted.
+  The window now publishes the positional neighbours — the songs a next or previous request would advance to if repeat-one were off — and the carousel slides toward one of them before returning.
 
 ### Under the Hood
 
-- `PlaybackWindow` gained a `generation` field: the service's
-  monotonic transition counter at the moment the window was produced.
-  Equality and hash code now include it, so two windows with the same
-  three paths but different generations are distinct values. A
-  re-publication (a pause, a resume, a seek, a metadata poke) carries
-  the same generation; a fresh transition (a prepare for a new song, a
-  reprepare that restarts the current song, a transition to idle)
-  advances it. The carousel uses this to tell a restart apart from a
-  re-publication even though the three paths are unchanged in both
-  cases.
-- `MusicService.peekNextIndex(int)` and `peekPreviousIndex(int)` no
-  longer special-case repeat-one. They return the positional or
-  shuffle-chosen neighbour under every repeat mode. The window
-  therefore always has somewhere for the carousel to slide toward.
-- `MusicService.getWindowSnapshot()` publishes the peek result without
-  nulling the neighbours for repeat-one, and carries `mGeneration` on
-  the returned window.
-- `MusicService.playNextSong()` and `playPreviousSong()` restart the
-  current song under repeat-one by setting `mTargetIndex = baseIndex`
-  and `mForceReprepare = true`. The reprepare is what makes
-  `reconcile()` begin a fresh transition even though the target index
-  has not changed. The three-way switch semantics — off, all, one —
-  are now uniform across every entry point: transport buttons, headset
-  media buttons, notification actions, and the automatic advance at
-  the end of a track.
-- `MusicService.onCompletion()` uses `computeNext` whenever shuffle is
-  on, under repeat off or all. Previously the repeat-off shuffle path
-  was positional, which made the auto-advance disagree with both the
-  window and the button.
-- `MusicService` gained a single-thread `mSortExecutor`. The sort-mode
-  receiver captures the current playlist, the anchor path, and the
-  requested sort mode on the main thread, sorts a copy on the executor,
-  and posts the swap and the broadcast back to the main thread. A newer
-  sort-mode change supersedes an older one through a comparison of the
-  captured mode against the current field; a superseded task exits
-  without touching state. The executor is shut down in `onDestroy`.
-- `MusicPlayer.mUpdatePlayerReceiver` now passes the broadcast's
-  `generation` extra to the `PlaybackWindow` constructor as its fourth
-  argument. The generation was already parsed for the activity's own
-  gate; the change is one line.
-- `MusicPlayer.playNextSong()` and `playPreviousSong()` choose the
-  carousel animation from the service's current repeat mode: the
-  below-threshold nudge when repeat-one, the full commit slide
-  otherwise. The mode check is a single `getRepeatMode() == 2` and does
-  not race in practice — repeat mode is a user setting that changes far
-  slower than a button press round-trip.
-- `AlbumArtCarousel` gained a `SwipeState.RESTARTING` state for the
-  repeat-one nudge. Both legs of the animation run inside this state so
-  a re-publication during the animation is absorbed without
-  interrupting it, and only a newer generation aborts it. The state is
-  also entered by the automatic restart when the incoming window
-  carries the current path unchanged but an advanced generation.
-- `AlbumArtCarousel` gained a `RESTART_NUDGE_FRACTION = 0.25f`
-  constant, separate from `COMMIT_THRESHOLD_FRACTION = 0.50f`. The
-  nudge is deliberately half the commit threshold's travel: it reads as
-  a gentle peek rather than a full attempt. The two constants are
-  independent so the commit threshold can be tuned without affecting
-  the nudge and vice versa.
-- `AlbumArtCarousel.setWindow`'s COMMITTING mismatch branch now calls
-  `animateToRest` instead of `snapToRest`. The strip glides back from
-  wherever the animation had reached rather than jumping, which is what
-  produces the rejected-press glide. The same `animateToRest` is used
-  by every other return path — below-threshold swipe spring-back,
-  refused committed swipe, refused button press, snapshot timeout, and
-  the return leg of the nudge — so the return animation is guaranteed
-  identical across all cases.
-- `AlbumArtCarousel.adoptInIdle` now takes the previous generation and
-  recognises two forms of transition: a song change (the current path
-  changed to a neighbour — full commit slide) and a restart (the
-  current path is unchanged but the generation advanced —
-  below-threshold nudge). The generation is the only signal that
-  distinguishes them, because the three paths are identical in both
-  cases.
-- `AlbumArtCarousel.nudgeToNext()` and `nudgeToPrevious()` are the
-  public methods the activity uses to run the repeat-one nudge. They
-  have the same idle/viewport/neighbour guards as `animateToNext()` /
-  `animateToPrevious()` and are the nudge equivalents of those commit
-  methods. The carousel has no knowledge of repeat modes; the caller
-  selects the animation.
-- `AlbumArtCarousel.calculateSampleSize` parameter names were expanded
-  from `reqWidth` / `reqHeight` to `requestedWidth` / `requestedHeight`
-  to match the codebase's convention of full names for variables.
-- `PlaylistActivity` gained a `mSortGeneration` field advanced by every
-  `cycleSortMode` call. The hide callback that runs after the
-  RecyclerView has settled checks it against the generation its cycle
-  was started with, so a superseded cycle cannot take the overlay down
-  on the current cycle's behalf.
-- `PlaylistActivity.cycleSortMode()` now updates the adapter and
-  performs the focus scroll synchronously in the same main-thread turn,
-  via a new `scrollToCurrentSongImmediately()` method. The new order
-  and the new scroll position land in the same RecyclerView layout
-  pass. The overlay is hidden only after that settled frame has been
-  drawn, via a new `hideSortOverlayAfterListSettles()` method that
-  registers a `ViewTreeObserver.OnPreDrawListener`, removes it on the
-  first callback, and posts the hide from inside it. The
-  `SORT_OVERLAY_MIN_DURATION_MS` floor is applied on top of the settle
-  wait by `scheduleSortOverlayHideAtMinDuration`.
-- `PlaylistAdapter.updateList(List<Song>)` gained an overload taking a
-  `reorderOnly` flag. The original signature is preserved and delegates
-  with the flag set to `false`. A caller that knows the two lists
-  contain the same songs in a different order — the sort cycle is the
-  case this was added for — passes `true` and the adapter replaces the
-  whole list in one step instead of running `DiffUtil`. The flag is a
-  hint, not a contract: a caller that is uncertain can pass `false` and
-  let `shouldBulkReplace` decide.
-- `PlaylistActivity.cycleSortMode()` calls `updateList` with
-  `reorderOnly = true`, opting in to the fast path. Every other
-  `updateList` call site in the file is unchanged and keeps the
-  `shouldBulkReplace` / `DiffUtil` behaviour for the small updates the
-  app already uses it for — genre updates, metadata edits, incremental
-  progress additions.
+- `PlaybackWindow` gained a `generation` field: the service's monotonic transition counter at the moment the window was produced.
+  Equality and hash code now include it, so two windows with the same three paths but different generations are distinct values.
+  A re-publication (a pause, a resume, a seek, a metadata poke) carries the same generation; a fresh transition (a prepare for a new song, a reprepare that restarts the current song, a transition to idle) advances it.
+  The carousel uses this to tell a restart apart from a re-publication even though the three paths are unchanged in both cases.
+- `MusicService.peekNextIndex(int)` and `peekPreviousIndex(int)` no longer special-case repeat-one.
+  They return the positional or shuffle-chosen neighbour under every repeat mode.
+  The window therefore always has somewhere for the carousel to slide toward.
+- `MusicService.getWindowSnapshot()` publishes the peek result without nulling the neighbours for repeat-one, and carries `mGeneration` on the returned window.
+- `MusicService.playNextSong()` and `playPreviousSong()` restart the current song under repeat-one by setting `mTargetIndex = baseIndex` and `mForceReprepare = true`.
+  The reprepare is what makes `reconcile()` begin a fresh transition even though the target index has not changed.
+  The three-way switch semantics — off, all, one — are now uniform across every entry point: transport buttons, headset media buttons, notification actions, and the automatic advance at the end of a track.
+- `MusicService.onCompletion()` uses `computeNext` whenever shuffle is on, under repeat off or all.
+  Previously the repeat-off shuffle path was positional, which made the auto-advance disagree with both the window and the button.
+- `MusicService` gained a single-thread `mSortExecutor`.
+  The sort-mode receiver captures the current playlist, the anchor path, and the requested sort mode on the main thread, sorts a copy on the executor, and posts the swap and the broadcast back to the main thread.
+  A newer sort-mode change supersedes an older one through a comparison of the captured mode against the current field; a superseded task exits without touching state.
+  The executor is shut down in `onDestroy`.
+- `MusicPlayer.mUpdatePlayerReceiver` now passes the broadcast's `generation` extra to the `PlaybackWindow` constructor as its fourth argument.
+  The generation was already parsed for the activity's own gate; the change is one line.
+- `MusicPlayer.playNextSong()` and `playPreviousSong()` choose the carousel animation from the service's current repeat mode: the below-threshold nudge when repeat-one, the full commit slide otherwise.
+  The mode check is a single `getRepeatMode() == 2` and does not race in practice — repeat mode is a user setting that changes far slower than a button press round-trip.
+- `AlbumArtCarousel` gained a `SwipeState.RESTARTING` state for the repeat-one nudge.
+  Both legs of the animation run inside this state so a re-publication during the animation is absorbed without interrupting it, and only a newer generation aborts it.
+  The state is also entered by the automatic restart when the incoming window carries the current path unchanged but an advanced generation.
+- `AlbumArtCarousel` gained a `RESTART_NUDGE_FRACTION = 0.25f` constant, separate from `COMMIT_THRESHOLD_FRACTION = 0.50f`.
+  The nudge is deliberately half the commit threshold's travel: it reads as a gentle peek rather than a full attempt.
+  The two constants are independent so the commit threshold can be tuned without affecting the nudge and vice versa.
+- `AlbumArtCarousel.setWindow`'s COMMITTING mismatch branch now calls `animateToRest` instead of `snapToRest`.
+  The strip glides back from wherever the animation had reached rather than jumping, which is what produces the rejected-press glide.
+  The same `animateToRest` is used by every other return path — below-threshold swipe spring-back, refused committed swipe, refused button press, snapshot timeout, and the return leg of the nudge — so the return animation is guaranteed identical across all cases.
+- `AlbumArtCarousel.adoptInIdle` now takes the previous generation and recognises two forms of transition: a song change (the current path changed to a neighbour — full commit slide) and a restart (the current path is unchanged but the generation advanced — below-threshold nudge).
+  The generation is the only signal that distinguishes them, because the three paths are identical in both cases.
+- `AlbumArtCarousel.nudgeToNext()` and `nudgeToPrevious()` are the public methods the activity uses to run the repeat-one nudge.
+  They have the same idle/viewport/neighbour guards as `animateToNext()` / `animateToPrevious()` and are the nudge equivalents of those commit methods.
+  The carousel has no knowledge of repeat modes; the caller selects the animation.
+- `AlbumArtCarousel.calculateSampleSize` parameter names were expanded from `reqWidth` / `reqHeight` to `requestedWidth` / `requestedHeight` to match the codebase's convention of full names for variables.
+- `PlaylistActivity` gained a `mSortGeneration` field advanced by every `cycleSortMode` call.
+  The hide callback that runs after the RecyclerView has settled checks it against the generation its cycle was started with, so a superseded cycle cannot take the overlay down on the current cycle's behalf.
+- `PlaylistActivity.cycleSortMode()` now updates the adapter and performs the focus scroll synchronously in the same main-thread turn, via a new `scrollToCurrentSongImmediately()` method.
+  The new order and the new scroll position land in the same RecyclerView layout pass.
+  The overlay is hidden only after that settled frame has been drawn, via a new `hideSortOverlayAfterListSettles()` method that registers a `ViewTreeObserver.OnPreDrawListener`, removes it on the first callback, and posts the hide from inside it.
+  The `SORT_OVERLAY_MIN_DURATION_MS` floor is applied on top of the settle wait by `scheduleSortOverlayHideAtMinDuration`.
+- `PlaylistAdapter.updateList(List<Song>)` gained an overload taking a `reorderOnly` flag.
+  The original signature is preserved and delegates with the flag set to `false`.
+  A caller that knows the two lists contain the same songs in a different order — the sort cycle is the case this was added for — passes `true` and the adapter replaces the whole list in one step instead of running `DiffUtil`.
+  The flag is a hint, not a contract: a caller that is uncertain can pass `false` and let `shouldBulkReplace` decide.
+- `PlaylistActivity.cycleSortMode()` calls `updateList` with `reorderOnly = true`, opting in to the fast path.
+  Every other `updateList` call site in the file is unchanged and keeps the `shouldBulkReplace` / `DiffUtil` behaviour for the small updates the app already uses it for — genre updates, metadata edits, incremental progress additions.
 
 ---
 
 ## [1.2.0] - Sep 30, 2026
 
 ### Overview
-Two new interaction features, a split-screen layout that reshapes the
-whole app, a redesigned loading indicator, a process-wide overlay
-architecture, and a three-slot album-art carousel that renders the
-playback window the service publishes.
+
+Two new interaction features, a split-screen layout that reshapes the whole app, a redesigned loading indicator, a process-wide overlay architecture, and a three-slot album-art carousel that renders the playback window the service publishes.
 
 ### What's New
+
 - **Volume-aware playback** — Reaching volume 0 pauses playback.
-  Raising the volume above 0 resumes it. The rule is symmetric and
-  independent of what caused the pause: the user's act of raising
-  the volume is itself a signal that they want to hear the music.
-- **Album-art volume gesture** — Swipe up or down along the left or
-  right edge of the album art to change the volume. A short toast
-  shows the current level as a percentage. When the gesture reaches
-  the device maximum or zero and the finger continues in the same
-  direction, the toast echoes at a fixed rhythm so the gesture still
-  reads as being tracked even though the device volume cannot move
-  further.
-- **Playlist edge fast-scroll** — A vertical drag that starts inside
-  the leftmost or rightmost 32dp of the playlist scrolls the list
-  proportionally: a full viewport-height of finger travel moves
-  through five percent of the total scrollable range, anchored at
-  the position the drag began. On a library large enough for the
-  proportional mapping to be useful, the end of the list is reachable
-  in a bounded number of gestures regardless of how many songs it
-  holds.
-- **Sort progress feedback** — Cycling the playlist's sort mode shows
-  the same dim-and-spinner overlay the app uses for longer
-  operations. The overlay appears the moment the sort starts and
-  disappears when the sort finishes, with a short floor so it does
-  not flash on a small library.
-- **Split-screen layout** — Every activity declares the same
-  `configChanges` set and adjusts its own content when the window
-  resizes instead of being recreated. In the player, the album art
-  resizes with the window: at full height it is shown at 300dp; in a
-  tall split window it shrinks to 180dp and the volume gesture
-  remains available; in a short split window the art hides so the
-  title, artist, progress bar, timer, and controls take the space.
-  In the equalizer, the band controls and the effect controls share
-  a single scroll container; in split mode the band wrapper drops
-  its weight and takes its natural height, so the user scrolls
-  through both sections as one column. The folder manager hides the
-  folder list and shows a centred placeholder in its slot. The
-  metadata editor and the playlist let their existing scroll
-  containers absorb the overflow.
-- **Redesigned loading indicator** — A rotating ring with a bright
-  arc travelling around a dim track, in place of the previous static
-  circle. The arc's position is legible on every frame, so the
-  indicator reads as moving regardless of how long the underlying
-  work takes.
+  Raising the volume above 0 resumes it.
+  The rule is symmetric and independent of what caused the pause: the user's act of raising the volume is itself a signal that they want to hear the music.
+- **Album-art volume gesture** — Swipe up or down along the left or right edge of the album art to change the volume.
+  A short toast shows the current level as a percentage.
+  When the gesture reaches the device maximum or zero and the finger continues in the same direction, the toast echoes at a fixed rhythm so the gesture still reads as being tracked even though the device volume cannot move further.
+- **Playlist edge fast-scroll** — A vertical drag that starts inside the leftmost or rightmost 32dp of the playlist scrolls the list proportionally: a full viewport-height of finger travel moves through five percent of the total scrollable range, anchored at the position the drag began.
+  On a library large enough for the proportional mapping to be useful, the end of the list is reachable in a bounded number of gestures regardless of how many songs it holds.
+- **Sort progress feedback** — Cycling the playlist's sort mode shows the same dim-and-spinner overlay the app uses for longer operations.
+  The overlay appears the moment the sort starts and disappears when the sort finishes, with a short floor so it does not flash on a small library.
+- **Split-screen layout** — Every activity declares the same `configChanges` set and adjusts its own content when the window resizes instead of being recreated.
+  In the player, the album art resizes with the window: at full height it is shown at 300dp; in a tall split window it shrinks to 180dp and the volume gesture remains available; in a short split window the art hides so the title, artist, progress bar, timer, and controls take the space.
+  In the equalizer, the band controls and the effect controls share a single scroll container; in split mode the band wrapper drops its weight and takes its natural height, so the user scrolls through both sections as one column.
+  The folder manager hides the folder list and shows a centred placeholder in its slot.
+  The metadata editor and the playlist let their existing scroll containers absorb the overflow.
+- **Redesigned loading indicator** — A rotating ring with a bright arc travelling around a dim track, in place of the previous static circle.
+  The arc's position is legible on every frame, so the indicator reads as moving regardless of how long the underlying work takes.
 
 ### Album-art carousel
 
-The album art is a three-slot strip: the previous song's art on the
-left, the current song's art in the middle, the next song's art on the
-right. Swipe horizontally across the art and the strip follows your
-finger. Release past the midpoint and the strip commits to the
-neighbouring song; release before it and the strip springs back.
+The album art is a three-slot strip: the previous song's art on the left, the current song's art in the middle, the next song's art on the right.
+Swipe horizontally across the art and the strip follows your finger.
+Release past the midpoint and the strip commits to the neighbouring song; release before it and the strip springs back.
 
-The carousel renders a window the service publishes — the previous
-neighbour's path, the current song's path, the next neighbour's path,
-computed by `MusicService.getWindowSnapshot()`. The window is the same
-triple the service's own Next and Previous requests commit from, so
-the carousel and the service cannot disagree about which song will
-play next, which song is the previous, or which song is current. A
-window is a value; adopting it is a single method, `setWindow`, and
-every path through the service — a transport button, a headset key, a
-notification action, a Bluetooth resume, a shuffle re-pick, a sort
-reorder, a library reset — publishes a window.
+The carousel renders a window the service publishes — the previous neighbour's path, the current song's path, the next neighbour's path, computed by `MusicService.getWindowSnapshot()`.
+The window is the same triple the service's own Next and Previous requests commit from, so the carousel and the service cannot disagree about which song will play next, which song is the previous, or which song is current.
+A window is a value; adopting it is a single method, `setWindow`, and every path through the service — a transport button, a headset key, a notification action, a Bluetooth resume, a shuffle re-pick, a sort reorder, a library reset — publishes a window.
 
-Pressing Next or Previous animates the same strip. The slide and the
-audio transition run in parallel: the button dispatches the service
-request immediately, and the carousel slides while the service
-prepares the next song. When the service's window arrives, the strip
-settles on the incoming art. The visual result is identical to a
-committed swipe.
+Pressing Next or Previous animates the same strip.
+The slide and the audio transition run in parallel: the button dispatches the service request immediately, and the carousel slides while the service prepares the next song.
+When the service's window arrives, the strip settles on the incoming art.
+The visual result is identical to a committed swipe.
 
-Under shuffle the service's next is the shuffle-chosen index, not a
-positional neighbour; the carousel renders whatever path the service
-publishes, and the shuffle pick is memoised so the song the carousel
-displayed in its next slot is the song the the service plays. Rapid
-skip-forward and skip-back are handled by the path's own identity: the
-carousel installs a decoded bitmap only into a slot whose path matches
-the window, and a decode that resolves after the window has moved on
-is placed in the cache and dropped.
+Under shuffle the service's next is the shuffle-chosen index, not a positional neighbour; the carousel renders whatever path the service publishes, and the shuffle pick is memoised so the song the carousel displayed in its next slot is the song the the service plays.
+Rapid skip-forward and skip-back are handled by the path's own identity: the carousel installs a decoded bitmap only into a slot whose path matches the window, and a decode that resolves after the window has moved on is placed in the cache and dropped.
 
 ### Playlist edge fast-scroll
 
-The playlist list owns a fast-scroll zone on each of its two vertical
-edges. A vertical drag that starts inside the leftmost or rightmost
-32dp of the list scrolls the list proportionally: a full
-viewport-height of finger travel moves through five percent of the
-total scrollable range, anchored at the position the drag began. The
-mapping is smooth and reversible — the same finger position always
-lands on the same offset — so the user can read rows while dragging
-past them and reverse direction without the list jumping.
+The playlist list owns a fast-scroll zone on each of its two vertical edges.
+A vertical drag that starts inside the leftmost or rightmost 32dp of the list scrolls the list proportionally: a full viewport-height of finger travel moves through five percent of the total scrollable range, anchored at the position the drag began.
+The mapping is smooth and reversible — the same finger position always lands on the same offset — so the user can read rows while dragging past them and reverse direction without the list jumping.
 
-Fast scroll only engages when the content is at least three times
-taller than the viewport. On a shorter list the proportional mapping
-would be too coarse for a user who is reading rows, and the edge
-zones defer to the RecyclerView's own scrolling. Below that
-threshold, the two edge zones behave exactly like the rest of the
-list.
+Fast scroll only engages when the content is at least three times taller than the viewport.
+On a shorter list the proportional mapping would be too coarse for a user who is reading rows, and the edge zones defer to the RecyclerView's own scrolling.
+Below that threshold, the two edge zones behave exactly like the rest of the list.
 
-A tap is never consumed by the edge zones. The gesture classifier
-takes over the sequence only after the finger has moved past the
-touch slop, so tapping a song that happens to sit near an edge still
-plays it. Once the classifier has taken over, it cancels any scroll
-the RecyclerView had already begun in its slop window and drives the
-rest of the gesture itself, so the two scroll systems never fight
-over the same drag.
+A tap is never consumed by the edge zones.
+The gesture classifier takes over the sequence only after the finger has moved past the touch slop, so tapping a song that happens to sit near an edge still plays it.
+Once the classifier has taken over, it cancels any scroll the RecyclerView had already begun in its slop window and drives the rest of the gesture itself, so the two scroll systems never fight over the same drag.
 
-The gesture is independent of the album-art carousel and of the
-volume gesture. It lives on the playlist list; the carousel's swipe
-and the album-art volume gesture live on the album-art container in
-the player screen. No screen hosts both.
+The gesture is independent of the album-art carousel and of the volume gesture.
+It lives on the playlist list; the carousel's swipe and the album-art volume gesture live on the album-art container in the player screen.
+No screen hosts both.
 
 ### Media carousel
 
-The notification and the system media controls follow every playback
-transition, including rapid skip-forward and skip-back from the
-carousel itself. The metadata is delivered to the notification and
-the media session as it arrives, with the themed placeholder as the
-large icon while a song's album art is still decoding, and with the
-real bitmap once the decode resolves. The playback state is written
-on every awareness tick, so a state change the carousel missed on
-one tick is retried on the next.
+The notification and the system media controls follow every playback transition, including rapid skip-forward and skip-back from the carousel itself.
+The metadata is delivered to the notification and the media session as it arrives, with the themed placeholder as the large icon while a song's album art is still decoding, and with the real bitmap once the decode resolves.
+The playback state is written on every awareness tick, so a state change the carousel missed on one tick is retried on the next.
 
-The notification, the media session, the player UI, and the album-art
-carousel all read their display identity from one rule on the
-service: during a transition the display song is the target;
-otherwise it is the current song. One expression of the rule, four
-consumers, no drift.
+The notification, the media session, the player UI, and the album-art carousel all read their display identity from one rule on the service: during a transition the display song is the target; otherwise it is the current song.
+One expression of the rule, four consumers, no drift.
 
 ### Playback restoration
 
-The last song and its playback position restore reliably on every
-cold start, including after a force-kill or an OS-initiated process
-teardown. The position is checkpointed on a fixed interval while
-music is playing, alongside the existing saves at play, pause, and
-seek. A force-kill loses at most five seconds of listening position
-instead of the whole song.
+The last song and its playback position restore reliably on every cold start, including after a force-kill or an OS-initiated process teardown.
+The position is checkpointed on a fixed interval while music is playing, alongside the existing saves at play, pause, and seek.
+A force-kill loses at most five seconds of listening position instead of the whole song.
 
 ### Folder import
 
-Importing a folder after a library wipe prepares the first song
-paused. The service has no prior playback signal to honour on a cold
-start, so it waits for you to press play rather than starting
-playback on its own. Restoring a session after a restart is
-unaffected: if you were playing when the process went away,
-playback resumes at the saved position.
+Importing a folder after a library wipe prepares the first song paused.
+The service has no prior playback signal to honour on a cold start, so it waits for you to press play rather than starting playback on its own.
+Restoring a session after a restart is unaffected: if you were playing when the process went away, playback resumes at the saved position.
 
 ### Loading overlay
 
-Cold start, the metadata editor's reads, the folder-update cycle, and
-a user-initiated sort of the playlist all show the same
-dim-and-spinner overlay. The overlay is process-wide and
-reason-keyed: the spinner and the dim background belong to the
-process, not to any single activity, and the overlay follows the
-user across navigation. When you back-swipe out of the folder
-manager while a scan is running, the overlay is still there when you
-land in the player. The playlist rebuild now uses the in-app overlay
-instead of the previous background notification, so the transition
-from folder scan to genre loading stays inside the app's own surface.
-The spinner's rotation is bound to its attach state, so the animation
-runs exactly while the view is on screen.
+Cold start, the metadata editor's reads, the folder-update cycle, and a user-initiated sort of the playlist all show the same dim-and-spinner overlay.
+The overlay is process-wide and reason-keyed: the spinner and the dim background belong to the process, not to any single activity, and the overlay follows the user across navigation.
+When you back-swipe out of the folder manager while a scan is running, the overlay is still there when you land in the player.
+The playlist rebuild now uses the in-app overlay instead of the previous background notification, so the transition from folder scan to genre loading stays inside the app's own surface.
+The spinner's rotation is bound to its attach state, so the animation runs exactly while the view is on screen.
 
 ### Under the Hood
 
-- `PlaybackWindow` — an immutable value type holding the three paths
-  the carousel renders: the previous neighbour, the current song,
-  the next neighbour. Equality compares the three paths, so
-  republishing the same window is a no-op for every consumer. The
-  service is the sole producer; the carousel is the sole consumer.
+- `PlaybackWindow` — an immutable value type holding the three paths the carousel renders: the previous neighbour, the current song, the next neighbour.
+  Equality compares the three paths, so republishing the same window is a no-op for every consumer.
+  The service is the sole producer; the carousel is the sole consumer.
 - `MusicService` is the sole authority for the window.
-  `getWindowSnapshot()` computes it from two pure functions,
-  `peekNextIndex(int)` and `peekPreviousIndex(int)`, that are the
-  same primitives the service's own `playNextSong()` and
-  `playPreviousSong()` commit from. The peek functions do not mutate
-  the shuffle history; they memoise the answer the next commit will
-  consume, so the index the window advertised is the index the
-  service plays. The memo is cleared on every operation that changes
-  what an index means: a playlist replacement, a sort reorder, a
-  shuffle toggle, a repeat-mode change, a transition to idle, and a
-  commit. The shuffle history is cleared on the same operations
-  except a repeat-mode change and a commit; on a commit it is
-  appended to for a next, or popped from for a previous.
-- `MusicService.getDisplaySong()` is the single expression of "which
-  song is the app showing right now". During PREPARING it is the
-  target; every other state uses the current index. It feeds
-  `snapshotForNotification`, `getWindowSnapshot`, `broadcastUpdate`,
-  and `prefetchNotificationArt`. There is no second expression of
-  the rule, so there is nothing for one consumer to drift against
-  another. The notification and the media session carousel
-  therefore advance with the user's tap on a next or previous
-  request, in step with the app carousel, rather than waiting for
-  the transition to complete.
-- `AlbumArtCarousel` — the three-slot album-art strip. It holds no
-  playlist, no index, and no bitmap as primary state. Its entire
-  state is the last window it was given, the current commit state,
-  the confirmed window during a running animation, and the shared
-  placeholder bitmap. It renders the three paths the service names
-  and consults the shared `LruCache` for each path's art. A single
-  public mutator, `setWindow`, adopts every window, whether the
-  window arrived as the result of a swipe, a button press, a
-  headset key, or a Bluetooth resume.
-- `AlbumArtCarousel.animateToNext()` and
-  `AlbumArtCarousel.animateToPrevious()` — the button-driven
-  commit. The caller dispatches the service request immediately and
-  the carousel slides in parallel. The carousel does not dispatch
-  the swipe commit listener for a button-driven commit; the caller
-  that started the animation is responsible for dispatching the
-  service request.
-- `AlbumArtCarousel` has four commit states. `IDLE` is the resting
-  state. `DRAGGING` is a swipe in progress. `COMMITTING` is a
-  strip animating to a neighbour position. `AWAITING_SNAPSHOT` is a
-  commit dispatched, waiting for the service's window. The expected
-  current path is set before the animation starts, so a window that
-  arrives during the animation can be matched immediately: a
-  matching window is stored and adopted when the animation
-  finishes, and the strip settles at rest without a jump. A
-  non-matching window is a refusal, and the strip springs back. A
-  window that arrives while the user is dragging is adopted
-  directly; the drag is abandoned.
-- `PlaylistActivity.setupEdgeFastScroll()` — installs the
-  fast-scroll interceptor on the playlist `RecyclerView` through an
-  `OnItemTouchListener`. The interceptor records the anchor at
-  `ACTION_DOWN`, engages on the first `ACTION_MOVE` that exceeds the
-  touch slop inside an edge zone and on a list long enough for the
-  proportional mapping, then cancels the RecyclerView's own scroll
-  and drives the rest of the gesture through `scrollBy`. A tap is
-  never consumed: the interceptor returns false from
-  `onInterceptTouchEvent` until the slop is crossed.
-- `PlaylistActivity.cycleSortMode()` — shows
-  `OverlayManager.REASON_PLAYLIST_SORT` before dispatching the sort
-  to a background thread, and schedules the hide from the sort's
-  main-thread completion callback. The hide is scheduled with
-  `SORT_OVERLAY_MIN_DURATION_MS` minus the sort's own elapsed time,
-  so the overlay does not flash on a small library. A subsequent
-  cycle cancels the previous hide before scheduling its own, so
-  rapid taps do not stack. The reason is also released in
-  `onDestroy` if a sort was still in flight when the activity went
-  away.
-- The split-screen behaviour is per-activity, not shared. Each
-  activity applies its own layout rule in `onConfigurationChanged`.
-  `MusicPlayer.applyAlbumArtSize` reads `Configuration.screenHeightDp`
-  and sets the album art's size and visibility.
-  `EqualizerActivity.applyEqualizerSplitLayout` reads the same value
-  and toggles the band wrapper's layout weight: 1 in the full layout
-  so the band controls take the space the effect controls leave, 0
-  in split mode so the wrapper takes its natural height. The band
-  controls and the effect controls live inside one scroll container
-  either way, so in split mode the two sections scroll together and
-  in the full layout the whole column fits the window.
-  `FolderManager.applyFolderManagerSplitLayout` hides the list and
-  shows a centred placeholder in its slot. `MetadataEditor` and
-  `PlaylistActivity` let their existing scroll containers absorb the
-  overflow. Every activity declares the same `configChanges` set, so
-  a resize runs `onConfigurationChanged` instead of recreating the
-  activity.
-- `OverlayManager` — the process-wide, reason-keyed dim-and-spinner
-  overlay. A singleton that registers itself as an
-  `Application.ActivityLifecycleCallbacks` listener and reattaches
-  the overlay to the current activity on every resume. The overlay
-  is visible while at least one reason token is held, so the
-  cold-start library load, the metadata editor's reads, the
-  folder-update cycle, and a user-initiated sort can all hold the
-  overlay without interfering with each other. The spinner is a
-  private view with a lifecycle-bound rotation animator, started on
-  attach and cancelled on detach. A periodic health check releases
-  any reason held longer than the stuck timeout.
-- `MusicService` monitors the music stream through a receiver for
-  `AudioManager.VOLUME_CHANGED_ACTION`, filtered to the music
-  stream. A drop to zero pauses playback when the state is PLAYING,
-  or defers a pause when the state is PREPARING; a raise from zero
-  resumes playback when the state is PAUSED, or clears the deferred
-  pause when the state is PREPARING. The rules are symmetric and
-  independent of what caused the pause.
-- `MusicService` checkpoints the persisted position on a fixed
-  interval inside the existing health monitor, and on
-  `onTrimMemory`. The state-change saves remain in place for pause,
-  seek, and stop.
-- `MusicService.setPlaylist` prepares the anchor paused on a cold
-  start that has no prior playback signal to honour, which is the
-  case after a library wipe or a fresh install. When the persisted
-  state records that playback was active before the process went
-  away, the anchor is prepared to resume at the saved position
-  instead. The rule applies whether the anchor came from a
-  persisted last-song path or from the fallback to index zero on an
-  empty playlist history.
-- `NotificationController.applySnapshot` commits a song's identity
-  as it arrives, with the themed placeholder as the large icon when
-  art has not yet resolved and the real bitmap when it has. The
-  snapshot the controller commits is the one
-  `MusicService.snapshotForNotification` produced, so the
-  notification, the media session, the player UI, and the app
-  carousel all read the same display song.
-- `MusicPlayer.onConfigurationChanged` reapplies the album-art size
-  and visibility. The decision is a pure function of
-  `Configuration.screenHeightDp`.
-- `MusicPlayer.proceedWithInitialization` is linear: preload the
-  previous song for display, then start and bind the service. The
-  activity's preload paints the title, artist, and art while the
-  playlist loads, and does not decide whether anything is restored.
-- `MusicPlayer`'s album-art container owns every gesture that
-  operates on the album art. A single touch listener classifies each
-  gesture on the first significant move: a horizontal swipe becomes
-  a carousel swipe, a vertical swipe that starts inside the left or
-  right 20dp of the container becomes a volume change, and a
-  vertical swipe that starts at the centre is cancelled so it
-  reaches whatever sits behind the album art.
-- `MusicPlayer.playNextSong()` and `MusicPlayer.playPreviousSong()`
-  drive the carousel's slide before dispatching the service request.
-  When the carousel cannot animate — a commit is already in flight,
-  the viewport is not laid out, or the window advertises no
-  neighbour in that direction — the call is a no-op and the service
-  request still proceeds; the resulting window is adopted without
-  animation.
+  `getWindowSnapshot()` computes it from two pure functions, `peekNextIndex(int)` and `peekPreviousIndex(int)`, that are the same primitives the service's own `playNextSong()` and `playPreviousSong()` commit from.
+  The peek functions do not mutate the shuffle history; they memoise the answer the next commit will consume, so the index the window advertised is the index the service plays.
+  The memo is cleared on every operation that changes what an index means: a playlist replacement, a sort reorder, a shuffle toggle, a repeat-mode change, a transition to idle, and a commit.
+  The shuffle history is cleared on the same operations except a repeat-mode change and a commit; on a commit it is appended to for a next, or popped from for a previous.
+- `MusicService.getDisplaySong()` is the single expression of "which song is the app showing right now".
+  During PREPARING it is the target; every other state uses the current index.
+  It feeds `snapshotForNotification`, `getWindowSnapshot`, `broadcastUpdate`, and `prefetchNotificationArt`.
+  There is no second expression of the rule, so there is nothing for one consumer to drift against another.
+  The notification and the media session carousel therefore advance with the user's tap on a next or previous request, in step with the app carousel, rather than waiting for the transition to complete.
+- `AlbumArtCarousel` — the three-slot album-art strip.
+  It holds no playlist, no index, and no bitmap as primary state.
+  Its entire state is the last window it was given, the current commit state, the confirmed window during a running animation, and the shared placeholder bitmap.
+  It renders the three paths the service names and consults the shared `LruCache` for each path's art.
+  A single public mutator, `setWindow`, adopts every window, whether the window arrived as the result of a swipe, a button press, a headset key, or a Bluetooth resume.
+- `AlbumArtCarousel.animateToNext()` and `AlbumArtCarousel.animateToPrevious()` — the button-driven commit.
+  The caller dispatches the service request immediately and the carousel slides in parallel.
+  The carousel does not dispatch the swipe commit listener for a button-driven commit; the caller that started the animation is responsible for dispatching the service request.
+- `AlbumArtCarousel` has four commit states.
+  `IDLE` is the resting state.
+  `DRAGGING` is a swipe in progress.
+  `COMMITTING` is a strip animating to a neighbour position.
+  `AWAITING_SNAPSHOT` is a commit dispatched, waiting for the service's window.
+  The expected current path is set before the animation starts, so a window that arrives during the animation can be matched immediately: a matching window is stored and adopted when the animation finishes, and the strip settles at rest without a jump.
+  A non-matching window is a refusal, and the strip springs back.
+  A window that arrives while the user is dragging is adopted directly; the drag is abandoned.
+- `PlaylistActivity.setupEdgeFastScroll()` — installs the fast-scroll interceptor on the playlist `RecyclerView` through an `OnItemTouchListener`.
+  The interceptor records the anchor at `ACTION_DOWN`, engages on the first `ACTION_MOVE` that exceeds the touch slop inside an edge zone and on a list long enough for the proportional mapping, then cancels the RecyclerView's own scroll and drives the rest of the gesture through `scrollBy`.
+  A tap is never consumed: the interceptor returns false from `onInterceptTouchEvent` until the slop is crossed.
+- `PlaylistActivity.cycleSortMode()` — shows `OverlayManager.REASON_PLAYLIST_SORT` before dispatching the sort to a background thread, and schedules the hide from the sort's main-thread completion callback.
+  The hide is scheduled with `SORT_OVERLAY_MIN_DURATION_MS` minus the sort's own elapsed time, so the overlay does not flash on a small library.
+  A subsequent cycle cancels the previous hide before scheduling its own, so rapid taps do not stack.
+  The reason is also released in `onDestroy` if a sort was still in flight when the activity went away.
+- The split-screen behaviour is per-activity, not shared.
+  Each activity applies its own layout rule in `onConfigurationChanged`.
+  `MusicPlayer.applyAlbumArtSize` reads `Configuration.screenHeightDp` and sets the album art's size and visibility.
+  `EqualizerActivity.applyEqualizerSplitLayout` reads the same value and toggles the band wrapper's layout weight: 1 in the full layout so the band controls take the space the effect controls leave, 0 in split mode so the wrapper takes its natural height.
+  The band controls and the effect controls live inside one scroll container either way, so in split mode the two sections scroll together and in the full layout the whole column fits the window.
+  `FolderManager.applyFolderManagerSplitLayout` hides the list and shows a centred placeholder in its slot.
+  `MetadataEditor` and `PlaylistActivity` let their existing scroll containers absorb the overflow.
+  Every activity declares the same `configChanges` set, so a resize runs `onConfigurationChanged` instead of recreating the activity.
+- `OverlayManager` — the process-wide, reason-keyed dim-and-spinner overlay.
+  A singleton that registers itself as an `Application.ActivityLifecycleCallbacks` listener and reattaches the overlay to the current activity on every resume.
+  The overlay is visible while at least one reason token is held, so the cold-start library load, the metadata editor's reads, the folder-update cycle, and a user-initiated sort can all hold the overlay without interfering with each other.
+  The spinner is a private view with a lifecycle-bound rotation animator, started on attach and cancelled on detach.
+  A periodic health check releases any reason held longer than the stuck timeout.
+- `MusicService` monitors the music stream through a receiver for `AudioManager.VOLUME_CHANGED_ACTION`, filtered to the music stream.
+  A drop to zero pauses playback when the state is PLAYING, or defers a pause when the state is PREPARING; a raise from zero resumes playback when the state is PAUSED, or clears the deferred pause when the state is PREPARING.
+  The rules are symmetric and independent of what caused the pause.
+- `MusicService` checkpoints the persisted position on a fixed interval inside the existing health monitor, and on `onTrimMemory`.
+  The state-change saves remain in place for pause, seek, and stop.
+- `MusicService.setPlaylist` prepares the anchor paused on a cold start that has no prior playback signal to honour, which is the case after a library wipe or a fresh install.
+  When the persisted state records that playback was active before the process went away, the anchor is prepared to resume at the saved position instead.
+  The rule applies whether the anchor came from a persisted last-song path or from the fallback to index zero on an empty playlist history.
+- `NotificationController.applySnapshot` commits a song's identity as it arrives, with the themed placeholder as the large icon when art has not yet resolved and the real bitmap when it has.
+  The snapshot the controller commits is the one `MusicService.snapshotForNotification` produced, so the notification, the media session, the player UI, and the app carousel all read the same display song.
+- `MusicPlayer.onConfigurationChanged` reapplies the album-art size and visibility.
+  The decision is a pure function of `Configuration.screenHeightDp`.
+- `MusicPlayer.proceedWithInitialization` is linear: preload the previous song for display, then start and bind the service.
+  The activity's preload paints the title, artist, and art while the playlist loads, and does not decide whether anything is restored.
+- `MusicPlayer`'s album-art container owns every gesture that operates on the album art.
+  A single touch listener classifies each gesture on the first significant move: a horizontal swipe becomes a carousel swipe, a vertical swipe that starts inside the left or right 20dp of the container becomes a volume change, and a vertical swipe that starts at the centre is cancelled so it reaches whatever sits behind the album art.
+- `MusicPlayer.playNextSong()` and `MusicPlayer.playPreviousSong()` drive the carousel's slide before dispatching the service request.
+  When the carousel cannot animate — a commit is already in flight, the viewport is not laid out, or the window advertises no neighbour in that direction — the call is a no-op and the service request still proceeds; the resulting window is adopted without animation.
 
 ---
 
 ## [1.1.9] - Sep 28, 2026
 
 ### Overview
-A small maintenance release. One user-visible bug fix, two message and
-timing adjustments, and the supporting changes underneath them.
+
+A small maintenance release.
+One user-visible bug fix, two message and timing adjustments, and the supporting changes underneath them.
 
 ### Fixed
-- **Media carousel settling on a previous song under rapid switching** —
-  Two independent causes, both fixed.
 
-  The awareness poll recorded a snapshot as rendered whether it had been
-  rendered or held. A held snapshot — a new song whose album art is still
-  decoding — was therefore marked as the current render, and a subsequent
-  snapshot that compared equal to it was skipped. The poll now records a
-  snapshot only when it commits, so a held render is re-evaluated on
-  every tick.
+- **Media carousel settling on a previous song under rapid switching** — Two independent causes, both fixed.
 
-  Separately, the session's playback state was written only when a
-  metadata commit happened, and on a rapid switch the state value is the
-  same before and after (`PLAYING` → `PLAYING`). The carousel therefore
-  received a metadata-only delivery, which does not reliably refresh it.
-  The session's playback state is now written on every tick from the
-  state machine's own state — including the `BUFFERING` state every song
-  switch passes through — independent of the metadata commit. A state
-  change is delivered on every transition, so the carousel converges on
-  the current song no matter how rapidly the user taps.
+The awareness poll recorded a snapshot as rendered whether it had been rendered or held.
+A held snapshot — a new song whose album art is still decoding — was therefore marked as the current render, and a subsequent snapshot that compared equal to it was skipped.
+The poll now records a snapshot only when it commits, so a held render is re-evaluated on every tick.
+
+Separately, the session's playback state was written only when a metadata commit happened, and on a rapid switch the state value is the same before and after (`PLAYING` → `PLAYING`).
+The carousel therefore received a metadata-only delivery, which does not reliably refresh it.
+The session's playback state is now written on every tick from the state machine's own state — including the `BUFFERING` state every song switch passes through — independent of the metadata commit.
+A state change is delivered on every transition, so the carousel converges on the current song no matter how rapidly the user taps.
 
 ### Changed
-- **Playlist sync overlay message** — A playlist scan triggered by a
-  storage change now shows `Syncing playlist...` for the duration of the
-  run instead of the metadata loader's default `Loading metadata... X/Y`
-  text. The new message names the action the user caused and stays in
-  place for the whole operation; the counter is not shown because a sync
-  that finds nothing to change would sit at `0/N` and vanish. The
-  genre-loading operation itself is unchanged: callers that supply no
-  message keep the default progress text.
-- **Playlist updated confirmation** — The confirmation toast now uses
-  the normal duration instead of the short one.
+
+- **Playlist sync overlay message** — A playlist scan triggered by a storage change now shows `Syncing playlist...` for the duration of the run instead of the metadata loader's default `Loading metadata... X/Y` text.
+  The new message names the action the user caused and stays in place for the whole operation; the counter is not shown because a sync that finds nothing to change would sit at `0/N` and vanish.
+  The genre-loading operation itself is unchanged: callers that supply no message keep the default progress text.
+- **Playlist updated confirmation** — The confirmation toast now uses the normal duration instead of the short one.
 
 ### Under the Hood
-- `PlaylistManager.EXTRA_TRIGGER_MESSAGE` — optional overlay message
-  carried on the genre-loading trigger broadcast.
-- `PlaylistManager.triggerGenreLoading(String)` — takes an optional
-  message; the no-argument overload preserves the previous behaviour.
-- `NotificationController.ServiceStateSource` gains
-  `sessionPlaybackState()` and `updateSessionPlaybackState()`. The
-  session's metadata is a projection of the render commit and commits
-  once per song with the art held until it resolves. The session's
-  playback state is a projection of the state machine and is written on
-  every sync tick, independent of the metadata. The two projections have
-  independent lifetimes; only the second is what keeps the carousel in
-  sync on a rapid switch.
-- `NotificationController.syncOnce()` (renamed from `pollOnce`) records
-  a snapshot as rendered only when it commits, so a held render is
-  re-evaluated on every tick.
+
+- `PlaylistManager.EXTRA_TRIGGER_MESSAGE` — optional overlay message carried on the genre-loading trigger broadcast.
+- `PlaylistManager.triggerGenreLoading(String)` — takes an optional message; the no-argument overload preserves the previous behaviour.
+- `NotificationController.ServiceStateSource` gains `sessionPlaybackState()` and `updateSessionPlaybackState()`.
+  The session's metadata is a projection of the render commit and commits once per song with the art held until it resolves.
+  The session's playback state is a projection of the state machine and is written on every sync tick, independent of the metadata.
+  The two projections have independent lifetimes; only the second is what keeps the carousel in sync on a rapid switch.
+- `NotificationController.syncOnce()` (renamed from `pollOnce`) records a snapshot as rendered only when it commits, so a held render is re-evaluated on every tick.
 
 ---
 
 ## [1.1.8] - Sep 27, 2026
 
 ### Overview
-This release restructures roughly half the non-UI classes. Four subsystems were rewritten end to end, two classes were renamed, and the framework media session classes were migrated to the AndroidX support library. The user-facing behavior is largely unchanged; the code underneath is not.
+
+This release restructures roughly half the non-UI classes.
+Four subsystems were rewritten end to end, two classes were renamed, and the framework media session classes were migrated to the AndroidX support library.
+The user-facing behavior is largely unchanged; the code underneath is not.
 
 ### What's New
-- **Notification ownership inverted** — `NotificationController` replaces `NotificationService`. The controller polls the service through a state-source interface instead of receiving pushed state, and is now the sole writer of the media session metadata.
-- **Media session and notification committed together** — one `RenderSnapshot`, one main-thread turn, two projections. The carousel and the notification can no longer show different songs on a rapid switch.
-- **Operation stack replaces the single-owner overlay token** — `ToastManager` renders from an ordered stack of operations. An operation below the top is retained but not shown; a cancelled operation is removed as a terminal state, and the overlay cannot freeze.
-- **Folder-update cycle overlay ownership made strictly sequential** — folder sync, playlist rebuild, and genre loading each own the persistent overlay for the duration of their own work. One operation per phase, pushed and popped by its owner, no operation ever left on the stack underneath another.
-- **Empty library leaves no trace** — the media session is created inactive and the service does not promote to foreground when the playlist is empty. A first launch with no songs shows nothing in the status bar or the media carousel.
+
+- **Notification ownership inverted** — `NotificationController` replaces `NotificationService`.
+  The controller polls the service through a state-source interface instead of receiving pushed state, and is now the sole writer of the media session metadata.
+- **Media session and notification committed together** — one `RenderSnapshot`, one main-thread turn, two projections.
+  The carousel and the notification can no longer show different songs on a rapid switch.
+- **Operation stack replaces the single-owner overlay token** — `ToastManager` renders from an ordered stack of operations.
+  An operation below the top is retained but not shown; a cancelled operation is removed as a terminal state, and the overlay cannot freeze.
+- **Folder-update cycle overlay ownership made strictly sequential** — folder sync, playlist rebuild, and genre loading each own the persistent overlay for the duration of their own work.
+  One operation per phase, pushed and popped by its owner, no operation ever left on the stack underneath another.
+- **Empty library leaves no trace** — the media session is created inactive and the service does not promote to foreground when the playlist is empty.
+  A first launch with no songs shows nothing in the status bar or the media carousel.
 - **Library reset added** — a first-class `PlaylistManager.resetLibrary()` operation with its own write barrier, invalidation broadcast, and completion signal.
 - **Media session migrated to AndroidX** — `MediaSessionCompat`, `PlaybackStateCompat`, `MediaMetadataCompat`, and `MediaButtonReceiver` replace the framework classes.
-- **Bluetooth resume rebuilt** — a dedicated `ACTION_BLUETOOTH_RESUME` service action replaces the generic play broadcast. A2DP disconnect now pauses playback.
+- **Bluetooth resume rebuilt** — a dedicated `ACTION_BLUETOOTH_RESUME` service action replaces the generic play broadcast.
+  A2DP disconnect now pauses playback.
 - **Result types replace ad-hoc returns** — `MetadataReader`, `MetadataWriter`, and `CharacterMapper` now return typed results with exhaustive status enums.
 - **Equalizer settings made authoritative in `SharedPreferences`** — getters read what setters wrote, regardless of any rounding the underlying effect applies.
 
 ### Technical Improvements
 
-**Folder-Update Cycle**
-- `FolderManager` pushes `FOLDER_SYNC` on the scan's first progress callback and pops it at scan completion on every exit path — success, error, and full-wipe completion
-- `MusicPlayer`'s `UPDATE_PLAYLIST_FROM_FOLDERS` receiver pushes a `PLAYLIST_REBUILD` persistent overlay before starting the rebuild on its executor, and pops it once the rebuild has been handed to the service
-- `MusicPlayer` broadcasts `PlaylistManager.ACTION_TRIGGER_GENRE_LOADING` directly after the rebuild
-- The rebuild overlay is pushed with `ToastManager.getCurrentActivity()`, so it renders in whichever window is visible and follows the user across navigation via `ToastManager`'s existing reattach mechanism
-- The `PLAYLIST_REBUILD` overlay is heartbeated by `MusicPlayer` for the duration of the rebuild
-- `PlaylistManager` pushes `GENRE_UPDATE` and owns it for the whole genre-load lifetime
+**Folder-Update Cycle** - `FolderManager` pushes `FOLDER_SYNC` on the scan's first progress callback and pops it at scan completion on every exit path — success, error, and full-wipe completion - `MusicPlayer`'s `UPDATE_PLAYLIST_FROM_FOLDERS` receiver pushes a `PLAYLIST_REBUILD` persistent overlay before starting the rebuild on its executor, and pops it once the rebuild has been handed to the service - `MusicPlayer` broadcasts `PlaylistManager.ACTION_TRIGGER_GENRE_LOADING` directly after the rebuild - The rebuild overlay is pushed with `ToastManager.getCurrentActivity()`, so it renders in whichever window is visible and follows the user across navigation via `ToastManager`'s existing reattach mechanism - The `PLAYLIST_REBUILD` overlay is heartbeated by `MusicPlayer` for the duration of the rebuild - `PlaylistManager` pushes `GENRE_UPDATE` and owns it for the whole genre-load lifetime
 
-**Architecture Overhaul**
-- **Renamed and Restructured**
-  - `NotificationService` → `NotificationController` (inverted ownership)
-  - `PlaylistService` → `PlaylistManager` (rename plus ownership change for library reset and genre loading)
-- **Framework → AndroidX Support Library**: All media session types (`MediaSession`, `PlaybackState`, `MediaMetadata`) migrated to the `compat` namespace
-- **Result Types Replace Ad-Hoc Returns**: `MetadataReader`, `MetadataWriter`, and `CharacterMapper` now return typed results with exhaustive status enums
-- **Data Layer Restructured**: `SongDatabase` gained a `Table` enum, a `RowReader` that caches column indexes, and an asynchronous constructor
-- **New Operation: Library Reset**: `PlaylistManager.resetLibrary()` with admission, write barrier, invalidation broadcast, and completion signal
-- **Notification Ownership Inverted**: `NotificationController` is the sole writer of the media session metadata, committing it from the same `RenderSnapshot` as the notification
-- **The Operation Stack**: `ToastManager` now uses an ordered stack of operation IDs to manage persistent overlays, allowing concurrent operations and preventing stuck overlays
-- **Metadata Editor Broadcast Unified**: The editor publishes a single `METADATA_UPDATED` broadcast after a successful write. The previous two-broadcast sequence (`UPDATE_SONG_IN_PLAYLIST` followed by `FORCE_UPDATE_PLAYER`) is gone. Each consumer reacts to the one broadcast according to its own concerns, and the service's receiver pokes the controller's awareness poll so the edit reaches both the notification and the session in one turn.
-- **Metadata Cache File Extensions Derived from Source**: `MetadataReader` and `MetadataWriter` now determine the cache file's extension from the source document's display name. Naming every cached file `.mp3` would force jaudiotagger's MP3 reader onto FLAC, OGG, M4A, and MP4 sources.
-- **Dialog Top-Bar Geometry Unified**: `PresetDialog`, `ThemeDialog`, and `CreditsDialog` now use the same top-bar geometry. The CANCEL button measures and positions identically across all three.
+**Architecture Overhaul** - **Renamed and Restructured** - `NotificationService` → `NotificationController` (inverted ownership) - `PlaylistService` → `PlaylistManager` (rename plus ownership change for library reset and genre loading) - **Framework → AndroidX Support Library**: All media session types (`MediaSession`, `PlaybackState`, `MediaMetadata`) migrated to the `compat` namespace - **Result Types Replace Ad-Hoc Returns**: `MetadataReader`, `MetadataWriter`, and `CharacterMapper` now return typed results with exhaustive status enums - **Data Layer Restructured**: `SongDatabase` gained a `Table` enum, a `RowReader` that caches column indexes, and an asynchronous constructor - **New Operation: Library Reset**: `PlaylistManager.resetLibrary()` with admission, write barrier, invalidation broadcast, and completion signal - **Notification Ownership Inverted**: `NotificationController` is the sole writer of the media session metadata, committing it from the same `RenderSnapshot` as the notification - **The Operation Stack**: `ToastManager` now uses an ordered stack of operation IDs to manage persistent overlays, allowing concurrent operations and preventing stuck overlays - **Metadata Editor Broadcast Unified**: The editor publishes a single `METADATA_UPDATED` broadcast after a successful write.
+The previous two-broadcast sequence (`UPDATE_SONG_IN_PLAYLIST` followed by `FORCE_UPDATE_PLAYER`) is gone.
+Each consumer reacts to the one broadcast according to its own concerns, and the service's receiver pokes the controller's awareness poll so the edit reaches both the notification and the session in one turn. - **Metadata Cache File Extensions Derived from Source**: `MetadataReader` and `MetadataWriter` now determine the cache file's extension from the source document's display name.
+Naming every cached file `.mp3` would force jaudiotagger's MP3 reader onto FLAC, OGG, M4A, and MP4 sources. - **Dialog Top-Bar Geometry Unified**: `PresetDialog`, `ThemeDialog`, and `CreditsDialog` now use the same top-bar geometry.
+The CANCEL button measures and positions identically across all three.
 
-**Playback and State Management**
-- **Single Writer for Media Session**: `NotificationController.applySnapshot` is the sole writer of session metadata and playback state, ensuring they cannot diverge
-- **Playback State Machine**: Added `mStartToken` to identify valid start/resume continuations, and `mPauseAfterPrepare` to correctly handle a pause during preparation
-- **Bluetooth Resume**: A dedicated `ACTION_BLUETOOTH_RESUME` action is now used for a more reliable resume experience
-- **Folder Sync and Genre Loading**: Genre loading now runs entirely on `PlaylistManager`'s executor, with a token-based cancellation system
+**Playback and State Management** - **Single Writer for Media Session**: `NotificationController.applySnapshot` is the sole writer of session metadata and playback state, ensuring they cannot diverge - **Playback State Machine**: Added `mStartToken` to identify valid start/resume continuations, and `mPauseAfterPrepare` to correctly handle a pause during preparation - **Bluetooth Resume**: A dedicated `ACTION_BLUETOOTH_RESUME` action is now used for a more reliable resume experience - **Folder Sync and Genre Loading**: Genre loading now runs entirely on `PlaylistManager`'s executor, with a token-based cancellation system
 
-**Build and Platform**
-- Java 11 upgraded to **Java 17**
-- `encoding 'UTF-8'` set explicitly
-- `androidx.core:core` upgraded to **1.13.1** and `androidx.media:media` upgraded to **1.8.0**
-- `viewBinding` explicitly disabled
-- **Manifest**: Registered `MediaButtonReceiver`, simplified `MusicService` intent filter, updated `BluetoothReceiver` gating, and added `parentActivityName` to all activities
+**Build and Platform** - Java 11 upgraded to **Java 17** - `encoding 'UTF-8'` set explicitly - `androidx.core:core` upgraded to **1.13.1** and `androidx.media:media` upgraded to **1.8.0** - `viewBinding` explicitly disabled - **Manifest**: Registered `MediaButtonReceiver`, simplified `MusicService` intent filter, updated `BluetoothReceiver` gating, and added `parentActivityName` to all activities
 
 ---
 
 ## [1.1.7] - Sep 24, 2026
 
 ### Fixed
+
 - **MediaPlayer Crashes During Rapid Transitions**: Resolved an issue where rapid or overlapping next/previous requests could leave the MediaPlayer in an invalid state and terminate the playback service:
   - **Serialized Transitions**: A single-gate state machine now ensures only one transition is in flight at a time
   - **Stale Callback Rejection**: Every player callback carries a generation stamp; callbacks from superseded transitions are ignored
@@ -6891,6 +3785,7 @@ This release restructures roughly half the non-UI classes. Four subsystems were 
   - **User Preemption**: Any explicit play, next, or previous press clears the budget immediately
 
 ### Technical Improvements
+
 - **Playback Threading**
   - MusicService now runs every raw MediaPlayer call on a dedicated HandlerThread; the state machine stays on main
   - `beginTransition()` posts release, reset, setDataSource, and prepareAsync as one player-thread runnable
@@ -6920,11 +3815,13 @@ This release restructures roughly half the non-UI classes. Four subsystems were 
 ## [1.1.6] - Sep 23, 2026
 
 ### Fixed
+
 - **Playback Stopping After Long Sessions**: Resolved an issue where the player sometimes stopped after several hours of playback:
   - **Transition State Clearing**: Playback state now resets on every exit from a transition
   - **Player Recovery**: Internal audio errors now recover without terminating the service
 
 ### Technical Improvements
+
 - **Playback State Management**
   - `resetPlayerSafely()` clears `mIsTransitioning` and `mIsPreparing` before touching the MediaPlayer
   - `releaseMediaPlayer()` clears `mIsPreparing` after the player is released
@@ -6937,6 +3834,7 @@ This release restructures roughly half the non-UI classes. Four subsystems were 
 ## [1.1.5] - Sep 2, 2026
 
 ### Fixed
+
 - **Memory Leak in MusicPlayer.onDestroy()**: Resolved several memory leak issues in the MusicPlayer activity's cleanup process:
   - **MusicLibrary Executor Shutdown**: The MusicLibrary instance now properly calls `shutdown()` on its internal executor service in `onDestroy()`
   - **Album Art Task Cleanup**: Added proper cancellation of `mCurrentAlbumArtFuture` and `mCurrentMetadataFuture` before activity destruction
@@ -6944,6 +3842,7 @@ This release restructures roughly half the non-UI classes. Four subsystems were 
   - **Placeholder Bitmap Cleanup**: Themed placeholder bitmaps are now properly recycled via `cleanupPlaceholderBitmaps()`
 
 ### Technical Improvements
+
 - **Memory Management**
   - Added `mMusicLibrary.shutdown()` to release executor resources
   - Cancel pending album art futures (`mCurrentAlbumArtFuture`, `mCurrentMetadataFuture`)
@@ -6957,28 +3856,28 @@ This release restructures roughly half the non-UI classes. Four subsystems were 
 
 ### Android 14+ Media Playback
 
-- Declared `FOREGROUND_SERVICE_MEDIA_PLAYBACK` for the service that
-  declares `android:foregroundServiceType="mediaPlayback"`.
-- The permission is a normal install-time permission. Android grants it
-  when the application is installed; it is not presented as a runtime
-  permission dialog.
-- The playback service uses the media-playback foreground-service type
-  when it promotes the ongoing audio session.
+- Declared `FOREGROUND_SERVICE_MEDIA_PLAYBACK` for the service that declares `android:foregroundServiceType="mediaPlayback"`.
+- The permission is a normal install-time permission.
+  Android grants it when the application is installed; it is not presented as a runtime permission dialog.
+- The playback service uses the media-playback foreground-service type when it promotes the ongoing audio session.
 
 ---
 
 ## [1.1.3] - Aug 19, 2026
 
 ### Fixed
+
 - **Temporary Toast "Stuck" Issue in FolderManager**: Resolved an issue where the "Imported: [folder name]" toast would appear stuck instead of auto-dismissing after importing a folder via Storage Access Framework (SAF)
   - Temporary toasts now correctly auto-dismiss after their duration and are no longer reattached during activity lifecycle events
 
 ### Enhanced ToastManager Reliability
+
 - Improved state machine with clear separation between temporary and persistent toast behavior
 - Temporary toasts are now properly isolated from lifecycle events, preventing them from becoming stuck
 - Persistent toasts continue to reattach correctly across configuration changes
 
 ### Technical Improvements
+
 - **State Machine Enhancements**
   - `handleReattach()` now only processes persistent toasts, preventing temporary toasts from being incorrectly reattached
   - `onActivityResumed()` now distinguishes between temporary and persistent toasts, applying appropriate lifecycle handling for each
@@ -6990,11 +3889,14 @@ This release restructures roughly half the non-UI classes. Four subsystems were 
 ## [1.1.2] - Aug 10, 2026
 
 ### Fixed
-- **Stuck Toasts**: Redesigned ToastManager now implements per-activity overlay management. This prevents toasts from getting orphaned during activity transitions
+
+- **Stuck Toasts**: Redesigned ToastManager now implements per-activity overlay management.
+  This prevents toasts from getting orphaned during activity transitions
 - **Overlay Leaks**: Activity lifecycle callbacks now properly clean up overlays when activities are destroyed
 - **Multiple Overlay Stacking**: Strict single-toast policy enforced by state machine
 
 ### Technical Improvements
+
 - **State Machine Architecture**
   - Enhanced 6-state machine with thread-safe atomic transitions
   - Event-driven state management with validation per state
@@ -7011,18 +3913,23 @@ This release restructures roughly half the non-UI classes. Four subsystems were 
 ## [1.1.1] - Aug 9, 2026
 
 ### What's New
-- **Unified Playback Control**: The Play/Pause button now uses a single source of truth in MusicService, ensuring consistent behavior whether you tap the play button, use your headset controls, or interact with the notification. This eliminates the bug where playback would restart from the beginning instead of resuming from the paused position.
+
+- **Unified Playback Control**: The Play/Pause button now uses a single source of truth in MusicService, ensuring consistent behavior whether you tap the play button, use your headset controls, or interact with the notification.
+  This eliminates the bug where playback would restart from the beginning instead of resuming from the paused position.
 - **Enhanced Sort Button**: The SORT button in PlaylistActivity now features the same responsive press animations as the CANCEL and SEARCH buttons, creating a cohesive interaction experience when cycling through the 10 sort modes.
 - **Consistent Equalizer Buttons**: The ENABLE/DISABLE, Preset and RESET buttons in the EqualizerActivity now match the press animation behavior found throughout the rest of the app, providing consistent tactile feedback across all buttons.
 - **Faster Repeat/Shuffle Button Response**: Repeat and Shuffle buttons now respond faster with a reduced debounce delay of 250ms, providing more responsive feedback when cycling through modes.
-- **Reliable Toast Lifecycle**: The ToastManager now properly transitions to the HIDDEN state after removing overlays, preventing toasts from getting stuck on screen. The state machine ensures toasts are always cleaned up correctly, even during activity transitions.
+- **Reliable Toast Lifecycle**: The ToastManager now properly transitions to the HIDDEN state after removing overlays, preventing toasts from getting stuck on screen.
+  The state machine ensures toasts are always cleaned up correctly, even during activity transitions.
 
 ### Bug Fixes
+
 - **Fixed Playback Resume Issue**: Playback now correctly resumes from the paused position instead of restarting the song from the beginning when tapping the play button
 - **Fixed Stuck Toasts**: Toast messages in MusicPlayer no longer remain stuck on screen after their duration expires
 - **Fixed Slow Repeat/Shuffle Response**: Reduced debounce delay from 500ms to 250ms for faster response and feedback
 
 ### Technical Improvements
+
 - **Single Source of Truth**: `MusicService.togglePlayPause()` now handles all edge cases including empty playlist, invalid index, player not ready, and stuck transition recovery
 - **Enhanced Player State Management**: Added explicit player readiness checks and saved position restoration for seamless resume
 - **Improved Toast State Transitions**: `hideInternal()` now always transitions to HIDDEN state, eliminating stuck toast scenarios
@@ -7033,17 +3940,22 @@ This release restructures roughly half the non-UI classes. Four subsystems were 
 ## [1.1.0] - Aug 2, 2026
 
 ### What's New
-- **Genre Loading**: Songs now display their true metadata genres from ID3 tags. Genres load progressively in the background, updating the playlist in real-time as metadata is extracted from your music files.
+
+- **Genre Loading**: Songs now display their true metadata genres from ID3 tags.
+  Genres load progressively in the background, updating the playlist in real-time as metadata is extracted from your music files.
 - **Sort Modes**: With genres properly loaded, Genre A-Z and Genre Z-A are now included in the sort modes, allowing you to organize your playlist by music genre.
-- **Playback Recovery System**: The app now automatically detects and recovers from playback stalls. If your music stops playing unexpectedly, Llama attempts recovery and resumes playback seamlessly.
+- **Playback Recovery System**: The app now automatically detects and recovers from playback stalls.
+  If your music stops playing unexpectedly, Llama attempts recovery and resumes playback seamlessly.
 - **Battery Optimization Request**: On Android Marshmallow and above, Llama requests exemption from battery optimizations, ensuring reliable background playback during extended screen-off periods.
 - **Incoming File Improvements**: When opening audio files from other apps, the playback experience is now smoother and more reliable.
 
 ### Enhancements
+
 - **Improved Scrolling Performance**: Playlist scrolling optimized with DiffUtil and payload-based updates for smoother navigation through large libraries.
 - **Enhanced Notifications**: Better sync state management with a timeout watchdog to prevent stuck "Syncing" states.
 
 ### Technical Improvements
+
 - **Database Version 2**: Added `file_size` and `uri` columns to `loose_songs` table for better consistency with the main `songs` table.
 - **StorageObserver Auto-Sync**: Llama automatically detects new music files in your added folders and updates the playlist in the background without interrupting playback.
 - **State Machine for Toasts**: ToastManager now uses a robust state machine to prevent toast duplication and ensure reliable overlay lifecycle management.
@@ -7051,16 +3963,18 @@ This release restructures roughly half the non-UI classes. Four subsystems were 
 - **Batched Genre Updates**: Genre updates are batched to prevent scroll jitter during background loading.
 
 ### Removed
+
 - **Removed SoundTouch library**: Llama now uses PlaybackParams for audio processing (Android 6.0+ required)
 
 ### System Requirements changed
-- **Minimum SDK raised from Android 4.4 (KitKat) / API 19 to Android 6.0
-  (Marshmallow) / API 23.** The SoundTouch native library was the reason
-  for the API 19 floor. `PlaybackParams`, which replaces it, was
-  introduced in API 23, so the floor moves with the replacement. The
-  bottom of this file reflects the new minimum from this release onward.
+
+- **Minimum SDK raised from Android 4.4 (KitKat) / API 19 to Android 6.0 (Marshmallow) / API 23.**
+  The SoundTouch native library was the reason for the API 19 floor.
+  `PlaybackParams`, which replaces it, was introduced in API 23, so the floor moves with the replacement.
+  The bottom of this file reflects the new minimum from this release onward.
 
 ### Bug Fixes
+
 - Fixed issue where playlist sort mode changes in PlaylistActivity would not correctly sync to MusicService
 - Fixed issue where metadata editor would lose current song's genre on app restart
 - Fixed issue where notification channel name would not update properly when sync state changed
@@ -7074,6 +3988,7 @@ This release restructures roughly half the non-UI classes. Four subsystems were 
 - Fixed issue where sort button in PlaylistActivity would not update header display after theme changes
 
 ### Backward Compatibility
+
 - **Android 14+ (API 34+)**: Added `FOREGROUND_SERVICE_MEDIA_PLAYBACK` permission for Google Play compliance
 - **Android 13+ (API 33+)**: Added `POST_NOTIFICATIONS` and `READ_MEDIA_IMAGES` permissions
 - **Android 12+ (API 31+)**: Added `BLUETOOTH_CONNECT` permission for headset controls
@@ -7085,6 +4000,7 @@ This release restructures roughly half the non-UI classes. Four subsystems were 
 ### Initial Release
 
 ### Features
+
 - **Pitch Control**: Adjust pitch from -6 to +6 semitones without affecting speed
 - **Tempo Control**: Change playback speed from 0.5x to 1.5x without affecting pitch
 - **10-Band Equalizer**: 60 preset configurations including custom preset (adjustable)
@@ -7099,9 +4015,11 @@ This release restructures roughly half the non-UI classes. Four subsystems were 
 - **Background Playback**: Notification controls and foreground service
 
 ### Known Issues
+
 - SoundTouchPlayer implementation doesn't work although the native libraries are compiled successfully during build.
 
 ### System Requirements
+
 - **Minimum SDK:** Android 4.4 (API 19)
 - **Target SDK:** Android 14 (API 34)
 - **Recommended RAM:** 512 MB or higher

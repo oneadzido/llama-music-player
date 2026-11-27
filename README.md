@@ -1,12 +1,13 @@
 # Llama Music Player
 
-Llama Music Player is a privacy-respecting Android music player for managing and enjoying a local music collection. It combines background playback, playlist and folder management, audio effects, metadata editing, and a customizable interface.
+Llama Music Player is a privacy-respecting Android music player for managing and enjoying a local music collection.
+It combines background playback, playlist and folder management, audio effects, metadata editing, and a customizable interface.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Android](https://img.shields.io/badge/Android-6.0%2B-brightgreen.svg)](https://developer.android.com)
 [![Privacy](https://img.shields.io/badge/Privacy-Policy-blue.svg)](PRIVACY.md)
 
-[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.6.8.apk)
+[![Download Latest Release APK](https://img.shields.io/badge/Download-Latest_Release_APK-brightgreen?style=for-the-badge&logo=android&logoColor=white)](https://github.com/oneadzido/llama-music-player/releases/latest/download/LlamaMusicPlayer-1.6.9.apk)
 
 [![Build](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml/badge.svg)](https://github.com/oneadzido/llama-music-player/actions/workflows/main.yml)
 
@@ -14,19 +15,22 @@ Llama Music Player is a privacy-respecting Android music player for managing and
 
 ## Overview
 
-Llama Music Player is designed for listeners who want direct control over music stored on their device. Playback runs through a dedicated service, while focused screens give you access to the library, playlists, folders, equalizer, and metadata tools.
+Llama Music Player is designed for listeners who want direct control over music stored on their device.
+Playback runs through a dedicated service, while focused screens give you access to the library, playlists, folders, equalizer, and metadata tools.
 
 ## Features
 
 ### Playback and audio
 
-- **Background playback:** Music keeps playing when the app is not in the foreground. You can control playback from the notification and the lock screen.
+- **Background playback:** Music keeps playing when the app is not in the foreground.
+  You can control playback from the notification and the lock screen.
 - **Multiple playback controls:** Control playback from the player, the notification, headset buttons, and supported media actions.
 - **Album-art gestures:** Swipe across the artwork to change tracks, tap the centre to play or pause, and swipe along the edge to adjust volume.
 - **Pitch and speed:** Adjust pitch from −6.0 to +6.0 semitones and playback speed from 0.50× to 1.50×.
 - **10-band equalizer:** Shape audio with 60 presets, including a customizable preset, plus bass boost and surround controls.
 - **Audio-focus handling:** Playback responds to calls and other audio interruptions by pausing, resuming, or ducking as appropriate.
-- **Bluetooth controls:** Use headset media buttons. Playback pauses safely when a headset disconnects.
+- **Bluetooth controls:** Use headset media buttons.
+  Playback pauses safely when a headset disconnects.
 
 ### Music library and playlists
 
@@ -47,7 +51,8 @@ Llama Music Player is designed for listeners who want direct control over music 
 
 ## Requirements
 
-Llama Music Player runs on **Android 6.0 (API 23)** and later. It targets **Android 15 (API 35)**.
+Llama Music Player runs on **Android 6.0 (API 23)** and later.
+It targets **Android 15 (API 35)**.
 
 ## Installation
 
@@ -60,7 +65,8 @@ Llama Music Player runs on **Android 6.0 (API 23)** and later. It targets **Andr
 
 1. Open Llama Music Player and grant music-library access when asked.
 2. Tap **MANAGER** on the main player screen.
-3. Tap **IMPORT FOLDER** and choose a folder that contains music. Repeat for any other folders.
+3. Tap **IMPORT FOLDER** and choose a folder that contains music.
+   Repeat for any other folders.
 4. Tap **UPDATE** to scan the folders you selected.
 5. Return to the player, or open **PLAYLIST**, to browse and play your tracks.
 
@@ -81,7 +87,8 @@ Llama Music Player runs on **Android 6.0 (API 23)** and later. It targets **Andr
 
 ## Permissions
 
-Android asks for permissions when a feature needs them. Depending on your Android version and the feature you are using, the app may ask for:
+Android asks for permissions when a feature needs them.
+Depending on your Android version and the feature you are using, the app may ask for:
 
 - **Music-library access:** `READ_MEDIA_AUDIO` on Android 13 and later, or `READ_EXTERNAL_STORAGE` on earlier supported versions.
 - **Notifications:** `POST_NOTIFICATIONS` on Android 13 and later, for playback and library notifications.
@@ -108,6 +115,7 @@ Third-party license texts are included under `app/src/main/assets/licenses/`.
 
 ## License
 
-Llama Music Player is licensed under the MIT License. See the [LICENSE](../LICENSE) file for the full license text.
+Llama Music Player is licensed under the MIT License.
+See the [LICENSE](../LICENSE) file for the full license text.
 
 Copyright © 2026 Richard Korbla Adzido.

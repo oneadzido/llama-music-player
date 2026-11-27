@@ -1,38 +1,21 @@
-# Llama Music Player v1.6.8
+# Llama Music Player v1.6.9
 
 **Release date:** November 27, 2026
 
 ## Overview
 
-Version 1.6.8 makes a full library reset clear playback-scope preferences
-and in-memory scope state together with the library, preventing stale scope
-data from surviving into a newly selected scope.
+Version 1.6.9 removes the playback notification and stops the service when the app task is dismissed while playback is not actively running.
+A loaded song in PAUSED or READY state is saved for later restoration but no longer leaves a stale notification in the notification area.
 
 ## Fixed
 
-- Full library reset removes `playback_scope_json`,
-  `playback_scope_resume_path`, and `playback_scope_empty_state`.
-- The service clears its full, scoped, and current playlists, resets the
-  scope to `ALL_SONGS`, and empties `mScopeHandoffCandidates` before
-  transitioning playback to idle.
-- Before scope and library state are cleared, the service invalidates pending
-  playback work, stops and releases the active player on its owning thread,
-  and removes the playback foreground notification.
-- Notification teardown explicitly ends foreground-service status and cancels
-  the playback notification. The service then clears scope state and performs
-  the idle transition, whose state broadcast informs the UI of the empty state.
-- The transition-generation barrier rejects queued updates from the song that
-  was playing before reset, preventing its notification from reappearing.
-- The Music Player applies a complete no-song timing state after reset:
-  the disabled SeekBar returns to zero, and elapsed time and duration return
-  to `00:00`. The periodic time updater does not repaint stale timing while
-  the service playlist is empty.
+- `MusicService.onTaskRemoved()` now keeps the service only when playback is actively running, including a `PREPARING` transition committed to start.
+- When the task is removed in `PAUSED` or `READY`, the service clears the playback notification and stops itself instead of leaving an orphaned notification in the notification area.
+- The full player state and player state are saved before teardown so the loaded song remains available for restoration when the app is opened again.
 
 ## Preserved
 
-- The reset uses the existing `LIBRARY_RESET` handling path and existing
-  stop/idle transition methods; no new methods were added.
-- Both library-only and factory reset paths clear scope state because both
-  reset the library.
+- Active background playback and its notification remain available when the app task is dismissed.
+- The existing saved-state restoration path is retained; the task-removal handling does not discard the loaded song by forcing a library or playlist reset.
 
 For the complete release history, see [CHANGELOG.md](CHANGELOG.md).
