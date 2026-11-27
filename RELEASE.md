@@ -10,6 +10,12 @@ seek-bar section to 12dp, declared once in
 seek-bar section's top margin. The layout XML, the Java constant,
 and the player documentation all state the same 12dp value.
 
+Playlist display updates and service playback are also kept in sync
+across song transitions and playback-scope changes. The service
+remains the authority for playback state, while the playlist screen
+refreshes after the existing transition debounce and resolves the
+current song again against the rebuilt display list.
+
 ## Fixed
 
 - The song-info group and the seek-bar section share the space
@@ -25,6 +31,17 @@ and the player documentation all state the same 12dp value.
   screen. Undocking restores the seek-bar section's saved layout
   params, so the XML baseline, including the 12dp gap, returns
   with the section.
+- Playlist updates reject stale generations and use the existing
+  500ms transition debounce. After rebuilding the display list, the
+  current song path is resolved again before its row is highlighted
+  or scrolled. A missing immediate lookup does not trigger an early
+  rebuild.
+- Scope changes capture successor paths from the old scoped playlist
+  before rebuilding. If the current song is excluded, the first
+  surviving successor is selected. If no old successor survives but
+  the new scope contains songs, playback starts at the first song
+  in the new scope. Playback goes idle only when the new scope is
+  empty.
 
 ## Preserved
 
@@ -38,5 +55,9 @@ and the player documentation all state the same 12dp value.
 - The timer row's fit rules: shown when it fits, hidden when it
   does not, with its top margin zeroed on the same turn it is
   hidden.
+- Automatic completion, repeat-one, repeat-all, shuffle, user
+  Next and Previous, and explicit song selection retain their
+  existing service transition and history paths. Scope reconciliation
+  does not introduce a parallel playback state machine.
 
 For the complete release history, see [CHANGELOG.md](CHANGELOG.md).

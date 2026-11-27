@@ -366,6 +366,52 @@ the carousel independently adopts the window and decodes/animates art.
 A slow OEM image decode or animation therefore cannot delay the visible
 song labels or timing controls.
 
+### Scope handoff and playlist refresh
+
+A scope change is a playlist rebuild, not a new playback command.
+`MusicService` captures the current song's successors from the old
+`mScopedPlaylist` before `rebuildPlaylists()` replaces the derived
+queues. It keeps those paths in old-list order and resolves them against
+the new scope when a handoff is needed. The current song takes
+priority if it still belongs to the new scope. Otherwise the first
+old-list successor that survives becomes the replacement. If none of the
+old successors remains but the new scope is non-empty, the first song
+in the new scope is the recovery destination. An empty scope is the
+only scope-handoff case that tears playback down to idle. Index zero
+is therefore a deliberate recovery choice for a non-empty scope, not
+a placeholder index for an empty playlist.
+
+The handoff does not introduce a parallel transition mechanism. While
+`PLAYING`, the live player remains the owner and
+`onCompletion()` resolves the next destination from the updated scope.
+During `PREPARING`, an invalidated target follows the existing
+cancel/re-prepare and generation reconciliation path. `PAUSED` and
+`READY` retain their state and seek/pause latches while a replacement
+is resolved. Repeat-one remains the existing `mRepeatMode == 2`
+path when the current song survives; repeat-all and shuffle continue
+through their existing selection rules for ordinary automatic
+completion. Manual Next may use the captured successor when its base
+song has fallen outside the scope; manual Previous and explicit song
+selection keep their established transport/history paths and clear the
+stale handoff chain.
+
+`PlaylistActivity` treats row positions as disposable across a
+refresh. `onUpdatePlayerEvent()` rejects older generations, updates
+the path identity, highlights only a path found in the current display
+list, and schedules the 500ms refresh for generation advances and
+restart-marked transitions. The delayed block rebuilds the list and
+looks the path up again before highlighting or scrolling. A missing
+path in the immediate lookup does not cause an immediate rebuild.
+`DisplayPlaylistEvent` uses the same debounce; genre loading can
+defer the refresh/focus work, and scrolling or interaction suppresses
+auto-scroll without suppressing the rebuild itself.
+
+The delay is intentional: the player transition has its own commit
+turn, and the playlist display should settle after that turn rather
+than rebuilding on every intermediate broadcast. The service remains
+the authority for playback identity and order; the activity only
+projects that state into its display list.
+
 ### The lungs
 
 `PlaylistManager`.

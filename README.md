@@ -35,7 +35,6 @@ Llama Music Player is designed for listeners who want direct control over music 
 - **Live search:** Filter playlists as you type across title, artist, album, and genre.
 - **Favorites:** Mark tracks and open your favorites from the player or playlist.
 - **Playback scopes:** Play the full library, favorites, loose tracks, or selections by folder, genre, artist, or album.
-- **Scope-aware navigation:** Next, Previous, automatic completion, and playback recovery all respect the active scope.
 - **Folder import:** Add music folders using Android's Storage Access Framework.
 - **Fast scrolling:** Move quickly through long playlist and scope lists.
 
