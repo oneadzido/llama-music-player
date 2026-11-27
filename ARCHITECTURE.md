@@ -403,6 +403,14 @@ path to finish the idle transition, clear current and target indices, and
 broadcast the empty service state. Both library-only and factory reset paths
 use this handling because both clear the library. No new method is needed.
 
+The Music Player's `applyNoSongState()` also clears the timing projection,
+not just its enabled state: it disables the SeekBar, restores its neutral
+range and zero progress, and sets elapsed time and duration to `00:00`.
+The periodic time updater checks the service playlist before reading playback
+position; while that playlist is empty it keeps the SeekBar disabled at zero
+and both time labels at zero. This prevents a timer tick from repainting the
+last song's position while the service finishes its reset.
+
 The idle transition also owns notification cleanup for other empty-service
 paths. Its already-idle early-return path still calls
 `NotificationController.clearPlaybackNotification()` when the service has no

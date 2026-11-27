@@ -28,6 +28,10 @@ data from surviving into a newly selected scope.
   the idle transition, whose state broadcast informs the UI of the empty state.
 - The transition-generation barrier rejects queued updates from the song that
   was playing before reset, preventing its notification from reappearing.
+- The Music Player applies a complete no-song timing state after reset:
+  the disabled SeekBar returns to zero, and elapsed time and duration return
+  to `00:00`. The periodic time updater does not repaint stale timing while
+  the service playlist is empty.
 
 ### Preserved
 
